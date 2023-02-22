@@ -114,15 +114,17 @@ import * as MonacoPrompt from './index'
 
         onExtraNetworkUpdate(() => {
             for (const card of cards) {
-                const base = document.getElementById(card.id)!
+                const base = document.getElementById(card.id)
                 const result: string[] = []
-                base.querySelectorAll(".card .name").forEach((item) => {
-                    const name = item.textContent
-                    if (!name) {
-                        return
-                    }
-                    result.push(name)
-                })
+                if (base) {
+                    base.querySelectorAll(".card .name").forEach((item) => {
+                        const name = item.textContent
+                        if (!name) {
+                            return
+                        }
+                        result.push(name)
+                    })
+                }
                 MonacoPrompt.addData(card.type, result, true)
             }
         })
