@@ -1,8 +1,8 @@
 {
-  "name": "webui_monaco_prompt",
-  "version": "1.0.0",
+  "name": "webui-monaco-prompt",
+  "version": "0.0.1",
   "description": "Prompt Editor Extension for AUTOMATIC1111 stable-diffusion-webui",
-  "main": "dist/index.js",
+  "main": "dist/main.js",
   "scripts": {
     "postinstall": "cd node_modules/monaco-vim/ && npm install && npm run babel",
     "clean": "rimraf ./dist ./javascript",
@@ -11,7 +11,7 @@
     "watch": "webpack watch --config webpack.dev.js",
     "watch:editor": "webpack watch --config webpack.editor.js"
   },
-  "author": "",
+  "author": "Taremin",
   "license": "MIT",
   "dependencies": {
     "csv-parse": "^5.3.5",
