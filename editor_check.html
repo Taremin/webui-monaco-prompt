@@ -1,0 +1,44 @@
+<html>
+    <head>
+        <script>
+            const tmp = document.createElement('script')
+            tmp.src = `dist/index.bundle.js?${+new Date()}`
+            document.head.appendChild(tmp)
+        </script>
+</head>
+<body>
+<div id="container" style="width:640px; height:100%; border: 1px solid black;"></div>
+<textarea id="textarea1">test1</textarea>
+<textarea id="textarea2">test2</textarea>
+<button id="button">test</button>
+<script>
+    window.addEventListener('load', (ev) => {
+        const container = document.getElementById('container')
+        const textareas = document.getElementsByTagName('textarea')
+
+        for (const textarea of textareas) {
+            const editor = new MonacoPrompt.PromptEditor(textarea, {autoLayout: true})
+            container.prepend(editor)
+            Object.assign(editor.style, {
+                resize: "vertical",
+                overflow: "overlay",
+                display: "block",
+                height: "50%",
+                minHeight: "10rem",
+                width: "100%",
+            })
+
+            //textarea.style.display = "none"
+            const button = document.getElementById('button')
+            button.addEventListener('click', (ev) => {
+                textarea.value = 'hogehoge'
+            })
+        }
+
+        fetch("./danbooru.csv").then(res => res.text()).then((value) => {
+            console.log(MonacoPrompt.loadCSV(value))
+        })
+    })
+</script>
+</body>
+</html>
