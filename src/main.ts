@@ -53,6 +53,7 @@ import * as MonacoPrompt from './index'
                 }
                 editor.onChangeShowLineNumbers(saveSettings)
                 editor.onChangeShowMinimap(saveSettings)
+                editor.onChangeReplaceUnderscore(saveSettings)
                 editor.onChangeMode(saveSettings)
                 editor.onChangeTheme(saveSettings)
                 editor.onChangeLanguage(saveSettings)

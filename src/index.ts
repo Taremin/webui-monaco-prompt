@@ -1,7 +1,7 @@
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.api'
 import { initVimMode } from 'monaco-vim'
 import { sdPrompt, sdDynamicPrompt } from './languages'
-import { provider, addCSV, loadCSV, getCount, addData, clearCSV } from './completion'
+import { provider, addCSV, loadCSV, getCount, addData, clearCSV, getReplaceUnderscore, updateReplaceUnderscore } from './completion'
 import style from "./styles/index.css"
 
 // define prompt language
@@ -33,6 +33,7 @@ interface PromptEditorOptions {
 interface PromptEditorSettings {
     minimap: boolean,
     lineNumbers: boolean,
+    replaceUnderscore: boolean,
     mode: PromptEditorMode,
     theme: string,
     language: string,
@@ -51,10 +52,12 @@ interface PromptEditorElements {
     status: HTMLDivElement
     lineNumbers: HTMLInputElement
     minimap: HTMLInputElement
+    replaceUnderscore: HTMLInputElement
 }
 
 interface PromptEditorCheckboxParam {
     label: string
+    title?: string
     isEnabledCallback: () => boolean
     callback: (label: HTMLLabelElement, input: HTMLInputElement) => void
     toggleCallback: (ev: Event) => void
@@ -75,6 +78,7 @@ class PromptEditor extends HTMLElement {
     textareaDisplay: string
     onChangeShowLineNumbersCallback?: () => void
     onChangeShowMinimapCallback?: () => void
+    onChangeReplaceUnderscoreCallback?: () => void
     onChangeThemeCallback?: () => void
     onChangeModeCallback?: () => void
     onChangeLanguageCallback?: () => void
@@ -229,6 +233,16 @@ class PromptEditor extends HTMLElement {
         }
     }
 
+    changeReplaceUnderscore(isReplace: boolean) {
+        if (this.elements.replaceUnderscore) {
+            this.elements.replaceUnderscore.checked = isReplace
+        }
+        updateReplaceUnderscore(isReplace)
+        if (this.onChangeReplaceUnderscoreCallback) {
+            this.onChangeReplaceUnderscoreCallback()
+        }
+    }
+
     polyfillMonacoEditorConfiguration() {
         if (typeof (this.monaco as any)["getConfiguration"] === 'function') {
             return
@@ -278,7 +292,7 @@ class PromptEditor extends HTMLElement {
         const headerElement = this.elements.header!
 
         // Monaco Options
-        for (const {label, callback, isEnabledCallback, toggleCallback} of [
+        for (const {label, title, callback, isEnabledCallback, toggleCallback} of [
             {
                 label: "Minimap",
                 callback: (label: HTMLLabelElement, checkbox: HTMLInputElement) => {
@@ -301,8 +315,21 @@ class PromptEditor extends HTMLElement {
                     this.syncLineNumbers()
                 }
             },
+            {
+                label: "Underscore",
+                title: "Replace Underscore -> Space (Completion)",
+                callback: (label: HTMLLabelElement, checkbox: HTMLInputElement) => {
+                    this.elements.replaceUnderscore = checkbox
+                },
+                isEnabledCallback: () => {
+                    return getReplaceUnderscore()
+                },
+                toggleCallback: (ev: Event) => {
+                    this.syncReplaceUnderscore()
+                }
+            },
         ] as PromptEditorCheckboxParam[]) {
-            headerElement.appendChild(this.createCheckbox(label, callback, isEnabledCallback, toggleCallback))
+            headerElement.appendChild(this.createCheckbox(label, callback, isEnabledCallback, toggleCallback, title))
         }
 
         for (const {label, data, callback, isSelectedCallback, changeCallback, getValue} of [
@@ -416,11 +443,22 @@ class PromptEditor extends HTMLElement {
         }
     }
 
+    syncReplaceUnderscore() {
+        if (!this.elements.replaceUnderscore) {
+            return
+        }
+        const value = this.elements.replaceUnderscore.checked
+        for (const instance of settings.instances) {
+            instance.changeReplaceUnderscore(value)
+        }
+    }
+
     createCheckbox(
         labelText: string,
         callback: (label: HTMLLabelElement, input: HTMLInputElement) => void,
         isEnabledCallback: () => boolean,
-        toggleCallback: (ev: Event) => void
+        toggleCallback: (ev: Event) => void,
+        title?: string,
     ) {
         const label = document.createElement('label')
         const input = document.createElement('input')
@@ -435,6 +473,9 @@ class PromptEditor extends HTMLElement {
 
         label.textContent = labelText
         label.prepend(input)
+        if (title) {
+            label.title = title
+        }
 
         callback(label, input)
 
@@ -508,6 +549,7 @@ class PromptEditor extends HTMLElement {
         return {
             minimap: this.elements.minimap?.checked,
             lineNumbers: this.elements.lineNumbers?.checked,
+            replaceUnderscore: getReplaceUnderscore(),
             language: this.monaco.getModel()!.getLanguageId(),
             theme: this.theme,
             mode: this.mode,
@@ -521,6 +563,9 @@ class PromptEditor extends HTMLElement {
         if (settings.lineNumbers !== void 0) {
             this.changeShowLineNumbers(settings.lineNumbers)
         }
+        if (settings.replaceUnderscore!== void 0) {
+            this.changeReplaceUnderscore(settings.replaceUnderscore)
+        }
         this.changeLanguage(settings.language)
         this.changeTheme(settings.theme)
         this.changeMode(settings.mode)
@@ -533,6 +578,11 @@ class PromptEditor extends HTMLElement {
     onChangeShowMinimap(callback: () => void) {
         this.onChangeShowMinimapCallback = callback
     }
+
+    onChangeReplaceUnderscore(callback: () => void) {
+        this.onChangeReplaceUnderscoreCallback = callback
+    }
+
 
     onChangeTheme(callback: () => void) {
         this.onChangeThemeCallback = callback
