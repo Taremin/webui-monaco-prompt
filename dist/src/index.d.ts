@@ -8,6 +8,7 @@ interface PromptEditorOptions {
 interface PromptEditorSettings {
     minimap: boolean;
     lineNumbers: boolean;
+    replaceUnderscore: boolean;
     mode: PromptEditorMode;
     theme: string;
     language: string;
@@ -25,6 +26,7 @@ interface PromptEditorElements {
     status: HTMLDivElement;
     lineNumbers: HTMLInputElement;
     minimap: HTMLInputElement;
+    replaceUnderscore: HTMLInputElement;
 }
 declare enum PromptEditorMode {
     NORMAL = "NORMAL",
@@ -40,6 +42,7 @@ declare class PromptEditor extends HTMLElement {
     textareaDisplay: string;
     onChangeShowLineNumbersCallback?: () => void;
     onChangeShowMinimapCallback?: () => void;
+    onChangeReplaceUnderscoreCallback?: () => void;
     onChangeThemeCallback?: () => void;
     onChangeModeCallback?: () => void;
     onChangeLanguageCallback?: () => void;
@@ -49,6 +52,7 @@ declare class PromptEditor extends HTMLElement {
     changeLanguage(languageId: string): void;
     changeShowLineNumbers(show: boolean): void;
     changeShowMinimap(show: boolean): void;
+    changeReplaceUnderscore(isReplace: boolean): void;
     polyfillMonacoEditorConfiguration(): void;
     getThemeId(): any;
     setValue(value: string): void;
@@ -59,7 +63,8 @@ declare class PromptEditor extends HTMLElement {
     syncTheme(): void;
     syncLineNumbers(): void;
     syncMinimap(): void;
-    createCheckbox(labelText: string, callback: (label: HTMLLabelElement, input: HTMLInputElement) => void, isEnabledCallback: () => boolean, toggleCallback: (ev: Event) => void): HTMLLabelElement;
+    syncReplaceUnderscore(): void;
+    createCheckbox(labelText: string, callback: (label: HTMLLabelElement, input: HTMLInputElement) => void, isEnabledCallback: () => boolean, toggleCallback: (ev: Event) => void, title?: string): HTMLLabelElement;
     createSelect(labelText: string, data: object, callback: (label: HTMLLabelElement, select: HTMLSelectElement) => void, isSelectedCallback: (dataValue: any) => boolean, changeCallback: (ev: Event) => void, getValue?: (value: any) => string): HTMLLabelElement;
     _mapToObject(map: Map<string, any>): {
         [key: string]: any;
@@ -73,6 +78,7 @@ declare class PromptEditor extends HTMLElement {
     setSettings(settings: PromptEditorSettings): void;
     onChangeShowLineNumbers(callback: () => void): void;
     onChangeShowMinimap(callback: () => void): void;
+    onChangeReplaceUnderscore(callback: () => void): void;
     onChangeTheme(callback: () => void): void;
     onChangeMode(callback: () => void): void;
     onChangeLanguage(callback: () => void): void;

@@ -13,13 +13,23 @@ type CompletionItem = languages.CompletionItem & CompletionItemExtention
 interface State {
     threshold: number
     filteredTags: Partial<CompletionItem>[]
+    isRplaceUnderscore: boolean
 }
 
 const tags: Partial<CompletionItem>[] = []
 const data: CompletionData = {}
 const state: State = {
     threshold: 100,
-    filteredTags: []
+    filteredTags: [],
+    isRplaceUnderscore: false,
+}
+
+const updateReplaceUnderscore = (replace: boolean) => {
+    state.isRplaceUnderscore = replace
+}
+
+const getReplaceUnderscore = () => {
+    return state.isRplaceUnderscore
 }
 
 const checkThreshold = (item: CompletionItem) => {
@@ -147,7 +157,8 @@ const provider: languages.CompletionItemProvider = {
                                 endColumn: wordPosition.endColumn
                             }
                         },
-                        item
+                        item,
+                        state.isRplaceUnderscore ? {insertText: item.insertText!.replaceAll('_', ' ')} : {},
                     ) as languages.CompletionItem
                 })
                 break
@@ -190,4 +201,6 @@ export {
     getCount,
     addData,
     updateFilteredTags,
+    updateReplaceUnderscore,
+    getReplaceUnderscore,
 }
