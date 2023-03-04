@@ -27,12 +27,12 @@ import * as MonacoPrompt from './index'
                 }
             }
 
-            promptIds.push(
+            const extraIds = [
                 "file_edit_box_id", // Wildcards Manager
-            )
+            ]
 
             promptLoaded = true
-            for (const id of promptIds) {
+            for (const id of promptIds.concat(extraIds)) {
                 const container = document.getElementById(id)
                 if (!container) {
                     continue
@@ -42,7 +42,7 @@ import * as MonacoPrompt from './index'
                     autoLayout: true,
                     handleTextAreaValue: true,
                 })
-                container?.prepend(editor)
+                container.prepend(editor)
                 Object.assign(editor.style, {
                     resize: "vertical",
                     overflow: "overlay",
