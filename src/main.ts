@@ -27,9 +27,16 @@ import * as MonacoPrompt from './index'
                 }
             }
 
+            promptIds.push(
+                "file_edit_box_id", // Wildcards Manager
+            )
+
             promptLoaded = true
             for (const id of promptIds) {
-                const container = document.getElementById(id)!
+                const container = document.getElementById(id)
+                if (!container) {
+                    continue
+                }
                 const textarea = container.querySelector('textarea')!
                 const editor = new MonacoPrompt.PromptEditor(textarea, {
                     autoLayout: true,
