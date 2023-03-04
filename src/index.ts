@@ -464,7 +464,7 @@ class PromptEditor extends HTMLElement {
         const input = document.createElement('input')
 
         Object.assign(label.style, {
-            display: "inline-block",
+            display: "flex",
         })
 
         input.checked = isEnabledCallback()
@@ -492,7 +492,7 @@ class PromptEditor extends HTMLElement {
     ) {
         const labelElement = document.createElement('label')
         Object.assign(labelElement.style, {
-            display: "inline-block",
+            display: "flex",
         })
         const selectElement = document.createElement('select')
         Object.assign(selectElement.style, {
