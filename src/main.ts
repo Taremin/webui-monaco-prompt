@@ -29,6 +29,7 @@ import * as MonacoPrompt from './index'
 
             const extraIds = [
                 "file_edit_box_id", // Wildcards Manager
+                "sddp-wildcard-file-editor", // Wildcards Manager
             ]
 
             promptLoaded = true

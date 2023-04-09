@@ -533,10 +533,23 @@ class PromptEditor extends HTMLElement {
     }
 
     handleResize() {
-        const observer = new MutationObserver((mutations, observer) => {
+        const callback = (mutations: (MutationRecord|IntersectionObserverEntry)[], observer: (MutationObserver|IntersectionObserver)) => {
+            const main = this.elements.main
+            if (!main) {
+                return
+            }
+            main.style.maxHeight = this.clientHeight + "px"
+            if (this.parentElement) {
+                main.style.height = this.parentElement.clientHeight + "px"
+            }
             this.monaco.layout()
+        }
+        const mutation = new MutationObserver(callback)
+        const intersection = new IntersectionObserver(callback, {
+            root: document.documentElement
         })
-        observer.observe(this.elements.container!, {attributes: true, attributeFilter: ["style"]})
+        mutation.observe(this, {attributes: true, attributeFilter: ["style"]})
+        intersection.observe(this)
     }
 
     copyStyleToShadow() {
