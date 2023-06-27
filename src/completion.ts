@@ -167,6 +167,9 @@ const provider: languages.CompletionItemProvider = {
         // extra networks
         const extra: languages.CompletionItem[] = []
         for (const [type, list] of Object.entries(data)) {
+            if (type === "embedding" && triggerCharacter === "<") {
+                continue
+            }
             for (const word of list) {
                 const escapedWord = escape(word)
                 const insertText = `${type}:${escapedWord}:1.0`
