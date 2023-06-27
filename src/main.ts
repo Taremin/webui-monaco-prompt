@@ -1,4 +1,5 @@
 import * as MonacoPrompt from './index'
+declare const gradio_config: any;
 
 ((srcURL) => {
     let isLoaded = false
@@ -12,6 +13,31 @@ import * as MonacoPrompt from './index'
             
         const document = gradioApp()
         
+        const loadInitialExtranetworks= () => {
+            for (const [type, label] of [
+                ["embedding", "Embedding"],
+                ["lora",      "Lora"],
+                ["hypernet",  "Hypernetwork"],
+                ["lyco",      "Add LyCORIS to prompt"],
+            ]) {
+                const component = gradio_config.components.filter((c: any) => {
+                    return (c.props.label === label && c.props.choices)
+                })[0]
+                if (!component) {
+                    continue
+                }
+                const choices = component.props.choices.slice()
+                if (type === "lyco") {
+                    if (choices[0] === "None") {
+                        choices.shift()
+                    }
+                }
+                console.log(`${type}:`, choices)
+                MonacoPrompt.addData(type, choices, true)
+            }
+        }
+        loadInitialExtranetworks()
+
         let promptLoaded = false
         onUiUpdate(() => {
             if (promptLoaded) {
@@ -133,6 +159,9 @@ import * as MonacoPrompt from './index'
                         }
                         result.push(name)
                     })
+                }
+                if (result.length == 0) {
+                    continue
                 }
                 MonacoPrompt.addData(card.type, result, true)
             }
