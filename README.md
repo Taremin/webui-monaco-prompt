@@ -16,7 +16,8 @@
     - Dynamic Prompts拡張表記 
 - オートコンプリート対応
     - デフォルトでは `danbooru.csv`, `extra-quality-tags.csv` を読み込んでいるので既に `a1111-sd-webui-tagcompete` を使用している方は違和感なく使えます
-    - `<` を入力すると Extra Networks (TI/HN/LoRA) のみの候補を出せます
+    - `<` を入力すると Extra Networks (HN/LoRA/LyCORIS) のみの候補を出せます
+        - LyCORISは[a1111-sd-webui-lycoris](https://github.com/KohakuBlueleaf/a1111-sd-webui-lycoris)拡張導入時に使用可能です
 
 ## 注意
 

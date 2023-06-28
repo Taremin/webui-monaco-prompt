@@ -32,7 +32,6 @@ declare const gradio_config: any;
                         choices.shift()
                     }
                 }
-                console.log(`${type}:`, choices)
                 MonacoPrompt.addData(type, choices, true)
             }
         }
@@ -145,6 +144,10 @@ declare const gradio_config: any;
                 id: "txt2img_lora_cards",
                 type: "lora"
             },
+            {
+                id: "txt2img_lycoris_cards",
+                type: "lyco"
+            }
         ]
 
         onExtraNetworkUpdate(() => {
