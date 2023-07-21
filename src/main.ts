@@ -1,11 +1,12 @@
 import * as MonacoPrompt from './index'
+import { deepEqual } from 'fast-equals'
+import { EndPoint } from '../extension.json'
 declare const gradio_config: any;
 
 ((srcURL) => {
     let isLoaded = false
-    const storageKey = 'Extensions/webui-monaco-prompt'
 
-    const onLoad = () => {
+    const onLoad = async () => {
         if (isLoaded) {
             return
         }
@@ -38,7 +39,7 @@ declare const gradio_config: any;
         loadInitialExtranetworks()
 
         let promptLoaded = false
-        onUiUpdate(() => {
+        onUiUpdate(async () => {
             if (promptLoaded) {
                 return
             }
@@ -58,6 +59,12 @@ declare const gradio_config: any;
             ]
 
             promptLoaded = true
+
+            let prevSettings: MonacoPrompt.PromptEditorSettings|null = null
+            const settings = await fetch(EndPoint, {method: 'GET'})
+                .then(res => res.json())
+                .catch(err => console.error("fetch error:", EndPoint, err))
+
             for (const id of promptIds.concat(extraIds)) {
                 const container = document.getElementById(id)
                 if (!container) {
@@ -78,24 +85,25 @@ declare const gradio_config: any;
                     width: "100%",
                 })
 
-                const saveSettings = () => {
-                    const settings = JSON.stringify(editor.getSettings())
-                    if (localStorage.getItem(storageKey) !== settings) {
-                        localStorage.setItem(storageKey, settings)
+                editor.setSettings(settings)
+
+                const saveSettings = async () => {
+                    const currentSettings = editor.getSettings()
+                    if (deepEqual(prevSettings, currentSettings)) {
+                        return
+                    }
+                    prevSettings = currentSettings
+                    console.log(prevSettings, currentSettings)
+
+                    const res = await fetch(EndPoint, {method: 'POST', body: JSON.stringify(currentSettings)})
+                        .then(res => res.json())
+                        .catch(err => console.error("fetch error:", EndPoint, err))
+                    if (!res.success) {
+                        console.error("fetch failed:", res)
                     }
                 }
-                editor.onChangeShowLineNumbers(saveSettings)
-                editor.onChangeShowMinimap(saveSettings)
-                editor.onChangeReplaceUnderscore(saveSettings)
-                editor.onChangeMode(saveSettings)
-                editor.onChangeTheme(saveSettings)
-                editor.onChangeLanguage(saveSettings)
 
-                const storageItem = localStorage.getItem(storageKey)
-                if (storageItem) {
-                    const settings = JSON.parse(storageItem) as MonacoPrompt.PromptEditorSettings
-                    editor.setSettings(settings)
-                }
+                editor.onChange(saveSettings)
             }
         })
 

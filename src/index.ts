@@ -76,12 +76,12 @@ class PromptEditor extends HTMLElement {
     vim: any // monaco-vim instance
     textareaDescriptor: PropertyDescriptor
     textareaDisplay: string
-    onChangeShowLineNumbersCallback?: () => void
-    onChangeShowMinimapCallback?: () => void
-    onChangeReplaceUnderscoreCallback?: () => void
-    onChangeThemeCallback?: () => void
-    onChangeModeCallback?: () => void
-    onChangeLanguageCallback?: () => void
+    onChangeShowLineNumbersCallbacks: Array<() => void>
+    onChangeShowMinimapCallbacks: Array<() => void>
+    onChangeReplaceUnderscoreCallbacks: Array<() => void>
+    onChangeThemeCallbacks: Array<() => void>
+    onChangeModeCallbacks: Array<() => void>
+    onChangeLanguageCallbacks: Array<() => void>
     
     constructor(textarea: HTMLTextAreaElement, options: Partial<PromptEditorOptions>={}) {
         super()
@@ -111,6 +111,13 @@ class PromptEditor extends HTMLElement {
         footerElement.classList.add(style.footer)
         monacoElement.classList.add(style.monaco)
         statusElement.classList.add(style.status)
+
+        this.onChangeShowLineNumbersCallbacks = []
+        this.onChangeShowMinimapCallbacks = []
+        this.onChangeReplaceUnderscoreCallbacks = []
+        this.onChangeThemeCallbacks = []
+        this.onChangeModeCallbacks = []
+        this.onChangeLanguageCallbacks = []
 
         const editor = this.monaco = monaco.editor.create(monacoElement, {
             value: textarea.value,
@@ -177,8 +184,8 @@ class PromptEditor extends HTMLElement {
             this.elements.keyBindings.value = newMode
         }
 
-        if (this.onChangeModeCallback) {
-            this.onChangeModeCallback()
+        for (const callback of this.onChangeModeCallbacks) {
+            callback()
         }
     }
 
@@ -190,8 +197,8 @@ class PromptEditor extends HTMLElement {
         }
         
         (this.monaco as any)._themeService.setTheme(this.theme)
-        if (this.onChangeThemeCallback) {
-            this.onChangeThemeCallback()
+        for (const callback of this.onChangeThemeCallbacks) {
+            callback()
         }
     }
 
@@ -202,8 +209,8 @@ class PromptEditor extends HTMLElement {
 
         const model = this.monaco.getModel()
         monaco.editor.setModelLanguage(model!, languageId)
-        if (this.onChangeLanguageCallback) {
-            this.onChangeLanguageCallback()
+        for (const callback of this.onChangeLanguageCallbacks) {
+            callback()
         }
     }
 
@@ -214,12 +221,12 @@ class PromptEditor extends HTMLElement {
         this.monaco.updateOptions({
             lineNumbers: show ? 'on' : 'off'
         })
-        if (this.onChangeShowLineNumbersCallback) {
-            this.onChangeShowLineNumbersCallback()
+        for (const callback of this.onChangeShowLineNumbersCallbacks) {
+            callback()
         }
     }
 
-    changeShowMinimap(show: boolean) {
+    changeShowMinimap(show: boolean, noCallback: boolean=false) {
         if (this.elements.minimap) {
             this.elements.minimap.checked = show
         }
@@ -228,8 +235,8 @@ class PromptEditor extends HTMLElement {
                 enabled: show
             }
         })
-        if (this.onChangeShowMinimapCallback) {
-            this.onChangeShowMinimapCallback()
+        for (const callback of this.onChangeShowMinimapCallbacks) {
+            callback()
         }
     }
 
@@ -238,8 +245,8 @@ class PromptEditor extends HTMLElement {
             this.elements.replaceUnderscore.checked = isReplace
         }
         updateReplaceUnderscore(isReplace)
-        if (this.onChangeReplaceUnderscoreCallback) {
-            this.onChangeReplaceUnderscoreCallback()
+        for (const callback of this.onChangeReplaceUnderscoreCallbacks) {
+            callback()
         }
     }
 
@@ -569,44 +576,78 @@ class PromptEditor extends HTMLElement {
         } as PromptEditorSettings
     }
 
-    setSettings(settings: PromptEditorSettings) {
-        if (settings.minimap !== void 0) {
+    setSettings(settings: Partial<PromptEditorSettings>) {
+        const currentSettings = this.getSettings()
+
+        if (
+            settings.minimap !== void 0 &&
+            settings.minimap !== currentSettings.minimap
+        ) {
             this.changeShowMinimap(settings.minimap)
         }
-        if (settings.lineNumbers !== void 0) {
+        if (
+            settings.lineNumbers !== void 0 &&
+            settings.lineNumbers !== currentSettings.lineNumbers
+        ) {
             this.changeShowLineNumbers(settings.lineNumbers)
         }
-        if (settings.replaceUnderscore!== void 0) {
+        if (
+            settings.replaceUnderscore !== void 0 &&
+            settings.replaceUnderscore !== currentSettings.replaceUnderscore
+        ) {
             this.changeReplaceUnderscore(settings.replaceUnderscore)
         }
-        this.changeLanguage(settings.language)
-        this.changeTheme(settings.theme)
-        this.changeMode(settings.mode)
+        if (
+            settings.language !== void 0 &&
+            settings.language !== currentSettings.language
+        ) {
+            this.changeLanguage(settings.language)
+        }
+        if (
+            settings.theme !== void 0 &&
+            settings.theme !== currentSettings.theme
+        ) {
+            this.changeTheme(settings.theme)
+        }
+        if (
+            settings.mode !== void 0 &&
+            settings.mode !== currentSettings.mode
+        ) {
+            this.changeMode(settings.mode)
+        }
     }
 
     onChangeShowLineNumbers(callback: () => void) {
-        this.onChangeShowLineNumbersCallback = callback
+        this.onChangeShowLineNumbersCallbacks.push(callback)
     }
 
     onChangeShowMinimap(callback: () => void) {
-        this.onChangeShowMinimapCallback = callback
+        this.onChangeShowMinimapCallbacks.push(callback)
     }
 
     onChangeReplaceUnderscore(callback: () => void) {
-        this.onChangeReplaceUnderscoreCallback = callback
+        this.onChangeReplaceUnderscoreCallbacks.push(callback)
     }
 
-
     onChangeTheme(callback: () => void) {
-        this.onChangeThemeCallback = callback
+        this.onChangeThemeCallbacks.push(callback)
     }
 
     onChangeMode(callback: () => void) {
-        this.onChangeModeCallback = callback
+        this.onChangeModeCallbacks.push(callback)
     }
 
     onChangeLanguage(callback: () => void) {
-        this.onChangeLanguageCallback = callback
+        this.onChangeLanguageCallbacks.push(callback)
+    }
+
+    onChange(callback: () => void) {
+        this.onChangeShowLineNumbers(callback)
+        this.onChangeShowMinimap(callback)
+        this.onChangeReplaceUnderscore(callback)
+        this.onChangeTheme(callback)
+        this.onChangeMode(callback)
+        this.onChangeLanguage(callback)
     }
 }
 window.customElements.define('prompt-editor', PromptEditor);
