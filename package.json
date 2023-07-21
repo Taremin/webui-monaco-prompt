@@ -1,6 +1,6 @@
 {
   "name": "webui-monaco-prompt",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "Prompt Editor Extension for AUTOMATIC1111 stable-diffusion-webui",
   "main": "dist/main.js",
   "scripts": {
@@ -15,6 +15,7 @@
   "license": "MIT",
   "dependencies": {
     "csv-parse": "^5.3.5",
+    "fast-equals": "^5.0.1",
     "monaco-editor": "^0.35.0",
     "monaco-vim": "github:Taremin/monaco-vim"
   },
