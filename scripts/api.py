@@ -6,7 +6,6 @@ from gradio import Blocks
 import fastapi
 from fastapi import FastAPI, HTTPException, status
 from modules.api.api import Api
-import modules.api.models as models
 
 import os
 extension_base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -63,12 +62,9 @@ def on_app_started(demo: Optional[Blocks], app: FastAPI):
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
         )
     def get_embeddings(request: fastapi.Request):
-        value = Api.get_embeddings(None)
-        print(value)
-        return value
+        return Api.get_embeddings(None)
     app.add_api_route(extension_settings.get("EndPoint"), get, methods=["GET"])
     app.add_api_route(extension_settings.get("EndPoint"), post, methods=["POST"])
-    app.add_api_route(extension_settings.get("GetEmbeddings"), get_embeddings, methods=["GET"])#, response_model=models.EmbeddingsResponse)
-    #app.add_api_route(extension_settings.get("GetEmbeddings"), hook(Api.get_embeddings), methods=["GET"], response_model=models.EmbeddingsResponse)
+    app.add_api_route(extension_settings.get("GetEmbeddings"), get_embeddings, methods=["GET"])
 
 script_callbacks.on_app_started(on_app_started)
