@@ -28,7 +28,7 @@
 ## その他
 
 設定はこの拡張のあるディレクトリの `settings` 内に保存されます。
-認証未設定字は `global.json` 認証設定時は `user_[username].json` というファイル名です。
+認証未設定時は `global.json` 認証設定時は `user_[username].json` というファイル名です。
 
 ## クレジット
 
