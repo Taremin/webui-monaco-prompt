@@ -23,22 +23,20 @@ const me = "webui-monaco-prompt";
                 MonacoPrompt.addData("embedding", Object.keys(embeddings.loaded), true)
             }
 
-            for (const [type, label] of [
-                ["lora",      "Lora"],
-                ["hypernet",  "Hypernetwork"],
-                ["lyco",      "Add LyCORIS to prompt"],
+            for (const [type, elemId] of [
+                ["lora",     "setting_sd_lora"],
+                ["hypernet", "setting_sd_hypernetwork"],
+                ["lyco",     "setting_sd_lyco"],
             ]) {
                 const component = gradio_config.components.filter((c: any) => {
-                    return (c.props.label === label && c.props.choices)
+                    return (c.props.elem_id === elemId && c.props.choices)
                 })[0]
                 if (!component) {
                     continue
                 }
                 const choices = component.props.choices.slice()
-                if (type === "lyco") {
-                    if (choices[0] === "None") {
-                        choices.shift()
-                    }
+                if (choices[0] === "None") {
+                    choices.shift()
                 }
                 console.log(me, "load", type, choices)
                 MonacoPrompt.addData(type, choices, true)
