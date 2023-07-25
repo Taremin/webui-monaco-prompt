@@ -1,7 +1,9 @@
 import * as MonacoPrompt from './index'
 import { deepEqual } from 'fast-equals'
-import { EndPoint } from '../extension.json'
+import { EndPoint, GetEmbeddings } from '../extension.json'
 declare const gradio_config: any;
+
+const me = "webui-monaco-prompt";
 
 ((srcURL) => {
     let isLoaded = false
@@ -14,9 +16,14 @@ declare const gradio_config: any;
             
         const document = gradioApp()
         
-        const loadInitialExtranetworks= () => {
+        const loadInitialExtranetworks= async () => {
+            const embeddings = await fetch(GetEmbeddings).then(res => res.json()).catch(e => new Error(`fetch error: ${e}`))
+            if (embeddings && embeddings.loaded) {
+                console.log(me, "load", "embedding", Object.keys(embeddings.loaded))
+                MonacoPrompt.addData("embedding", Object.keys(embeddings.loaded), true)
+            }
+
             for (const [type, label] of [
-                ["embedding", "Embedding"],
                 ["lora",      "Lora"],
                 ["hypernet",  "Hypernetwork"],
                 ["lyco",      "Add LyCORIS to prompt"],
@@ -33,10 +40,11 @@ declare const gradio_config: any;
                         choices.shift()
                     }
                 }
+                console.log(me, "load", type, choices)
                 MonacoPrompt.addData(type, choices, true)
             }
         }
-        loadInitialExtranetworks()
+        await loadInitialExtranetworks()
 
         let promptLoaded = false
         onUiUpdate(async () => {
@@ -133,6 +141,7 @@ declare const gradio_config: any;
                     continue
                 }
                 if (target.closest("#txt2img_extra_tabs")) {
+                    console.log("mutation2:", mutationRecord)
                     extraNetworkCallback.forEach(callback => callback())
                     break
                 }
@@ -141,7 +150,7 @@ declare const gradio_config: any;
 
         const cards = [
             {
-                id: "txt2img_textual inversion_cards",
+                id: "txt2img_textual_inversion_cards",
                 type: "embedding",
             },
             {
@@ -174,6 +183,7 @@ declare const gradio_config: any;
                 if (result.length == 0) {
                     continue
                 }
+                console.log(me, "refresh", card.type, result)
                 MonacoPrompt.addData(card.type, result, true)
             }
         })

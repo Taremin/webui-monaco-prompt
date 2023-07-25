@@ -1,3 +1,4 @@
 {
-    "EndPoint": "/webui-monaco-prompt"
+    "EndPoint": "/webui-monaco-prompt",
+    "GetEmbeddings": "/webui-monaco-prompt-embeddings"
 }
