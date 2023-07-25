@@ -141,7 +141,6 @@ const me = "webui-monaco-prompt";
                     continue
                 }
                 if (target.closest("#txt2img_extra_tabs")) {
-                    console.log("mutation2:", mutationRecord)
                     extraNetworkCallback.forEach(callback => callback())
                     break
                 }
