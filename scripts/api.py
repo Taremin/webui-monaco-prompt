@@ -16,9 +16,6 @@ with open(os.path.join(extension_base_dir, "extension.json"), mode="r") as f:
         print(__file__, "can't load extension settings")
         extension_settings = {}
 
-def hook(callback):
-    return lambda *args: callback(None, *args)
-   
 def on_app_started(demo: Optional[Blocks], app: FastAPI):
     def get_settings_path(auth, user):
         return os.path.join(
