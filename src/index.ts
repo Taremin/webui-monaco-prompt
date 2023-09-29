@@ -545,7 +545,7 @@ class PromptEditor extends HTMLElement {
             if (!main) {
                 return
             }
-            main.style.maxHeight = this.clientHeight + "px"
+            //main.style.maxHeight = this.clientHeight + "px"
             if (this.parentElement) {
                 main.style.height = this.parentElement.clientHeight + "px"
             }

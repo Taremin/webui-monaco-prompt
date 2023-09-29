@@ -50,7 +50,10 @@ const me = "webui-monaco-prompt";
                 return
             }
 
-            const promptIds = ["txt2img_prompt", "txt2img_neg_prompt", "img2img_prompt", "img2img_neg_prompt"]
+            const promptIds = [
+                "txt2img_prompt", "txt2img_neg_prompt",
+                "img2img_prompt", "img2img_neg_prompt",
+            ]
 
             // not ready
             for (const id of promptIds) {
@@ -59,9 +62,16 @@ const me = "webui-monaco-prompt";
                 }
             }
 
+            const styleEditorIds = [
+                // webui 1.6.0+ style editor
+                "txt2img_edit_style_prompt", "txt2img_edit_style_neg_prompt",
+                "img2img_edit_style_prompt", "img2img_edit_style_neg_prompt",
+            ]
+
             const extraIds = [
-                "file_edit_box_id", // Wildcards Manager
-                "sddp-wildcard-file-editor", // Wildcards Manager
+                // Wildcards Manager
+                "file_edit_box_id",
+                "sddp-wildcard-file-editor",
             ]
 
             promptLoaded = true
@@ -71,7 +81,7 @@ const me = "webui-monaco-prompt";
                 .then(res => res.json())
                 .catch(err => console.error("fetch error:", EndPoint, err))
 
-            for (const id of promptIds.concat(extraIds)) {
+            for (const id of promptIds.concat(styleEditorIds, extraIds)) {
                 const container = document.getElementById(id)
                 if (!container) {
                     continue
@@ -81,7 +91,11 @@ const me = "webui-monaco-prompt";
                     autoLayout: true,
                     handleTextAreaValue: true,
                 })
-                container.prepend(editor)
+                if (textarea.parentElement) {
+                    textarea.parentElement.append(editor)
+                } else {
+                    container.append(editor)
+                }
                 Object.assign(editor.style, {
                     resize: "vertical",
                     overflow: "overlay",
@@ -90,6 +104,15 @@ const me = "webui-monaco-prompt";
                     minHeight: "20rem",
                     width: "100%",
                 })
+
+                if (styleEditorIds.includes(id)) {
+                    const observer = new IntersectionObserver(
+                        (entry) => {
+                            editor.handleResize()
+                        },
+                    )
+                    observer.observe(editor)
+                }
 
                 editor.setSettings(settings)
 
