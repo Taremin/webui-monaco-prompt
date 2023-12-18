@@ -91,6 +91,16 @@ const me = "webui-monaco-prompt";
                     autoLayout: true,
                     handleTextAreaValue: true,
                 })
+                editor.addEventListener('keydown', (ev) => {
+                    switch (ev.key) {
+                        case 'Esc':
+                        case 'Escape':
+                            ev.stopPropagation()
+                            break
+                        default:
+                            break
+                    }
+                })
                 if (textarea.parentElement) {
                     textarea.parentElement.append(editor)
                 } else {
