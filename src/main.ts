@@ -132,7 +132,6 @@ const me = "webui-monaco-prompt";
                         return
                     }
                     prevSettings = currentSettings
-                    console.log(prevSettings, currentSettings)
 
                     const res = await fetch(EndPoint, {method: 'POST', body: JSON.stringify(currentSettings)})
                         .then(res => res.json())
