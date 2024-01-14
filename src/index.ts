@@ -28,6 +28,7 @@ interface PromptEditorOptions {
     focus: boolean;
     autoLayout: boolean;
     handleTextAreaValue: boolean;
+    overlayZIndex: number;
 }
 
 interface PromptEditorSettings {
@@ -53,6 +54,7 @@ interface PromptEditorElements {
     lineNumbers: HTMLInputElement
     minimap: HTMLInputElement
     replaceUnderscore: HTMLInputElement
+    overlay: HTMLDivElement
 }
 
 interface PromptEditorCheckboxParam {
@@ -127,6 +129,7 @@ class PromptEditor extends HTMLElement {
             },
             automaticLayout: true,
             wordWrap: 'on',
+            //fixedOverflowWidgets: true,
         } as any)
         this.polyfillMonacoEditorConfiguration()
 
@@ -160,7 +163,32 @@ class PromptEditor extends HTMLElement {
         this.textareaDisplay = textarea.style.display
         textarea.style.display = 'none'
 
+        const overlay = this.elements.main!.querySelector('.overflowingContentWidgets')! as HTMLDivElement
+        this.elements.overlay = overlay
+        this.fixedOverflowWidgetWorkaround(options)
+
         settings.instances.push(this)
+    }
+
+    // fixedOverflowWidget相当のworkaroundを行う
+    fixedOverflowWidgetWorkaround(options: Partial<PromptEditorOptions>) {
+        const overlay = this.elements.overlay!
+        const overlayParent = overlay.parentElement!
+
+        overlayParent.removeChild(overlay)
+        overlayParent.prepend(overlay)
+        overlay.style.position = 'fixed'
+
+        if (typeof(options.overlayZIndex) === "number") {
+            this.setOverlayZIndex(options.overlayZIndex)
+        }
+    }
+
+    setOverlayZIndex(zIndex: number) {
+        if (!this.elements.overlay) {
+            return
+        }
+        this.elements.overlay.style.zIndex = "" + zIndex
     }
 
     changeMode(newMode: PromptEditorMode) {
