@@ -90,6 +90,7 @@ const me = "webui-monaco-prompt";
                 const editor = new MonacoPrompt.PromptEditor(textarea, {
                     autoLayout: true,
                     handleTextAreaValue: true,
+                    overlayZIndex: 99999,
                 })
                 editor.addEventListener('keydown', (ev) => {
                     switch (ev.key) {
