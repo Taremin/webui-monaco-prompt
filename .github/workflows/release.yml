@@ -1,0 +1,55 @@
+name: release 
+
+on:
+  push:
+    tags:
+      - "v[0-9]+\\.[0-9]+\\.[0-9]+"
+
+jobs:
+  create_release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v1
+      - name: version
+        id: version
+        run: |
+          REPOSITORY=$(echo ${{ github.event.repository.name }})
+          echo "repository=$REPOSITORY" >> "$GITHUB_OUTPUT"
+          VERSION=$(basename ${{ github.ref }})
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          VERSION_STRING=$(echo $VERSION | sed -e "s#\.#_#g")
+          echo "version_string=$VERSION_STRING" >> "$GITHUB_OUTPUT"
+      - name: Comfy Zip output
+        id: comfy
+        run: |
+          ARCHIVE_BASENAME=$(echo ${{steps.version.outputs.repository}}-Comfy-${{steps.version.outputs.version_string}})
+          ARCHIVE_FILENAME=$(echo $ARCHIVE_BASENAME.zip)
+
+          echo "filename=$ARCHIVE_FILENAME" >> "$GITHUB_OUTPUT"
+
+          mkdir $ARCHIVE_BASENAME
+          rsync -av ./comfy/* $ARCHIVE_BASENAME --exclude $ARCHIVE_BASENAME
+          zip -r $ARCHIVE_FILENAME $ARCHIVE_BASENAME -x ".git"
+      - name: A1111 Zip output
+        id: a1111
+        run: |
+          ARCHIVE_BASENAME=$(echo ${{steps.version.outputs.repository}}-A1111-${{steps.version.outputs.version_string}})
+          ARCHIVE_FILENAME=$(echo $ARCHIVE_BASENAME.zip)
+          
+          echo "filename=$ARCHIVE_FILENAME" >> "$GITHUB_OUTPUT"
+
+          mkdir $ARCHIVE_BASENAME
+          rsync -av ./* $ARCHIVE_BASENAME --exclude $ARCHIVE_BASENAME
+          zip -r $ARCHIVE_FILENAME $ARCHIVE_BASENAME -x ".git"
+      - name: Create Release
+        id: create-release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Release ${{ steps.version.outputs.version }} 
+          tag_name: ${{ steps.version.outputs.version }}
+          draft: true
+          files: |
+            ${{ steps.comfy.outputs.filename}}
+            ${{ steps.a1111.outputs.filename}}
