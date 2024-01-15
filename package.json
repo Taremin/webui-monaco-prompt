@@ -5,11 +5,12 @@
   "main": "dist/main.js",
   "scripts": {
     "postinstall": "cd node_modules/monaco-vim/ && npm install && npm run babel",
-    "clean": "rimraf ./dist ./javascript",
-    "build": "npm run clean && webpack --config webpack.prod.js",
+    "clean": "rimraf ./dist ./javascript ./comfy",
+    "build": "npm run clean && webpack --config webpack.prod.js && webpack --config webpack.comfy.js",
     "build:vim": "npm run clean && npm run postinstall && webpack --config webpack.prod.js",
     "watch": "webpack watch --config webpack.dev.js",
-    "watch:editor": "webpack watch --config webpack.editor.js"
+    "watch:editor": "webpack watch --config webpack.editor.js",
+    "watch:comfy": "webpack watch --config webpack.comfy.dev.js"
   },
   "author": "Taremin",
   "license": "MIT",
@@ -20,6 +21,7 @@
     "monaco-vim": "github:Taremin/monaco-vim"
   },
   "devDependencies": {
+    "copy-webpack-plugin": "^12.0.1",
     "css-loader": "^6.8.1",
     "file-loader": "^6.2.0",
     "monaco-editor-webpack-plugin": "^7.1.0",
