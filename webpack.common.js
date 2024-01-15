@@ -44,9 +44,14 @@ module.exports = {
 			{
 				test: /\.ttf$/,
 				type: 'asset/resource',
-				dependency: { not: ['url'] },
+				generator: {
+					filename: "[name][ext]"
+				}
 			}
-		]
+		],
+		parser: {
+			javascript: { importMeta: false },
+		},
 	},
 	plugins: [
         new MonacoWebpackPlugin({
