@@ -6,7 +6,13 @@
 
 ## インストール
 
+### AUTOMATIC1111 Stable Diffusion WebUI
+
 `stable-diffusion-webui` の `Install from URL` からこのリポジトリのURL `https://github.com/Taremin/webui-monaco-prompt` を入力してインストールしてください。
+
+### ComfyUI (Experimental)
+
+[Releases](https://github.com/Taremin/webui-monaco-prompt/releases) からzipファイルをダウンロードして `web/extensions` に展開してください。
 
 ## 機能
 
@@ -21,11 +27,15 @@
 
 ## 注意
 
+### AUTOMATIC1111 Stable Diffusion WebUI
+
 この拡張では標準のプロンプト編集で使用するtextareaを差し替えたり Extra Networks のリフレッシュへの対応などで、特定のHTML要素に依存したあまり汎用的でない手段を用いています。
 そのため、HTML構造が変化したり既存機能の変更が行われた場合、利用できなくなることがあるかもしれません。
 その場合は一時的に利用を中止することをおすすめします。
 
 ## その他
+
+### AUTOMATIC1111 Stable Diffusion WebUI
 
 設定はこの拡張のあるディレクトリの `settings` 内に保存されます。
 認証未設定時は `global.json` 認証設定時は `user_[username].json` というファイル名です。
