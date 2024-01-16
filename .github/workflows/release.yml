@@ -21,23 +21,12 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           VERSION_STRING=$(echo $VERSION | sed -e "s#\.#_#g")
           echo "version_string=$VERSION_STRING" >> "$GITHUB_OUTPUT"
-      - name: Comfy Zip output
-        id: comfy
+      - name: Zip output
+        id: create_zip
         run: |
-          ARCHIVE_BASENAME=$(echo ${{steps.version.outputs.repository}}-Comfy-${{steps.version.outputs.version_string}})
+          ARCHIVE_BASENAME=$(echo ${{steps.version.outputs.repository}}-${{steps.version.outputs.version_string}})
           ARCHIVE_FILENAME=$(echo $ARCHIVE_BASENAME.zip)
 
-          echo "filename=$ARCHIVE_FILENAME" >> "$GITHUB_OUTPUT"
-
-          mkdir $ARCHIVE_BASENAME
-          rsync -av ./comfy/* $ARCHIVE_BASENAME --exclude $ARCHIVE_BASENAME
-          zip -r $ARCHIVE_FILENAME $ARCHIVE_BASENAME -x ".git"
-      - name: A1111 Zip output
-        id: a1111
-        run: |
-          ARCHIVE_BASENAME=$(echo ${{steps.version.outputs.repository}}-A1111-${{steps.version.outputs.version_string}})
-          ARCHIVE_FILENAME=$(echo $ARCHIVE_BASENAME.zip)
-          
           echo "filename=$ARCHIVE_FILENAME" >> "$GITHUB_OUTPUT"
 
           mkdir $ARCHIVE_BASENAME
@@ -51,5 +40,4 @@ jobs:
           tag_name: ${{ steps.version.outputs.version }}
           draft: true
           files: |
-            ${{ steps.comfy.outputs.filename}}
-            ${{ steps.a1111.outputs.filename}}
+            ${{ steps.create_zip.outputs.filename}}

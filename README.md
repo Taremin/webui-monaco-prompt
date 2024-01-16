@@ -12,7 +12,15 @@
 
 ### ComfyUI (Experimental)
 
-[Releases](https://github.com/Taremin/webui-monaco-prompt/releases) からzipファイルをダウンロードして `web/extensions` に展開してください。
+下記の二通りからお好きな方法でインストールしてください。
+
+1. `custom_nodes` にこのリポジトリを clone する
+2. `ComfyUI Manager Menu` の `Install via Git URL` にこのリポジトリのURLを入力してインストールする
+
+#### 以前のインストール方法
+
+~~[Releases](https://github.com/Taremin/webui-monaco-prompt/releases) からzipファイルをダウンロードして `web/extensions` に展開してください。~~
+v0.1.2からはこの方法ではインストールできなくなりました。
 
 ## 機能
 
