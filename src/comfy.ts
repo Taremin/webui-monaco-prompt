@@ -119,6 +119,10 @@ const me = "webui-monaco-prompt";
             }
             prevSettings = currentSettings
 
+            if (settings && settings.editor) {
+                settings.editor = currentSettings
+            }
+
             api.storeSetting(me, Object.assign(settings, {
                 editor: currentSettings
             })).then((res: Response) => {
