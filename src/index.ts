@@ -573,6 +573,7 @@ class PromptEditor extends HTMLElement {
             if (!main) {
                 return
             }
+            this.toggleHeader()
             //main.style.maxHeight = this.clientHeight + "px"
             if (this.parentElement) {
                 main.style.height = this.parentElement.clientHeight + "px"
@@ -585,6 +586,33 @@ class PromptEditor extends HTMLElement {
         })
         mutation.observe(this, {attributes: true, attributeFilter: ["style"]})
         intersection.observe(this)
+    }
+
+    toggleHeader() {
+        const child = this.elements.header
+        const parent = this.elements.inner
+
+        if (!child || !parent) {
+            return
+        }
+
+        child.style.display = "block"
+
+        const childRect = child.getBoundingClientRect()
+        const parentRect  = parent.getBoundingClientRect()
+
+        if (
+            childRect.width <= parentRect.width &&
+            childRect.height <= parentRect.height &&
+            childRect.top >= parentRect.top &&
+            childRect.left >= parentRect.left &&
+            childRect.bottom <= parentRect.bottom &&
+            childRect.right <= parentRect.right
+        ) {
+            child.style.removeProperty("display")
+        } else {
+            child.style.display = "none"
+        }
     }
 
     copyStyleToShadow() {
