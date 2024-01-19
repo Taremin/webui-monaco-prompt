@@ -45,6 +45,7 @@ interface PromptEditorSettings {
     mode: PromptEditorMode,
     theme: string,
     language: string,
+    showHeader: boolean,
 }
 
 interface PromptEditorElements {
@@ -83,9 +84,11 @@ class PromptEditor extends HTMLElement {
     mode: PromptEditorMode = PromptEditorMode.NORMAL
     monaco: monaco.editor.IStandaloneCodeEditor
     theme: string
+    showHeader: boolean
     vim: any // monaco-vim instance
     textareaDescriptor: PropertyDescriptor
     textareaDisplay: string
+    onChangeShowHeaderCallbacks: Array<() => void>
     onChangeShowLineNumbersCallbacks: Array<() => void>
     onChangeShowMinimapCallbacks: Array<() => void>
     onChangeReplaceUnderscoreCallbacks: Array<() => void>
@@ -123,6 +126,7 @@ class PromptEditor extends HTMLElement {
         monacoElement.classList.add(style.monaco)
         statusElement.classList.add(style.status)
 
+        this.onChangeShowHeaderCallbacks = []
         this.onChangeShowLineNumbersCallbacks = []
         this.onChangeShowMinimapCallbacks = []
         this.onChangeReplaceUnderscoreCallbacks = []
@@ -142,6 +146,7 @@ class PromptEditor extends HTMLElement {
         } as any)
         this.polyfillMonacoEditorConfiguration()
 
+        this.showHeader = true
         this.theme = this.getThemeId()
 
         this.changeMode(PromptEditorMode.VIM)
@@ -205,9 +210,24 @@ class PromptEditor extends HTMLElement {
 
     setContextMenu() {
         addActionWithCommandOption(this.monaco, {
+            id: 'header',
+            label: 'Show Header',
+            order: 0,
+            groupId: "monaco-prompt-editor",
+            run: () => {
+                this.changeShowHeader(!this.getContext(this.createContextKey("showHeader")))
+                this.syncShowHeader()
+            },
+            commandOptions: {
+                toggled: {
+                    condition: ContextKeyExpr.deserialize(this.createContextKey("showHeader"))
+                }
+            },
+        })
+        addActionWithCommandOption(this.monaco, {
             id: 'minimap',
             label: 'Show Minimap',
-            order: 0,
+            order: 1,
             groupId: "monaco-prompt-editor",
             run: () => {
                 this.changeShowMinimap(!this.getContext(this.createContextKey("minimap")))
@@ -222,7 +242,7 @@ class PromptEditor extends HTMLElement {
         addActionWithCommandOption(this.monaco, {
             id: 'line_numbers_show',
             label: 'LineNum',
-            order: 1,
+            order: 2,
             groupId: "monaco-prompt-editor",
             run: () => {
                 this.changeShowLineNumbers(!this.getContext(this.createContextKey("lineNumbers")))
@@ -237,7 +257,7 @@ class PromptEditor extends HTMLElement {
         addActionWithCommandOption(this.monaco, {
             id: 'underscore_replace',
             label: 'Replace Underscore',
-            order: 2,
+            order: 3,
             groupId: "monaco-prompt-editor",
             run: () => {
                 this.changeReplaceUnderscore(!this.getContext(this.createContextKey("replaceUnderscore")))
@@ -253,7 +273,7 @@ class PromptEditor extends HTMLElement {
             title: "Language",
             context: ["MonacoPromptEditorLanguage", this._id].join("_"),
             group: 'monaco-prompt-editor',
-            order: 3,
+            order: 4,
             actions: monaco.languages.getLanguages().map(lang => {
                 return {
                     id: ["language", lang.id].join("_"),
@@ -274,7 +294,7 @@ class PromptEditor extends HTMLElement {
             title: "KeyBindings",
             context: ["MonacoPromptEditorKeyBindings", this._id].join("_"),
             group: 'monaco-prompt-editor',
-            order: 3,
+            order: 5,
             actions: Object.values(PromptEditorMode).map(value => {
                 return {
                     id: ["keybinding", value].join("_"),
@@ -366,6 +386,17 @@ class PromptEditor extends HTMLElement {
         this.setContext(this.createContextKey("language"), languageId)
 
         for (const callback of this.onChangeLanguageCallbacks) {
+            callback()
+        }
+    }
+
+    changeShowHeader(show: boolean) {
+        this.showHeader = show
+        this.setContext(this.createContextKey("showHeader"), show)
+
+        this.toggleHeader()
+
+        for (const callback of this.onChangeShowHeaderCallbacks) {
             callback()
         }
     }
@@ -592,6 +623,12 @@ class PromptEditor extends HTMLElement {
         }
     }
 
+    syncShowHeader() {
+        for (const instance of settings.instances) {
+            instance.changeShowHeader(this.showHeader)
+        }
+    }
+
     syncLineNumbers() {
         if (!this.elements.lineNumbers) {
             return
@@ -730,6 +767,11 @@ class PromptEditor extends HTMLElement {
             return
         }
 
+        if (!this.showHeader) {
+            child.style.display = "none"
+            return
+        }
+
         child.style.display = "block"
 
         const childRect = child.getBoundingClientRect()
@@ -758,6 +800,7 @@ class PromptEditor extends HTMLElement {
     getSettings() {
         return {
             minimap: this.elements.minimap?.checked,
+            showHeader: this.showHeader,
             lineNumbers: this.elements.lineNumbers?.checked,
             replaceUnderscore: getReplaceUnderscore(),
             language: this.monaco.getModel()!.getLanguageId(),
@@ -776,6 +819,14 @@ class PromptEditor extends HTMLElement {
             )
         ) {
             this.changeShowMinimap(settings.minimap)
+        }
+        if (
+            settings.showHeader !== void 0 && (
+                force ||
+                settings.showHeader !== currentSettings.showHeader
+            )
+        ) {
+            this.changeShowHeader(settings.showHeader)
         }
         if (
             settings.lineNumbers !== void 0 && (
@@ -819,6 +870,10 @@ class PromptEditor extends HTMLElement {
         }
     }
 
+    onChangeShowHeader(callback: () => void) {
+        this.onChangeShowHeaderCallbacks.push(callback)
+    }
+
     onChangeShowLineNumbers(callback: () => void) {
         this.onChangeShowLineNumbersCallbacks.push(callback)
     }
@@ -844,6 +899,7 @@ class PromptEditor extends HTMLElement {
     }
 
     onChange(callback: () => void) {
+        this.onChangeShowHeader(callback)
         this.onChangeShowLineNumbers(callback)
         this.onChangeShowMinimap(callback)
         this.onChangeReplaceUnderscore(callback)
