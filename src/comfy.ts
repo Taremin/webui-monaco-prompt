@@ -44,8 +44,11 @@ const me = "webui-monaco-prompt";
     })
 
     let prevSettings: any = null
-    let settings: any = null
+    let settings: any = {}
     api.getSetting(me).then((userSetting: any) => {
+        if (!userSetting || !userSetting.editor) {
+            return
+        }
         settings = userSetting
         MonacoPrompt.runAllInstances((editor: any) => {
             if (settings && settings.editor) {
