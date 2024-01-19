@@ -49,7 +49,7 @@ const me = "webui-monaco-prompt";
         settings = userSetting
         MonacoPrompt.runAllInstances((editor: any) => {
             if (settings && settings.editor) {
-                editor.setSettings(settings.editor)
+                editor.setSettings(settings.editor, true)
             }
         })
     })
@@ -109,7 +109,7 @@ const me = "webui-monaco-prompt";
         editor.style.cssText = getComputedStyle(textarea).cssText
 
         if (settings && settings.editor) {
-            editor.setSettings(settings.editor)
+            editor.setSettings(settings.editor, true)
         }
 
         const saveSettings = async () => {

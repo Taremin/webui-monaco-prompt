@@ -2,6 +2,10 @@ import * as monaco from 'monaco-editor/esm/vs/editor/editor.api'
 import { initVimMode } from 'monaco-vim'
 import { sdPrompt, sdDynamicPrompt } from './languages'
 import { provider, addCSV, loadCSV, getCount, addData, clearCSV, getReplaceUnderscore, updateReplaceUnderscore } from './completion'
+import { addActionWithCommandOption, addActionWithSubMenu } from './monaco_utils'
+// @ts-ignore
+import { ContextKeyExpr } from 'monaco-editor/esm/vs/platform/contextkey/common/contextkey'
+
 import style from "./styles/index.css"
 
 // define prompt language
@@ -15,6 +19,8 @@ for (const {id, lang} of [
     monaco.languages.registerCompletionItemProvider(id, provider)
 }
 
+const ContextPrefix = "monacoPromptEditor"
+
 interface PromptEditorGlobal {
     instances: PromptEditor[]
 }
@@ -23,6 +29,7 @@ interface PromptEditorGlobal {
 const settings: PromptEditorGlobal = {
     instances: [],
 }
+let id = 0
 
 interface PromptEditorOptions {
     focus: boolean;
@@ -65,10 +72,11 @@ interface PromptEditorCheckboxParam {
     toggleCallback: (ev: Event) => void
 }
 
-enum PromptEditorMode {
-    NORMAL = 'NORMAL',
-    VIM = 'VIM',
+const PromptEditorMode = {
+    NORMAL: 'NORMAL',
+    VIM: 'VIM',
 }
+type PromptEditorMode = typeof PromptEditorMode[keyof typeof PromptEditorMode]
 
 class PromptEditor extends HTMLElement {
     elements: Partial<PromptEditorElements> = {}
@@ -84,6 +92,7 @@ class PromptEditor extends HTMLElement {
     onChangeThemeCallbacks: Array<() => void>
     onChangeModeCallbacks: Array<() => void>
     onChangeLanguageCallbacks: Array<() => void>
+    _id = 0
     
     constructor(textarea: HTMLTextAreaElement, options: Partial<PromptEditorOptions>={}) {
         super()
@@ -167,6 +176,12 @@ class PromptEditor extends HTMLElement {
         this.elements.overlay = overlay
         this.fixedOverflowWidgetWorkaround(options)
 
+        this._id = id++
+        this.setContextMenu()
+
+        // init context
+        this.setSettings(this.getSettings(), true)
+
         settings.instances.push(this)
     }
 
@@ -184,11 +199,119 @@ class PromptEditor extends HTMLElement {
         }
     }
 
+    createContextKey(key: string) {
+        return [ContextPrefix, key].join('.')
+    }
+
+    setContextMenu() {
+        addActionWithCommandOption(this.monaco, {
+            id: 'minimap',
+            label: 'Show Minimap',
+            order: 0,
+            groupId: "monaco-prompt-editor",
+            run: () => {
+                this.changeShowMinimap(!this.getContext(this.createContextKey("minimap")))
+                this.syncMinimap()
+            },
+            commandOptions: {
+                toggled: {
+                    condition: ContextKeyExpr.deserialize(this.createContextKey("minimap"))
+                }
+            },
+        })
+        addActionWithCommandOption(this.monaco, {
+            id: 'line_numbers_show',
+            label: 'LineNum',
+            order: 1,
+            groupId: "monaco-prompt-editor",
+            run: () => {
+                this.changeShowLineNumbers(!this.getContext(this.createContextKey("lineNumbers")))
+                this.syncLineNumbers()
+            },
+            commandOptions: {
+                toggled: {
+                    condition: ContextKeyExpr.deserialize(this.createContextKey("lineNumbers"))
+                }
+            },
+        })
+        addActionWithCommandOption(this.monaco, {
+            id: 'underscore_replace',
+            label: 'Replace Underscore',
+            order: 2,
+            groupId: "monaco-prompt-editor",
+            run: () => {
+                this.changeReplaceUnderscore(!this.getContext(this.createContextKey("replaceUnderscore")))
+                this.syncReplaceUnderscore()
+            },
+            commandOptions: {
+                toggled: {
+                    condition: ContextKeyExpr.deserialize(this.createContextKey("replaceUnderscore"))
+                }
+            },
+        })
+        addActionWithSubMenu(this.monaco, {
+            title: "Language",
+            context: ["MonacoPromptEditorLanguage", this._id].join("_"),
+            group: 'monaco-prompt-editor',
+            order: 3,
+            actions: monaco.languages.getLanguages().map(lang => {
+                return {
+                    id: ["language", lang.id].join("_"),
+                    label: lang.id,
+                    run: () => {
+                        this.changeLanguage(lang.id)
+                        this.syncLanguage()
+                    },
+                    commandOptions: {
+                        toggled: {
+                            condition: ContextKeyExpr.deserialize(`${[ContextPrefix, "language"].join('.')} == ${lang.id}`)
+                        }
+                    }
+                }
+            })
+        })
+        addActionWithSubMenu(this.monaco, {
+            title: "KeyBindings",
+            context: ["MonacoPromptEditorKeyBindings", this._id].join("_"),
+            group: 'monaco-prompt-editor',
+            order: 3,
+            actions: Object.values(PromptEditorMode).map(value => {
+                return {
+                    id: ["keybinding", value].join("_"),
+                    label: value,
+                    run: () => {
+                        this.changeMode(value)
+                        this.syncKeyBindings()
+                    },
+                    commandOptions: {
+                        toggled: {
+                            condition: ContextKeyExpr.deserialize(`${[ContextPrefix, "keybinding"].join('.')} == ${value}`)
+                        }
+                    }
+                }
+            })
+        })
+    }
+
     setOverlayZIndex(zIndex: number) {
         if (!this.elements.overlay) {
             return
         }
         this.elements.overlay.style.zIndex = "" + zIndex
+    }
+
+    setContext(key:string, value: any) {
+        // @ts-ignore
+        const contextKeyService = this.monaco._contextKeyService 
+        const contextValueContainer = contextKeyService.getContextValuesContainer(contextKeyService._myContextId)
+        contextValueContainer.setValue(key, value)
+    }
+
+    getContext(key:string) {
+        // @ts-ignore
+        const contextKeyService = this.monaco._contextKeyService 
+        const contextValueContainer = contextKeyService.getContextValuesContainer(contextKeyService._myContextId)
+        return contextValueContainer.getValue(key)
     }
 
     changeMode(newMode: PromptEditorMode) {
@@ -207,6 +330,7 @@ class PromptEditor extends HTMLElement {
         }
 
         this.mode = newMode
+        this.setContext(this.createContextKey("keybinding"), this.mode)
 
         if (this.elements.keyBindings) {
             this.elements.keyBindings.value = newMode
@@ -225,6 +349,8 @@ class PromptEditor extends HTMLElement {
         }
         
         (this.monaco as any)._themeService.setTheme(this.theme)
+        this.setContext(this.createContextKey("theme"), this.theme)
+
         for (const callback of this.onChangeThemeCallbacks) {
             callback()
         }
@@ -237,6 +363,8 @@ class PromptEditor extends HTMLElement {
 
         const model = this.monaco.getModel()
         monaco.editor.setModelLanguage(model!, languageId)
+        this.setContext(this.createContextKey("language"), languageId)
+
         for (const callback of this.onChangeLanguageCallbacks) {
             callback()
         }
@@ -249,6 +377,8 @@ class PromptEditor extends HTMLElement {
         this.monaco.updateOptions({
             lineNumbers: show ? 'on' : 'off'
         })
+        this.setContext(this.createContextKey("lineNumbers"), show)
+
         for (const callback of this.onChangeShowLineNumbersCallbacks) {
             callback()
         }
@@ -263,6 +393,8 @@ class PromptEditor extends HTMLElement {
                 enabled: show
             }
         })
+        this.setContext(this.createContextKey("minimap"), show)
+
         for (const callback of this.onChangeShowMinimapCallbacks) {
             callback()
         }
@@ -273,6 +405,8 @@ class PromptEditor extends HTMLElement {
             this.elements.replaceUnderscore.checked = isReplace
         }
         updateReplaceUnderscore(isReplace)
+        this.setContext(this.createContextKey("replaceUnderscore"), isReplace)
+
         for (const callback of this.onChangeReplaceUnderscoreCallbacks) {
             callback()
         }
@@ -632,42 +766,54 @@ class PromptEditor extends HTMLElement {
         } as PromptEditorSettings
     }
 
-    setSettings(settings: Partial<PromptEditorSettings>) {
+    setSettings(settings: Partial<PromptEditorSettings>, force=false) {
         const currentSettings = this.getSettings()
 
         if (
-            settings.minimap !== void 0 &&
-            settings.minimap !== currentSettings.minimap
+            settings.minimap !== void 0 && (
+                force ||
+                settings.minimap !== currentSettings.minimap
+            )
         ) {
             this.changeShowMinimap(settings.minimap)
         }
         if (
-            settings.lineNumbers !== void 0 &&
-            settings.lineNumbers !== currentSettings.lineNumbers
+            settings.lineNumbers !== void 0 && (
+                force ||
+                settings.lineNumbers !== currentSettings.lineNumbers
+            )
         ) {
             this.changeShowLineNumbers(settings.lineNumbers)
         }
         if (
-            settings.replaceUnderscore !== void 0 &&
-            settings.replaceUnderscore !== currentSettings.replaceUnderscore
+            settings.replaceUnderscore !== void 0 && (
+                force ||
+                settings.replaceUnderscore !== currentSettings.replaceUnderscore
+            )
         ) {
             this.changeReplaceUnderscore(settings.replaceUnderscore)
         }
         if (
-            settings.language !== void 0 &&
-            settings.language !== currentSettings.language
+            settings.language !== void 0 && (
+                force ||
+                settings.language !== currentSettings.language
+            )
         ) {
             this.changeLanguage(settings.language)
         }
         if (
-            settings.theme !== void 0 &&
-            settings.theme !== currentSettings.theme
+            settings.theme !== void 0 && (
+                force ||
+                settings.theme !== currentSettings.theme
+            )
         ) {
             this.changeTheme(settings.theme)
         }
         if (
-            settings.mode !== void 0 &&
-            settings.mode !== currentSettings.mode
+            settings.mode !== void 0 && (
+                force ||
+                settings.mode !== currentSettings.mode
+            )
         ) {
             this.changeMode(settings.mode)
         }
