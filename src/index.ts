@@ -311,6 +311,27 @@ class PromptEditor extends HTMLElement {
                 }
             })
         })
+        addActionWithSubMenu(this.monaco, {
+            title: "Theme",
+            context: ["MonacoPromptEditorTheme", this._id].join("_"),
+            group: 'monaco-prompt-editor',
+            order: 6,
+            actions: Object.keys(this._mapToObject((this.monaco as any)._themeService._knownThemes)).map(value => {
+                return {
+                    id: ["theme", value].join("_"),
+                    label: value,
+                    run: () => {
+                        this.changeTheme(value)
+                        this.syncTheme()
+                    },
+                    commandOptions: {
+                        toggled: {
+                            condition: ContextKeyExpr.deserialize(`${[ContextPrefix, "theme"].join('.')} == ${value}`)
+                        }
+                    }
+                }
+            })
+        })
     }
 
     setOverlayZIndex(zIndex: number) {
