@@ -295,7 +295,7 @@ class PromptEditor extends HTMLElement {
                     },
                     commandOptions: {
                         toggled: {
-                            condition: ContextKeyExpr.deserialize(`${[ContextPrefix, "language"].join('.')} == ${lang.id}`)
+                            condition: ContextKeyExpr.deserialize(`${this.createContextKey("language")} == ${lang.id}`)
                         }
                     }
                 }
@@ -316,7 +316,7 @@ class PromptEditor extends HTMLElement {
                     },
                     commandOptions: {
                         toggled: {
-                            condition: ContextKeyExpr.deserialize(`${[ContextPrefix, "keybinding"].join('.')} == ${value}`)
+                            condition: ContextKeyExpr.deserialize(`${this.createContextKey("keybinding")} == ${value}`)
                         }
                     }
                 }
@@ -337,7 +337,7 @@ class PromptEditor extends HTMLElement {
                     },
                     commandOptions: {
                         toggled: {
-                            condition: ContextKeyExpr.deserialize(`${[ContextPrefix, "theme"].join('.')} == ${value}`)
+                            condition: ContextKeyExpr.deserialize(`${this.createContextKey("theme")} == ${value}`)
                         }
                     }
                 }
