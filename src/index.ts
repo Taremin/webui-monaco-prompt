@@ -20,6 +20,7 @@ for (const {id, lang} of [
 }
 
 const ContextPrefix = "monacoPromptEditor"
+const FontSizePreset = [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48]
 
 interface PromptEditorGlobal {
     instances: {[key: number]: PromptEditor}
@@ -46,6 +47,7 @@ interface PromptEditorSettings {
     theme: string,
     language: string,
     showHeader: boolean,
+    fontSize: number,
 }
 
 interface PromptEditorElements {
@@ -63,6 +65,7 @@ interface PromptEditorElements {
     minimap: HTMLInputElement
     replaceUnderscore: HTMLInputElement
     overlay: HTMLDivElement
+    fontsize: HTMLSelectElement
 }
 
 interface PromptEditorCheckboxParam {
@@ -95,6 +98,7 @@ class PromptEditor extends HTMLElement {
     onChangeThemeCallbacks: Array<() => void>
     onChangeModeCallbacks: Array<() => void>
     onChangeLanguageCallbacks: Array<() => void>
+    onChangeFontSizeCallbacks: Array<() => void>
     _id: number
     
     constructor(textarea: HTMLTextAreaElement, options: Partial<PromptEditorOptions>={}) {
@@ -134,6 +138,7 @@ class PromptEditor extends HTMLElement {
         this.onChangeThemeCallbacks = []
         this.onChangeModeCallbacks = []
         this.onChangeLanguageCallbacks = []
+        this.onChangeFontSizeCallbacks = []
 
         const editor = this.monaco = monaco.editor.create(monacoElement, {
             value: textarea.value,
@@ -281,10 +286,31 @@ class PromptEditor extends HTMLElement {
             },
         })
         addActionWithSubMenu(this.monaco, {
+            title: "FontSize",
+            context: ["MonacoPromptEditorFontSize", this._id].join("_"),
+            group: 'monaco-prompt-editor',
+            order: 4,
+            actions: FontSizePreset.map(size => {
+                return {
+                    id: ["fontsize", size].join("_"),
+                    label: ""+size,
+                    run: () => {
+                        this.changeFontSize(size)
+                        this.syncFontSize()
+                    },
+                    commandOptions: {
+                        toggled: {
+                            condition: ContextKeyExpr.deserialize(`${this.createContextKey("fontSize")} == ${size}`)
+                        }
+                    }
+                }
+            })
+        })
+        addActionWithSubMenu(this.monaco, {
             title: "Language",
             context: ["MonacoPromptEditorLanguage", this._id].join("_"),
             group: 'monaco-prompt-editor',
-            order: 4,
+            order: 5,
             actions: monaco.languages.getLanguages().map(lang => {
                 return {
                     id: ["language", lang.id].join("_"),
@@ -305,7 +331,7 @@ class PromptEditor extends HTMLElement {
             title: "KeyBindings",
             context: ["MonacoPromptEditorKeyBindings", this._id].join("_"),
             group: 'monaco-prompt-editor',
-            order: 5,
+            order: 6,
             actions: Object.values(PromptEditorMode).map(value => {
                 return {
                     id: ["keybinding", value].join("_"),
@@ -326,7 +352,7 @@ class PromptEditor extends HTMLElement {
             title: "Theme",
             context: ["MonacoPromptEditorTheme", this._id].join("_"),
             group: 'monaco-prompt-editor',
-            order: 6,
+            order: 7,
             actions: Object.keys(this._mapToObject((this.monaco as any)._themeService._knownThemes)).map(value => {
                 return {
                     id: ["theme", value].join("_"),
@@ -475,6 +501,20 @@ class PromptEditor extends HTMLElement {
         }
     }
 
+    changeFontSize(size: number) {
+        if (this.elements.fontsize) {
+            this.elements.fontsize.value = ""+size
+        }
+        this.monaco.updateOptions({
+            "fontSize": size
+        })
+        this.setContext(this.createContextKey("fontSize"), size)
+
+        for (const callback of this.onChangeFontSizeCallbacks) {
+            callback()
+        }
+    }
+
     polyfillMonacoEditorConfiguration() {
         if (typeof (this.monaco as any)["getConfiguration"] === 'function') {
             return
@@ -565,6 +605,21 @@ class PromptEditor extends HTMLElement {
         }
 
         for (const {label, data, callback, isSelectedCallback, changeCallback, getValue} of [
+            {
+                label: "FontSize",
+                data: this._arrayToObject(FontSizePreset),
+                callback: (label: HTMLLabelElement, select: HTMLSelectElement) => {
+                    this.elements.fontsize = select
+                },
+                isSelectedCallback: (dataValue: string) => {
+                    return +dataValue === this.monaco.getOption(monaco.editor.EditorOption.fontSize)
+                },
+                changeCallback: (ev: Event) => {
+                    const value = +(ev.target as HTMLSelectElement).value
+                    this.changeFontSize(value)
+                    this.syncFontSize()
+                }
+            },
             {
                 label: "Language",
                 data: this._arrayToObject(monaco.languages.getLanguages().map(lang => lang.id)),
@@ -691,6 +746,13 @@ class PromptEditor extends HTMLElement {
         })
     }
 
+    syncFontSize() {
+        const value = this.getContext(this.createContextKey("fontSize"))
+        runAllInstances((instance) => {
+            instance.changeFontSize(value)
+        })
+    }
+
     createCheckbox(
         labelText: string,
         callback: (label: HTMLLabelElement, input: HTMLInputElement) => void,
@@ -762,8 +824,8 @@ class PromptEditor extends HTMLElement {
         return obj
     }
 
-    _arrayToObject(array: string[]) {
-        const obj: {[key: string]: string} = {}
+    _arrayToObject<T extends string|number>(array: T[]) {
+        const obj: {[key in T]: T} = {} as any
         array.forEach((value) => {
             obj[value] = value
         })
@@ -838,6 +900,7 @@ class PromptEditor extends HTMLElement {
             language: this.monaco.getModel()!.getLanguageId(),
             theme: this.theme,
             mode: this.mode,
+            fontSize: this.getContext(this.createContextKey("fontSize"))
         } as PromptEditorSettings
     }
 
@@ -900,6 +963,15 @@ class PromptEditor extends HTMLElement {
         ) {
             this.changeMode(settings.mode)
         }
+
+        if (
+            settings.fontSize !== void 0 && (
+                force ||
+                settings.fontSize !== currentSettings.fontSize
+            )
+        ) {
+            this.changeFontSize(settings.fontSize)
+        }
     }
 
     onChangeShowHeader(callback: () => void) {
@@ -930,6 +1002,10 @@ class PromptEditor extends HTMLElement {
         this.onChangeLanguageCallbacks.push(callback)
     }
 
+    onChangeFontSize(callback: () => void) {
+        this.onChangeFontSizeCallbacks.push(callback)
+    }
+
     onChange(callback: () => void) {
         this.onChangeShowHeader(callback)
         this.onChangeShowLineNumbers(callback)
@@ -938,6 +1014,7 @@ class PromptEditor extends HTMLElement {
         this.onChangeTheme(callback)
         this.onChangeMode(callback)
         this.onChangeLanguage(callback)
+        this.onChangeFontSize(callback)
     }
 }
 window.customElements.define('prompt-editor', PromptEditor);
