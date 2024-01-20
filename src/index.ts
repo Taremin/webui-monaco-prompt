@@ -22,12 +22,12 @@ for (const {id, lang} of [
 const ContextPrefix = "monacoPromptEditor"
 
 interface PromptEditorGlobal {
-    instances: PromptEditor[]
+    instances: {[key: number]: PromptEditor}
 }
 
 // global settings
 const settings: PromptEditorGlobal = {
-    instances: [],
+    instances: {},
 }
 let id = 0
 
@@ -95,11 +95,12 @@ class PromptEditor extends HTMLElement {
     onChangeThemeCallbacks: Array<() => void>
     onChangeModeCallbacks: Array<() => void>
     onChangeLanguageCallbacks: Array<() => void>
-    _id = 0
+    _id: number
     
     constructor(textarea: HTMLTextAreaElement, options: Partial<PromptEditorOptions>={}) {
         super()
 
+        this._id = id++
         this.textareaDescriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(textarea), 'value')!
 
         const container = this.elements.container = this.attachShadow({mode: 'open'})
@@ -181,13 +182,23 @@ class PromptEditor extends HTMLElement {
         this.elements.overlay = overlay
         this.fixedOverflowWidgetWorkaround(options)
 
-        this._id = id++
         this.setContextMenu()
 
         // init context
         this.setSettings(this.getSettings(), true)
 
-        settings.instances.push(this)
+        settings.instances[this._id] = this
+    }
+
+    dispose() {
+        if (this.monaco) {
+            const model = this.monaco.getModel()
+            if (model) {
+                model.dispose()
+            }
+            this.monaco.dispose()
+        }
+        delete settings.instances[this._id]
     }
 
     // fixedOverflowWidget相当のworkaroundを行う
@@ -618,9 +629,9 @@ class PromptEditor extends HTMLElement {
             return
         }
         const value = this.elements.language.value
-        for (const instance of settings.instances) {
+        runAllInstances((instance) => {
             instance.changeLanguage(value)
-        }
+        })
     }
 
     syncKeyBindings() {
@@ -628,9 +639,9 @@ class PromptEditor extends HTMLElement {
             return
         }
         const value = this.elements.keyBindings.value as PromptEditorMode
-        for (const instance of settings.instances) {
+        runAllInstances((instance) => {
             instance.changeMode(value)
-        }
+        })
         this.monaco.focus()
     }
 
@@ -639,15 +650,15 @@ class PromptEditor extends HTMLElement {
             return
         }
         const value = this.elements.theme.value
-        for (const instance of settings.instances) {
+        runAllInstances((instance) => {
             instance.changeTheme(value)
-        }
+        })
     }
 
     syncShowHeader() {
-        for (const instance of settings.instances) {
+        runAllInstances((instance) => {
             instance.changeShowHeader(this.showHeader)
-        }
+        })
     }
 
     syncLineNumbers() {
@@ -655,9 +666,9 @@ class PromptEditor extends HTMLElement {
             return
         }
         const value = this.elements.lineNumbers.checked
-        for (const instance of settings.instances) {
+        runAllInstances((instance) => {
             instance.changeShowLineNumbers(value)
-        }
+        })
     }
 
     syncMinimap() {
@@ -665,9 +676,9 @@ class PromptEditor extends HTMLElement {
             return
         }
         const value = this.elements.minimap.checked
-        for (const instance of settings.instances) {
+        runAllInstances((instance) => {
             instance.changeShowMinimap(value)
-        }
+        })
     }
 
     syncReplaceUnderscore() {
@@ -675,9 +686,9 @@ class PromptEditor extends HTMLElement {
             return
         }
         const value = this.elements.replaceUnderscore.checked
-        for (const instance of settings.instances) {
+        runAllInstances((instance) => {
             instance.changeReplaceUnderscore(value)
-        }
+        })
     }
 
     createCheckbox(
@@ -932,8 +943,8 @@ class PromptEditor extends HTMLElement {
 window.customElements.define('prompt-editor', PromptEditor);
 
 const runAllInstances = (callback: (instance: PromptEditor) => boolean|void) => {
-    for (const instance of settings.instances) {
-        if (callback(instance)) {
+    for (const instanceId of (Object.keys(settings.instances) as unknown as number[]).sort()) {
+        if (callback(settings.instances[instanceId])) {
             break
         }
     }
