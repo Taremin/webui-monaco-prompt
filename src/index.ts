@@ -5,6 +5,8 @@ import { provider, addCSV, loadCSV, getCount, addData, clearCSV, getReplaceUnder
 import { addActionWithCommandOption, addActionWithSubMenu } from './monaco_utils'
 // @ts-ignore
 import { ContextKeyExpr } from 'monaco-editor/esm/vs/platform/contextkey/common/contextkey'
+// @ts-ignore
+import { IQuickInputService } from 'monaco-editor/esm/vs/platform/quickinput/common/quickinput'
 
 import style from "./styles/index.css"
 
@@ -20,14 +22,15 @@ for (const {id, lang} of [
 }
 
 const ContextPrefix = "monacoPromptEditor"
+const FontSizePreset = [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48]
 
 interface PromptEditorGlobal {
-    instances: PromptEditor[]
+    instances: {[key: number]: PromptEditor}
 }
 
 // global settings
 const settings: PromptEditorGlobal = {
-    instances: [],
+    instances: {},
 }
 let id = 0
 
@@ -46,6 +49,8 @@ interface PromptEditorSettings {
     theme: string,
     language: string,
     showHeader: boolean,
+    fontSize: number,
+    fontFamily: string,
 }
 
 interface PromptEditorElements {
@@ -63,6 +68,7 @@ interface PromptEditorElements {
     minimap: HTMLInputElement
     replaceUnderscore: HTMLInputElement
     overlay: HTMLDivElement
+    fontsize: HTMLSelectElement
 }
 
 interface PromptEditorCheckboxParam {
@@ -95,11 +101,14 @@ class PromptEditor extends HTMLElement {
     onChangeThemeCallbacks: Array<() => void>
     onChangeModeCallbacks: Array<() => void>
     onChangeLanguageCallbacks: Array<() => void>
-    _id = 0
+    onChangeFontSizeCallbacks: Array<() => void>
+    onChangeFontFamilyCallbacks: Array<() => void>
+    _id: number
     
     constructor(textarea: HTMLTextAreaElement, options: Partial<PromptEditorOptions>={}) {
         super()
 
+        this._id = id++
         this.textareaDescriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(textarea), 'value')!
 
         const container = this.elements.container = this.attachShadow({mode: 'open'})
@@ -133,6 +142,8 @@ class PromptEditor extends HTMLElement {
         this.onChangeThemeCallbacks = []
         this.onChangeModeCallbacks = []
         this.onChangeLanguageCallbacks = []
+        this.onChangeFontSizeCallbacks = []
+        this.onChangeFontFamilyCallbacks = []
 
         const editor = this.monaco = monaco.editor.create(monacoElement, {
             value: textarea.value,
@@ -181,13 +192,25 @@ class PromptEditor extends HTMLElement {
         this.elements.overlay = overlay
         this.fixedOverflowWidgetWorkaround(options)
 
-        this._id = id++
         this.setContextMenu()
 
         // init context
         this.setSettings(this.getSettings(), true)
 
-        settings.instances.push(this)
+        this.setEventHandler()
+
+        settings.instances[this._id] = this
+    }
+
+    dispose() {
+        if (this.monaco) {
+            const model = this.monaco.getModel()
+            if (model) {
+                model.dispose()
+            }
+            this.monaco.dispose()
+        }
+        delete settings.instances[this._id]
     }
 
     // fixedOverflowWidget相当のworkaroundを行う
@@ -270,10 +293,54 @@ class PromptEditor extends HTMLElement {
             },
         })
         addActionWithSubMenu(this.monaco, {
+            title: "FontSize",
+            context: ["MonacoPromptEditorFontSize", this._id].join("_"),
+            group: 'monaco-prompt-editor',
+            order: 4,
+            actions: FontSizePreset.map(size => {
+                return {
+                    id: ["fontsize", size].join("_"),
+                    label: ""+size,
+                    run: () => {
+                        this.changeFontSize(size)
+                        this.syncFontSize()
+                    },
+                    commandOptions: {
+                        toggled: {
+                            condition: ContextKeyExpr.deserialize(`${this.createContextKey("fontSize")} == ${size}`)
+                        }
+                    }
+                }
+            })
+        })
+        this.monaco.addAction({
+            id: "fontfamily",
+            label: "FontFamily",
+            run: () => {
+                (this.monaco as any).invokeWithinContext(async (accessor:any) => {
+                    const service = accessor.get(IQuickInputService)
+                    const inputBox = service.createInputBox()
+
+                    inputBox.placeholder = "input font family"
+                    inputBox.value = this.monaco.getOption(monaco.editor.EditorOption.fontFamily)
+                    inputBox.onDidAccept(() => {
+                        this.changeFontFamily(inputBox.value)
+                        this.syncFontFamily()
+                        inputBox.dispose()
+                    })
+
+                    inputBox.show()
+                })
+            },
+            contextMenuOrder: 5,
+            contextMenuGroupId: 'monaco-prompt-editor',
+        })
+
+        addActionWithSubMenu(this.monaco, {
             title: "Language",
             context: ["MonacoPromptEditorLanguage", this._id].join("_"),
             group: 'monaco-prompt-editor',
-            order: 4,
+            order: 6,
             actions: monaco.languages.getLanguages().map(lang => {
                 return {
                     id: ["language", lang.id].join("_"),
@@ -284,7 +351,7 @@ class PromptEditor extends HTMLElement {
                     },
                     commandOptions: {
                         toggled: {
-                            condition: ContextKeyExpr.deserialize(`${[ContextPrefix, "language"].join('.')} == ${lang.id}`)
+                            condition: ContextKeyExpr.deserialize(`${this.createContextKey("language")} == ${lang.id}`)
                         }
                     }
                 }
@@ -294,7 +361,7 @@ class PromptEditor extends HTMLElement {
             title: "KeyBindings",
             context: ["MonacoPromptEditorKeyBindings", this._id].join("_"),
             group: 'monaco-prompt-editor',
-            order: 5,
+            order: 7,
             actions: Object.values(PromptEditorMode).map(value => {
                 return {
                     id: ["keybinding", value].join("_"),
@@ -305,7 +372,7 @@ class PromptEditor extends HTMLElement {
                     },
                     commandOptions: {
                         toggled: {
-                            condition: ContextKeyExpr.deserialize(`${[ContextPrefix, "keybinding"].join('.')} == ${value}`)
+                            condition: ContextKeyExpr.deserialize(`${this.createContextKey("keybinding")} == ${value}`)
                         }
                     }
                 }
@@ -315,7 +382,7 @@ class PromptEditor extends HTMLElement {
             title: "Theme",
             context: ["MonacoPromptEditorTheme", this._id].join("_"),
             group: 'monaco-prompt-editor',
-            order: 6,
+            order: 8,
             actions: Object.keys(this._mapToObject((this.monaco as any)._themeService._knownThemes)).map(value => {
                 return {
                     id: ["theme", value].join("_"),
@@ -326,11 +393,22 @@ class PromptEditor extends HTMLElement {
                     },
                     commandOptions: {
                         toggled: {
-                            condition: ContextKeyExpr.deserialize(`${[ContextPrefix, "theme"].join('.')} == ${value}`)
+                            condition: ContextKeyExpr.deserialize(`${this.createContextKey("theme")} == ${value}`)
                         }
                     }
                 }
             })
+        })
+    }
+
+    setEventHandler() {
+        this.monaco.onDidChangeConfiguration((e) => {
+            if (e.hasChanged(monaco.editor.EditorOption.fontSize)) {
+                this.changeFontSize(this.monaco.getOption(monaco.editor.EditorOption.fontSize), false)
+            }
+            if (e.hasChanged(monaco.editor.EditorOption.fontFamily)) {
+                this.changeFontFamily(this.monaco.getOption(monaco.editor.EditorOption.fontFamily), false)
+            }
         })
     }
 
@@ -464,6 +542,37 @@ class PromptEditor extends HTMLElement {
         }
     }
 
+    changeFontSize(size: number, updateEditorOption=true) {
+        if (this.elements.fontsize) {
+            this.elements.fontsize.value = ""+size
+        }
+
+        // avoid update loop
+        if (updateEditorOption) {
+            this.monaco.updateOptions({
+                "fontSize": size
+            })
+        }
+        this.setContext(this.createContextKey("fontSize"), size)
+
+        for (const callback of this.onChangeFontSizeCallbacks) {
+            callback()
+        }
+    }
+
+    changeFontFamily(fontFamily: string, updateEditorOption=true) {
+        if (updateEditorOption) {
+            this.monaco.updateOptions({
+                fontFamily: fontFamily
+            })
+        }
+        this.setContext(this.createContextKey("fontFamily"), fontFamily)
+
+        for (const callback of this.onChangeFontFamilyCallbacks) {
+            callback()
+        }
+    }
+
     polyfillMonacoEditorConfiguration() {
         if (typeof (this.monaco as any)["getConfiguration"] === 'function') {
             return
@@ -555,6 +664,21 @@ class PromptEditor extends HTMLElement {
 
         for (const {label, data, callback, isSelectedCallback, changeCallback, getValue} of [
             {
+                label: "FontSize",
+                data: this._arrayToObject(FontSizePreset),
+                callback: (label: HTMLLabelElement, select: HTMLSelectElement) => {
+                    this.elements.fontsize = select
+                },
+                isSelectedCallback: (dataValue: string) => {
+                    return +dataValue === this.monaco.getOption(monaco.editor.EditorOption.fontSize)
+                },
+                changeCallback: (ev: Event) => {
+                    const value = +(ev.target as HTMLSelectElement).value
+                    this.changeFontSize(value)
+                    this.syncFontSize()
+                }
+            },
+            {
                 label: "Language",
                 data: this._arrayToObject(monaco.languages.getLanguages().map(lang => lang.id)),
                 callback: (label: HTMLLabelElement, select: HTMLSelectElement) => {
@@ -618,9 +742,9 @@ class PromptEditor extends HTMLElement {
             return
         }
         const value = this.elements.language.value
-        for (const instance of settings.instances) {
+        runAllInstances((instance) => {
             instance.changeLanguage(value)
-        }
+        })
     }
 
     syncKeyBindings() {
@@ -628,9 +752,9 @@ class PromptEditor extends HTMLElement {
             return
         }
         const value = this.elements.keyBindings.value as PromptEditorMode
-        for (const instance of settings.instances) {
+        runAllInstances((instance) => {
             instance.changeMode(value)
-        }
+        })
         this.monaco.focus()
     }
 
@@ -639,15 +763,15 @@ class PromptEditor extends HTMLElement {
             return
         }
         const value = this.elements.theme.value
-        for (const instance of settings.instances) {
+        runAllInstances((instance) => {
             instance.changeTheme(value)
-        }
+        })
     }
 
     syncShowHeader() {
-        for (const instance of settings.instances) {
+        runAllInstances((instance) => {
             instance.changeShowHeader(this.showHeader)
-        }
+        })
     }
 
     syncLineNumbers() {
@@ -655,9 +779,9 @@ class PromptEditor extends HTMLElement {
             return
         }
         const value = this.elements.lineNumbers.checked
-        for (const instance of settings.instances) {
+        runAllInstances((instance) => {
             instance.changeShowLineNumbers(value)
-        }
+        })
     }
 
     syncMinimap() {
@@ -665,9 +789,9 @@ class PromptEditor extends HTMLElement {
             return
         }
         const value = this.elements.minimap.checked
-        for (const instance of settings.instances) {
+        runAllInstances((instance) => {
             instance.changeShowMinimap(value)
-        }
+        })
     }
 
     syncReplaceUnderscore() {
@@ -675,9 +799,23 @@ class PromptEditor extends HTMLElement {
             return
         }
         const value = this.elements.replaceUnderscore.checked
-        for (const instance of settings.instances) {
+        runAllInstances((instance) => {
             instance.changeReplaceUnderscore(value)
-        }
+        })
+    }
+
+    syncFontSize() {
+        const value = this.getContext(this.createContextKey("fontSize"))
+        runAllInstances((instance) => {
+            instance.changeFontSize(value)
+        })
+    }
+
+    syncFontFamily() {
+        const value = this.getContext(this.createContextKey("fontFamily"))
+        runAllInstances((instance) => {
+            instance.changeFontFamily(value)
+        })
     }
 
     createCheckbox(
@@ -751,8 +889,8 @@ class PromptEditor extends HTMLElement {
         return obj
     }
 
-    _arrayToObject(array: string[]) {
-        const obj: {[key: string]: string} = {}
+    _arrayToObject<T extends string|number>(array: T[]) {
+        const obj: {[key in T]: T} = {} as any
         array.forEach((value) => {
             obj[value] = value
         })
@@ -827,6 +965,8 @@ class PromptEditor extends HTMLElement {
             language: this.monaco.getModel()!.getLanguageId(),
             theme: this.theme,
             mode: this.mode,
+            fontSize: this.getContext(this.createContextKey("fontSize")),
+            fontFamily: this.getContext(this.createContextKey("fontFamily")),
         } as PromptEditorSettings
     }
 
@@ -889,6 +1029,24 @@ class PromptEditor extends HTMLElement {
         ) {
             this.changeMode(settings.mode)
         }
+
+        if (
+            settings.fontSize !== void 0 && (
+                force ||
+                settings.fontSize !== currentSettings.fontSize
+            )
+        ) {
+            this.changeFontSize(settings.fontSize)
+        }
+
+        if (
+            settings.fontFamily !== void 0 && (
+                force ||
+                settings.fontFamily !== currentSettings.fontFamily
+            )
+        ) {
+            this.changeFontFamily(settings.fontFamily)
+        }
     }
 
     onChangeShowHeader(callback: () => void) {
@@ -919,6 +1077,14 @@ class PromptEditor extends HTMLElement {
         this.onChangeLanguageCallbacks.push(callback)
     }
 
+    onChangeFontSize(callback: () => void) {
+        this.onChangeFontSizeCallbacks.push(callback)
+    }
+
+    onChangeFontFamily(callback: () => void) {
+        this.onChangeFontFamilyCallbacks.push(callback)
+    }
+
     onChange(callback: () => void) {
         this.onChangeShowHeader(callback)
         this.onChangeShowLineNumbers(callback)
@@ -927,13 +1093,15 @@ class PromptEditor extends HTMLElement {
         this.onChangeTheme(callback)
         this.onChangeMode(callback)
         this.onChangeLanguage(callback)
+        this.onChangeFontSize(callback)
+        this.onChangeFontFamily(callback)
     }
 }
 window.customElements.define('prompt-editor', PromptEditor);
 
 const runAllInstances = (callback: (instance: PromptEditor) => boolean|void) => {
-    for (const instance of settings.instances) {
-        if (callback(instance)) {
+    for (const instanceId of (Object.keys(settings.instances) as unknown as number[]).sort()) {
+        if (callback(settings.instances[instanceId])) {
             break
         }
     }

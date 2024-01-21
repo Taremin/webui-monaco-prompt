@@ -1,6 +1,6 @@
 # WebUI Monaco Prompt
 
-これは AUTOMATIC1111 氏の [stable-diffusion-webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui) 用の拡張です。
+これは AUTOMATIC1111 氏の [stable-diffusion-webui](https://github.com/AUTOMATIC1111/stable-diffusion-webui) と [ComfyUI](https://github.com/comfyanonymous/ComfyUI) 用の拡張です。
 
 プロンプトの編集をVSCodeでも使用されているエディタ実装 [Monaco Editor](https://microsoft.github.io/monaco-editor/) で行えるようにします。
 

@@ -144,8 +144,10 @@ const me = "webui-monaco-prompt";
 
         const ctx = link[id]
         ctx.observer.disconnect()
-        ctx.monaco.parentElement.removeChild(ctx.monaco)
-        link[id] = void 0
+        const editor = ctx.monaco
+        editor.dispose()
+        editor.parentElement.removeChild(ctx.monaco)
+        delete link[id]
     }
 
     for (const filename of ["danbooru.csv", "extra-quality-tags.csv"]) {
