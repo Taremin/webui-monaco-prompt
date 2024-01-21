@@ -1,6 +1,5 @@
 import { deepEqual } from 'fast-equals'
 const api  = (await eval('import("../../scripts/api.js")')).api // call native import
-console.log("api:", api)
 
 declare let __webpack_public_path__: any;
 
@@ -129,7 +128,6 @@ const me = "webui-monaco-prompt";
             api.storeSetting(me, Object.assign(settings, {
                 editor: currentSettings
             })).then((res: Response) => {
-                console.log("Store:", res)
             })
         }
 
