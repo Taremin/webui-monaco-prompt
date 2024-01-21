@@ -1,7 +1,7 @@
 {
   "name": "webui-monaco-prompt",
-  "version": "0.1.5",
-  "description": "Prompt Editor Extension for AUTOMATIC1111 stable-diffusion-webui",
+  "version": "0.1.6",
+  "description": "Prompt Editor Extension for AUTOMATIC1111 stable-diffusion-webui and ComfyUI",
   "main": "dist/main.js",
   "scripts": {
     "postinstall": "cd node_modules/monaco-vim/ && npm install && npm run babel",
