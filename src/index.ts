@@ -192,6 +192,8 @@ class PromptEditor extends HTMLElement {
         // init context
         this.setSettings(this.getSettings(), true)
 
+        this.setEventHandler()
+
         settings.instances[this._id] = this
     }
 
@@ -371,6 +373,14 @@ class PromptEditor extends HTMLElement {
         })
     }
 
+    setEventHandler() {
+        this.monaco.onDidChangeConfiguration((e) => {
+            if (e.hasChanged(monaco.editor.EditorOption.fontSize)) {
+                this.changeFontSize(this.monaco.getOption(monaco.editor.EditorOption.fontSize), false)
+            }
+        })
+    }
+
     setOverlayZIndex(zIndex: number) {
         if (!this.elements.overlay) {
             return
@@ -501,13 +511,17 @@ class PromptEditor extends HTMLElement {
         }
     }
 
-    changeFontSize(size: number) {
+    changeFontSize(size: number, updateEditorOption=true) {
         if (this.elements.fontsize) {
             this.elements.fontsize.value = ""+size
         }
-        this.monaco.updateOptions({
-            "fontSize": size
-        })
+
+        // avoid update loop
+        if (updateEditorOption) {
+            this.monaco.updateOptions({
+                "fontSize": size
+            })
+        }
         this.setContext(this.createContextKey("fontSize"), size)
 
         for (const callback of this.onChangeFontSizeCallbacks) {
