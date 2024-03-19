@@ -10,7 +10,8 @@ const dir = srcURL.pathname.split('/').slice(0, -1).join('/');
 __webpack_public_path__ = dir + "/"
 
 // import は __webpack_public_path__ を使う場合は処理順の関係で使えない
-const MonacoPrompt = require("./index")
+const MonacoPrompt = require("./index");
+(window as any).WebuiMonacoPrompt = MonacoPrompt
 
 const me = "webui-monaco-prompt";
 
