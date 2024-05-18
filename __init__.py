@@ -12,6 +12,7 @@ WEB_DIRECTORY = "./comfy"
 
 extension_root_path = os.path.dirname(__file__)
 
+
 @server.PromptServer.instance.routes.get("/webui-monaco-prompt/csv")
 async def get_csv_fils(request):
     for path in glob.glob(os.path.join(extension_root_path, "csv", "*.csv"), recursive=True):

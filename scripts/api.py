@@ -17,26 +17,27 @@ with open(os.path.join(extension_base_dir, "extension.json"), mode="r") as f:
         print(__file__, "can't load extension settings")
         extension_settings = {}
 
+
 def on_app_started(demo: Optional[Blocks], app: FastAPI):
     def get_settings_path(auth, user):
         return os.path.join(
             extension_base_dir,
             f"settings/{'user_' + user if auth is not None else 'global'}.json"
         )
-    
+
     def get_current_user(request: fastapi.Request) -> Optional[str]:
         token = request.cookies.get("access-token") or request.cookies.get(
             "access-token-unsecure"
         )
         return app.tokens.get(token)
-    
+
     def get(request: fastapi.Request):
         user = get_current_user(request)
         if app.auth is None or user is not None:
             settings_path = get_settings_path(app.auth, user)
             if not os.path.isfile(settings_path):
                 return {}
-            
+
             with open(settings_path, mode="r") as f:
                 try:
                     return json.load(f)
@@ -46,6 +47,7 @@ def on_app_started(demo: Optional[Blocks], app: FastAPI):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
         )
+
     async def post(request: fastapi.Request):
         user = get_current_user(request)
         if app.auth is None or user is not None:
@@ -59,8 +61,10 @@ def on_app_started(demo: Optional[Blocks], app: FastAPI):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
         )
+
     def get_embeddings(request: fastapi.Request):
         return Api.get_embeddings(None)
+
     def get_csvs(request: fastapi.Request):
         paths = glob.glob(
             pathname=os.path.join(extension_base_dir, "csv", "**", "*.csv"),
@@ -71,5 +75,6 @@ def on_app_started(demo: Optional[Blocks], app: FastAPI):
     app.add_api_route(extension_settings.get("EndPoint"), post, methods=["POST"])
     app.add_api_route(extension_settings.get("GetEmbeddings"), get_embeddings, methods=["GET"])
     app.add_api_route(extension_settings.get("CSV"), get_csvs, methods=["GET"])
+
 
 script_callbacks.on_app_started(on_app_started)
