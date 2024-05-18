@@ -1,7 +1,7 @@
 import * as WebuiMonacoPrompt from "../index"
 import { PromptEditor, NodeFindMatch } from "./types"
 // @ts-ignore
-import * as codicon from "monaco-editor/esm/vs/base/common/codicons"
+import * as codicon from "monaco-editor/esm/vs/base/common/codiconsUtil"
 
 
 // Codicon を style 要素でロード
