@@ -1,6 +1,7 @@
 from modules import script_callbacks
 from typing import Optional
 import json
+import glob
 
 from gradio import Blocks
 import fastapi
@@ -60,8 +61,15 @@ def on_app_started(demo: Optional[Blocks], app: FastAPI):
         )
     def get_embeddings(request: fastapi.Request):
         return Api.get_embeddings(None)
+    def get_csvs(request: fastapi.Request):
+        paths = glob.glob(
+            pathname=os.path.join(extension_base_dir, "csv", "**", "*.csv"),
+            recursive=True
+        )
+        return list(map(lambda path: os.path.splitext(os.path.basename(path))[0], paths))
     app.add_api_route(extension_settings.get("EndPoint"), get, methods=["GET"])
     app.add_api_route(extension_settings.get("EndPoint"), post, methods=["POST"])
     app.add_api_route(extension_settings.get("GetEmbeddings"), get_embeddings, methods=["GET"])
+    app.add_api_route(extension_settings.get("CSV"), get_csvs, methods=["GET"])
 
 script_callbacks.on_app_started(on_app_started)

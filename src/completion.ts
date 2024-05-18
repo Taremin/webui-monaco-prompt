@@ -14,6 +14,9 @@ interface State {
     threshold: number
     filteredTags: Partial<CompletionItem>[]
     isRplaceUnderscore: boolean
+    loadedCSV: {
+        [key: string]: string
+    }
 }
 
 const tags: Partial<CompletionItem>[] = []
@@ -22,6 +25,7 @@ const state: State = {
     threshold: 100,
     filteredTags: [],
     isRplaceUnderscore: false,
+    loadedCSV: {},
 }
 
 const updateReplaceUnderscore = (replace: boolean) => {
@@ -57,14 +61,33 @@ const clearCSV = () => {
     state.filteredTags.length = 0
 }
 
-const loadCSV = (csv: string) => {
+const loadCSV = (filename: string, csv: string) => {
     if (tags.length > 0) {
         clearCSV()
     }
 
-    addCSV(csv)
+    addCSV(filename, csv)
 }
-const addCSV = (csv: string) => {
+
+const addCSV = (filename: string, csv: string) => {
+    state.loadedCSV[filename] = csv
+    _addCSV(csv)
+}
+
+const addLoadedCSV = (files: string[]) => {
+    clearCSV()
+
+    for (const filename of files) {
+        const csv = state.loadedCSV[filename]
+        if (!csv) {
+            console.error(`"${filename}" is not loaded`)
+            continue
+        }
+        _addCSV(csv)
+    }
+}
+
+const _addCSV = (csv: string) => {
     for (const row of parse(csv, {columns: ["tag", "category", "count", "alias"]})) {
         const countString = isNaN(row.count) ? row.count : (+row.count).toLocaleString()
         const item: Partial<CompletionItem> = {
@@ -106,6 +129,10 @@ const updateFilteredTags = () => {
 
 const getCount = () => {
     return tags.length
+}
+
+const getLoadedCSV = () => {
+    return Object.keys(state.loadedCSV)
 }
 
 const escape = (str: string) => {
@@ -202,6 +229,8 @@ export {
     addCSV,
     loadCSV,
     getCount,
+    getLoadedCSV,
+    addLoadedCSV,
     addData,
     updateFilteredTags,
     updateReplaceUnderscore,
