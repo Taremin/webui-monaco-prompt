@@ -17,6 +17,7 @@ interface State {
     loadedCSV: {
         [key: string]: string
     }
+    enabledCSV: string[]
 }
 
 const tags: Partial<CompletionItem>[] = []
@@ -26,6 +27,7 @@ const state: State = {
     filteredTags: [],
     isRplaceUnderscore: false,
     loadedCSV: {},
+    enabledCSV: [],
 }
 
 const updateReplaceUnderscore = (replace: boolean) => {
@@ -71,11 +73,27 @@ const loadCSV = (filename: string, csv: string) => {
 
 const addCSV = (filename: string, csv: string) => {
     state.loadedCSV[filename] = csv
-    _addCSV(csv)
+
+    if (!state.enabledCSV.includes(filename)) {
+        state.enabledCSV.push(filename)
+    }
+
+    _addCSV(csv, filename)
 }
 
 const addLoadedCSV = (files: string[]) => {
-    clearCSV()
+    const  diff = compareArray(state.enabledCSV, files)
+
+    if (diff.equal) {
+        return
+    }
+
+    state.enabledCSV = files
+    if (diff.remove.length > 0) {
+        clearCSV()
+    } else if (diff.add.length > 0) {
+        files = diff.add
+    }
 
     for (const filename of files) {
         const csv = state.loadedCSV[filename]
@@ -83,15 +101,47 @@ const addLoadedCSV = (files: string[]) => {
             console.error(`"${filename}" is not loaded`)
             continue
         }
-        _addCSV(csv)
+        _addCSV(csv, filename)
     }
 }
 
-const _addCSV = (csv: string) => {
+const compareArray = (array1: any[], array2: any[]) => {
+    const result = {
+        equal: true,
+        add: [] as any[],
+        remove: [] as any[],
+    }
+    const array2map = new Map(array2.map(v => [v, true]))
+
+    for (const array1value of array1) {
+        if (!array2map.has(array1value)) {
+            result.equal = false
+            result.remove.push(array1value)
+        } else {
+            array2map.delete(array1value)
+        }
+    }
+    if (array2map.size > 0) {
+        result.equal = false
+    }
+    for (const key of array2map.keys()) {
+        result.add.push(key)
+    }
+
+    return result
+}
+
+const _addCSV = (csv: string, sourceName?: string) => {
     for (const row of parse(csv, {columns: ["tag", "category", "count", "alias"]})) {
         const countString = isNaN(row.count) ? row.count : (+row.count).toLocaleString()
+        const description = sourceName ?
+            [`${sourceName} -`, countString].join(" ") :
+            countString
         const item: Partial<CompletionItem> = {
-            label: {label: row.tag, description: countString},
+            label: {
+                label: row.tag,
+                description: description,
+            },
             kind: languages.CompletionItemKind.Value,
             insertText: escape(row.tag),
             count: row.count,
@@ -108,7 +158,11 @@ const _addCSV = (csv: string) => {
                 continue
             }
             const item: Partial<CompletionItem> = {
-                label: {label: alias, detail: ` -> ${row.tag}`, description: countString},
+                label: {
+                    label: alias,
+                    detail: ` -> ${row.tag}`,
+                    description: description,
+                },
                 kind: languages.CompletionItemKind.Value,
                 insertText: escape(row.tag),
                 count: row.count,
@@ -133,6 +187,10 @@ const getCount = () => {
 
 const getLoadedCSV = () => {
     return Object.keys(state.loadedCSV)
+}
+
+const getEnabledCSV = () => {
+    return state.enabledCSV.slice()
 }
 
 const escape = (str: string) => {
@@ -229,6 +287,7 @@ export {
     addCSV,
     loadCSV,
     getCount,
+    getEnabledCSV,
     getLoadedCSV,
     addLoadedCSV,
     addData,

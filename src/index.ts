@@ -1,7 +1,7 @@
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.api'
 import { initVimMode } from 'monaco-vim'
 import { sdPrompt, sdDynamicPrompt } from './languages'
-import { provider, addCSV, loadCSV, getCount, addData, clearCSV, getReplaceUnderscore, updateReplaceUnderscore, getLoadedCSV, addLoadedCSV } from './completion'
+import { provider, addCSV, loadCSV, getCount, addData, clearCSV, getReplaceUnderscore, updateReplaceUnderscore, getLoadedCSV, addLoadedCSV, getEnabledCSV } from './completion'
 import { addActionWithCommandOption, addActionWithSubMenu, ActionsPartialDescripter, getMenuId, updateSubMenu, removeSubMenu } from './monaco_utils'
 import { MultipleSelectInstance, multipleSelect} from 'multiple-select-vanilla'
 // @ts-ignore
@@ -238,7 +238,9 @@ class PromptEditor extends HTMLElement {
         this.setContextMenu()
 
         // init context
-        this.setSettings(this.getSettings(), true)
+        this.setSettings(Object.assign({}, this.getSettings(), {
+            csvToggle: Object.fromEntries(getEnabledCSV().map(csvName => [this.createContextKey("csv", csvName), true])),
+        }), true)
 
         this.setEventHandler()
 
