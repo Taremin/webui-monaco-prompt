@@ -135,7 +135,7 @@ const _addCSV = (csv: string, sourceName?: string) => {
     for (const row of parse(csv, {columns: ["tag", "category", "count", "alias"]})) {
         const countString = isNaN(row.count) ? row.count : (+row.count).toLocaleString()
         const description = sourceName ?
-            [`${sourceName} -`, countString].join(" ") :
+            [`(${sourceName})`, countString].join(" ") :
             countString
         const item: Partial<CompletionItem> = {
             label: {
