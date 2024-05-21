@@ -1,6 +1,6 @@
 {
   "name": "webui-monaco-prompt",
-  "version": "0.1.6",
+  "version": "0.2.0",
   "description": "Prompt Editor Extension for AUTOMATIC1111 stable-diffusion-webui and ComfyUI",
   "main": "dist/main.js",
   "scripts": {
