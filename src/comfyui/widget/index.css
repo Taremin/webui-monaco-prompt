@@ -1,0 +1,74 @@
+div.webui-monaco-prompt-container {
+    display: flex;
+    flex-flow: column;
+}
+div.webui-monaco-prompt-header {
+    display: flex;
+    flex-direction: column;
+}
+div.webui-monaco-prompt-input {
+    display: flex;
+    width: 100%;
+    margin: 2px 0;
+}
+div.webui-monaco-prompt-control {
+    display: flex;
+    flex-flow: nowrap;
+}
+div.webui-monaco-prompt-toggle {
+}
+div.webui-monaco-prompt-toggle-checked {
+    border-width: 1px;
+    border-color: var(--fg-color);
+}
+
+input.webui-monaco-prompt-input-text[type="text"] {
+    color: var(--input-text);
+    background-color: var(--comfy-input-bg);
+    width: 100%;
+}
+.webui-monaco-prompt-table-container {
+    color: var(--input-text);
+    display: flex;
+    height: 100vh;
+    overflow: auto;
+    margin-top: 11px;
+}
+.webui-monaco-prompt-table {
+    font-size: 11px;
+    width: 100%;
+    height: 0;
+}
+.webui-monaco-prompt-table-container thead > tr > th {
+    border-bottom: 1px solid var(--fg-color);
+}
+.webui-monaco-prompt-table-container tbody > tr {
+    cursor: pointer;
+    /*
+    display: flex;
+    */
+}
+.webui-monaco-prompt-table-container tbody > tr:hover {
+    background-color: var(--fg-color) !important;
+    color: var(--bg-color) !important;
+}
+.webui-monaco-prompt-table-container tbody > tr:nth-child(even) {
+    background-color: var(--tr-even-bg-color);
+}
+.webui-monaco-prompt-table-container tbody > tr:nth-child(odd) {
+    background-color: var(--tr-odd-bg-color);
+}
+.webui-monaco-prompt-td {
+    /*
+    flex: 0 0 auto;
+    */
+    text-wrap: nowrap;
+}
+.webui-monaco-prompt-td-expand {
+    /*
+    flex: 1 1 auto;
+    */
+    width: 100%;
+}
+
+

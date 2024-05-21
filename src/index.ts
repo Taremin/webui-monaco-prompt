@@ -1,14 +1,21 @@
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.api'
 import { initVimMode } from 'monaco-vim'
 import { sdPrompt, sdDynamicPrompt } from './languages'
-import { provider, addCSV, loadCSV, getCount, addData, clearCSV, getReplaceUnderscore, updateReplaceUnderscore } from './completion'
-import { addActionWithCommandOption, addActionWithSubMenu } from './monaco_utils'
+import { provider, addCSV, loadCSV, getCount, addData, clearCSV, getReplaceUnderscore, updateReplaceUnderscore, getLoadedCSV, addLoadedCSV, getEnabledCSV } from './completion'
+import { addActionWithCommandOption, addActionWithSubMenu, ActionsPartialDescripter, getMenuId, updateSubMenu, removeSubMenu } from './monaco_utils'
+import { MultipleSelectInstance, multipleSelect} from 'multiple-select-vanilla'
 // @ts-ignore
 import { ContextKeyExpr } from 'monaco-editor/esm/vs/platform/contextkey/common/contextkey'
 // @ts-ignore
 import { IQuickInputService } from 'monaco-editor/esm/vs/platform/quickinput/common/quickinput'
+// @ts-ignore
+import { StandaloneThemeService } from 'monaco-editor/esm/vs/editor/standalone/browser/standaloneThemeService'
+import "multiple-select-vanilla/dist/styles/css/multiple-select.css"
+
 
 import style from "./styles/index.css"
+import { deepEqual } from 'fast-equals'
+
 
 // define prompt language
 for (const {id, lang} of [
@@ -26,6 +33,11 @@ const FontSizePreset = [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48
 
 interface PromptEditorGlobal {
     instances: {[key: number]: PromptEditor}
+}
+
+type CodeEditor = monaco.editor.IStandaloneCodeEditor & {
+    _themeService: StandaloneThemeService,
+    getConfiguration: () => typeof monaco.editor.EditorOptions,
 }
 
 // global settings
@@ -51,6 +63,9 @@ interface PromptEditorSettings {
     showHeader: boolean,
     fontSize: number,
     fontFamily: string,
+    csvToggle: {
+        [key: string]: boolean
+    },
 }
 
 interface PromptEditorElements {
@@ -67,8 +82,11 @@ interface PromptEditorElements {
     lineNumbers: HTMLInputElement
     minimap: HTMLInputElement
     replaceUnderscore: HTMLInputElement
+    overflowGuard: HTMLDivElement
     overlay: HTMLDivElement
     fontsize: HTMLSelectElement
+    autocomplete: MultipleSelectInstance
+    autocompleteElement: HTMLLabelElement
 }
 
 interface PromptEditorCheckboxParam {
@@ -88,21 +106,32 @@ type PromptEditorMode = typeof PromptEditorMode[keyof typeof PromptEditorMode]
 class PromptEditor extends HTMLElement {
     elements: Partial<PromptEditorElements> = {}
     mode: PromptEditorMode = PromptEditorMode.NORMAL
-    monaco: monaco.editor.IStandaloneCodeEditor
+    monaco: CodeEditor
     theme: string
     showHeader: boolean
     vim: any // monaco-vim instance
     textareaDescriptor: PropertyDescriptor
     textareaDisplay: string
     onChangeShowHeaderCallbacks: Array<() => void>
+    onChangeShowHeaderBeforeSyncCallbacks: Array<() => void>
     onChangeShowLineNumbersCallbacks: Array<() => void>
+    onChangeShowLineNumbersBeforeSyncCallbacks: Array<() => void>
     onChangeShowMinimapCallbacks: Array<() => void>
+    onChangeShowMinimapBeforeSyncCallbacks: Array<() => void>
     onChangeReplaceUnderscoreCallbacks: Array<() => void>
+    onChangeReplaceUnderscoreBeforeSyncCallbacks: Array<() => void>
     onChangeThemeCallbacks: Array<() => void>
+    onChangeThemeBeforeSyncCallbacks: Array<() => void>
     onChangeModeCallbacks: Array<() => void>
+    onChangeModeBeforeSyncCallbacks: Array<() => void>
     onChangeLanguageCallbacks: Array<() => void>
+    onChangeLanguageBeforeSyncCallbacks: Array<() => void>
     onChangeFontSizeCallbacks: Array<() => void>
+    onChangeFontSizeBeforeSyncCallbacks: Array<() => void>
     onChangeFontFamilyCallbacks: Array<() => void>
+    onChangeFontFamilyBeforeSyncCallbacks: Array<() => void>
+    onChangeAutoCompleteToggleCallbacks: Array<() => void>
+    onChangeAutoCompleteToggleBeforeSyncCallbacks: Array<() => void>
     _id: number
     
     constructor(textarea: HTMLTextAreaElement, options: Partial<PromptEditorOptions>={}) {
@@ -136,14 +165,25 @@ class PromptEditor extends HTMLElement {
         statusElement.classList.add(style.status)
 
         this.onChangeShowHeaderCallbacks = []
+        this.onChangeShowHeaderBeforeSyncCallbacks = []
         this.onChangeShowLineNumbersCallbacks = []
+        this.onChangeShowLineNumbersBeforeSyncCallbacks = []
         this.onChangeShowMinimapCallbacks = []
+        this.onChangeShowMinimapBeforeSyncCallbacks = []
         this.onChangeReplaceUnderscoreCallbacks = []
+        this.onChangeReplaceUnderscoreBeforeSyncCallbacks = []
         this.onChangeThemeCallbacks = []
+        this.onChangeThemeBeforeSyncCallbacks = []
         this.onChangeModeCallbacks = []
+        this.onChangeModeBeforeSyncCallbacks = []
         this.onChangeLanguageCallbacks = []
+        this.onChangeLanguageBeforeSyncCallbacks = []
         this.onChangeFontSizeCallbacks = []
+        this.onChangeFontSizeBeforeSyncCallbacks = []
         this.onChangeFontFamilyCallbacks = []
+        this.onChangeFontFamilyBeforeSyncCallbacks = []
+        this.onChangeAutoCompleteToggleCallbacks = []
+        this.onChangeAutoCompleteToggleBeforeSyncCallbacks = []
 
         const editor = this.monaco = monaco.editor.create(monacoElement, {
             value: textarea.value,
@@ -154,7 +194,7 @@ class PromptEditor extends HTMLElement {
             automaticLayout: true,
             wordWrap: 'on',
             //fixedOverflowWidgets: true,
-        } as any)
+        } as any) as CodeEditor
         this.polyfillMonacoEditorConfiguration()
 
         this.showHeader = true
@@ -188,14 +228,19 @@ class PromptEditor extends HTMLElement {
         this.textareaDisplay = textarea.style.display
         textarea.style.display = 'none'
 
+        const overflowGuard = this.elements.main!.querySelector('.overflow-guard')! as HTMLDivElement
+        this.elements.overflowGuard = overflowGuard
         const overlay = this.elements.main!.querySelector('.overflowingContentWidgets')! as HTMLDivElement
         this.elements.overlay = overlay
         this.fixedOverflowWidgetWorkaround(options)
 
+        this.updateAutoComplete()
         this.setContextMenu()
 
         // init context
-        this.setSettings(this.getSettings(), true)
+        this.setSettings(Object.assign({}, this.getSettings(), {
+            csvToggle: Object.fromEntries(getEnabledCSV().map(csvName => [this.createContextKey("csv", csvName), true])),
+        }), true)
 
         this.setEventHandler()
 
@@ -216,19 +261,24 @@ class PromptEditor extends HTMLElement {
     // fixedOverflowWidget相当のworkaroundを行う
     fixedOverflowWidgetWorkaround(options: Partial<PromptEditorOptions>) {
         const overlay = this.elements.overlay!
-        const overlayParent = overlay.parentElement!
+        const overflowGuard = this.elements.overflowGuard!
 
-        overlayParent.removeChild(overlay)
-        overlayParent.prepend(overlay)
+        overflowGuard.style.position = 'absolute'
         overlay.style.position = 'fixed'
 
+        const scrollbar = overflowGuard.querySelector(".scrollbar.vertical") as HTMLElement
+        if (scrollbar) {
+            scrollbar.style.zIndex = "6"
+        }
+
+        this.setOverlayZIndex(10) // default z-index
         if (typeof(options.overlayZIndex) === "number") {
             this.setOverlayZIndex(options.overlayZIndex)
         }
     }
 
-    createContextKey(key: string) {
-        return [ContextPrefix, key].join('.')
+    createContextKey(...args: string[]) {
+        return [ContextPrefix, ...args].join('.')
     }
 
     setContextMenu() {
@@ -401,6 +451,135 @@ class PromptEditor extends HTMLElement {
         })
     }
 
+    createOrUpdateSubMenu(title: string, id: string, group: string, order: number, actions: ActionsPartialDescripter[]) {
+        const menuContext = [id, this.getInstanceId()].join("_")
+        const subMenu = {
+            title: title,
+            context: menuContext,
+            group: group,
+            order: order,
+            actions: actions,
+        }
+
+        if (!getMenuId(menuContext)) {
+            addActionWithSubMenu(this.monaco, subMenu)
+        } else {
+            updateSubMenu(this.monaco, subMenu)
+        }
+
+        return menuContext
+    }
+
+    removeSubMenu(id: string) {
+        removeSubMenu(id)
+    }
+
+    updateAutoComplete() {
+        const csvfiles = getLoadedCSV()
+
+        // context menu
+        const order = 9
+        this.createOrUpdateSubMenu("Autocomplete", "AutoComplete", "AutoComplete", order, csvfiles.map((filename) => {
+            const basename = filename.split(".", 2)[0]
+            const contextKey = this.createContextKey("csv", basename)
+            return {
+                id: ["autocomplete", basename].join("_"),
+                label: basename,
+                run: () => {
+                    const current = this.getContext(contextKey)
+                    this.changeAutoCompleteToggle(contextKey, !current, true)
+                    this.syncAutoCompleteToggle()
+                },
+                commandOptions: {
+                    toggled: {
+                        condition: ContextKeyExpr.equals(contextKey, true)
+                        //condition: ContextKeyExpr.deserialize(`${contextKey}`)
+                    }
+                }
+            }
+        }))
+
+        this.updateAutoCompleteHeader()
+    }
+
+    getCurrentEnableAutoCompleteToggle() {
+        return Object.entries(this.getLocalContextValues<boolean>("csv"))
+            .filter(([key, value]) => value)
+            .map(([key, value]) => key.split(".").pop())
+    }
+
+    updateAutoCompleteHeader() {
+        const csvfiles = getLoadedCSV()
+        const currentSelected = this.getCurrentEnableAutoCompleteToggle()
+        let multipleSelectInstance: MultipleSelectInstance
+
+        if (!this.elements.autocomplete) {
+            // create
+            const labelElement = document.createElement("label")
+            const divElement = document.createElement("div")
+            const selectElement = document.createElement("select")
+
+            labelElement.textContent = "AutoComplete"
+            divElement.appendChild(selectElement)
+            divElement.style.display = "inline-block"
+            divElement.style.marginLeft = "0.5rem"
+            labelElement.appendChild(divElement)
+
+            this.elements.header!.appendChild(labelElement)
+            this.elements.autocompleteElement = labelElement
+
+            selectElement.classList.add("multiple-select")
+
+            const multipleSelectInit = (multipleSelectInstance: MultipleSelectInstance) => {
+                const parent = multipleSelectInstance.getParentElement()
+                const button = parent.querySelector('.ms-choice')!
+                button.classList.add(style["ms-choice"])
+            }
+            
+            multipleSelectInstance = multipleSelect(selectElement, {
+                filter: true,
+                single: false,
+                showSearchClear: true,
+                data: csvfiles,
+                width: "24rem",
+                selectAll: false,
+                onClick: (view) => {
+                    const contextKey = this.createContextKey("csv", view.value)
+                    const newValue = (view as any).selected
+
+                    this.changeAutoCompleteToggle(contextKey, newValue, true)
+                    this.syncAutoCompleteToggle()
+                },
+                onAfterCreate: () => {
+                    if (!this.elements.autocomplete) {
+                        return
+                    }
+                    multipleSelectInit(this.elements.autocomplete)
+                },
+            }) as MultipleSelectInstance
+
+            multipleSelectInit(multipleSelectInstance)
+            this.elements.autocomplete = multipleSelectInstance
+            
+        } else {
+            // update
+            multipleSelectInstance = this.elements.autocomplete
+
+            multipleSelectInstance.refreshOptions({
+                data: csvfiles,
+            })
+        }
+
+        multipleSelectInstance.setSelects(currentSelected)
+    }
+    updateAutoCompleteHeaderToggle() {
+        const multipleSelectInstance = this.elements.autocomplete
+        if (!multipleSelectInstance) {
+            return
+        }
+        multipleSelectInstance.setSelects(this.getCurrentEnableAutoCompleteToggle())
+    }
+
     setEventHandler() {
         this.monaco.onDidChangeConfiguration((e) => {
             if (e.hasChanged(monaco.editor.EditorOption.fontSize)) {
@@ -431,6 +610,19 @@ class PromptEditor extends HTMLElement {
         const contextKeyService = this.monaco._contextKeyService 
         const contextValueContainer = contextKeyService.getContextValuesContainer(contextKeyService._myContextId)
         return contextValueContainer.getValue(key)
+    }
+
+    getContextValues() {
+        // @ts-ignore
+        const contextKeyService = this.monaco._contextKeyService
+        const contextValueContainer = contextKeyService.getContextValuesContainer(contextKeyService._myContextId)
+        return contextValueContainer.value
+    }
+
+    getLocalContextValues<T = unknown>(...args: string[]) {
+        const values = this.getContextValues()
+        const start = this.createContextKey(...args) + "."
+        return Object.fromEntries<T>(Object.entries<T>(values).filter(([key, value]) => key.startsWith(start)))
     }
 
     changeMode(newMode: PromptEditorMode) {
@@ -573,6 +765,18 @@ class PromptEditor extends HTMLElement {
         }
     }
 
+    changeAutoCompleteToggle(filename: string, value: boolean, isContextKey = false) {
+        const contextKey = isContextKey ? filename : this.createContextKey("csv", filename)
+
+        this.setContext(contextKey, value)
+        //this.updateAutoCompleteHeader()
+        this.updateAutoCompleteHeaderToggle()
+
+        for (const callback of this.onChangeAutoCompleteToggleCallbacks) {
+            callback()
+        }
+    }
+
     polyfillMonacoEditorConfiguration() {
         if (typeof (this.monaco as any)["getConfiguration"] === 'function') {
             return
@@ -594,6 +798,10 @@ class PromptEditor extends HTMLElement {
 
     getThemeId() {
         return (this.monaco as any)._themeService._theme.id
+    }
+
+    getInstanceId() {
+        return this._id
     }
 
     setValue(value: string) {
@@ -647,7 +855,7 @@ class PromptEditor extends HTMLElement {
             },
             {
                 label: "Underscore",
-                title: "Replace Underscore -> Space (Completion)",
+                title: "Replace Underscore -> Space (AutoComplete)",
                 callback: (label: HTMLLabelElement, checkbox: HTMLInputElement) => {
                     this.elements.replaceUnderscore = checkbox
                 },
@@ -732,6 +940,11 @@ class PromptEditor extends HTMLElement {
             ))
         }
 
+        headerElement.addEventListener("contextmenu", (ev: MouseEvent) => {
+            ev.stopPropagation()
+            ev.preventDefault()
+        })
+
         headerElement.querySelectorAll('header > *').forEach((item) => {
             (item as HTMLElement).style.marginRight = "1rem"
         })
@@ -742,6 +955,9 @@ class PromptEditor extends HTMLElement {
             return
         }
         const value = this.elements.language.value
+        for (const callback of this.onChangeLanguageBeforeSyncCallbacks) {
+            callback()
+        }
         runAllInstances((instance) => {
             instance.changeLanguage(value)
         })
@@ -752,6 +968,9 @@ class PromptEditor extends HTMLElement {
             return
         }
         const value = this.elements.keyBindings.value as PromptEditorMode
+        for (const callback of this.onChangeModeBeforeSyncCallbacks) {
+            callback()
+        }
         runAllInstances((instance) => {
             instance.changeMode(value)
         })
@@ -763,12 +982,18 @@ class PromptEditor extends HTMLElement {
             return
         }
         const value = this.elements.theme.value
+        for (const callback of this.onChangeThemeBeforeSyncCallbacks) {
+            callback()
+        }
         runAllInstances((instance) => {
             instance.changeTheme(value)
         })
     }
 
     syncShowHeader() {
+        for (const callback of this.onChangeShowHeaderBeforeSyncCallbacks) {
+            callback()
+        }
         runAllInstances((instance) => {
             instance.changeShowHeader(this.showHeader)
         })
@@ -779,6 +1004,9 @@ class PromptEditor extends HTMLElement {
             return
         }
         const value = this.elements.lineNumbers.checked
+        for (const callback of this.onChangeShowLineNumbersBeforeSyncCallbacks) {
+            callback()
+        }
         runAllInstances((instance) => {
             instance.changeShowLineNumbers(value)
         })
@@ -789,6 +1017,9 @@ class PromptEditor extends HTMLElement {
             return
         }
         const value = this.elements.minimap.checked
+        for (const callback of this.onChangeShowMinimapBeforeSyncCallbacks) {
+            callback()
+        }
         runAllInstances((instance) => {
             instance.changeShowMinimap(value)
         })
@@ -799,6 +1030,9 @@ class PromptEditor extends HTMLElement {
             return
         }
         const value = this.elements.replaceUnderscore.checked
+        for (const callback of this.onChangeReplaceUnderscoreBeforeSyncCallbacks) {
+            callback()
+        }
         runAllInstances((instance) => {
             instance.changeReplaceUnderscore(value)
         })
@@ -806,6 +1040,9 @@ class PromptEditor extends HTMLElement {
 
     syncFontSize() {
         const value = this.getContext(this.createContextKey("fontSize"))
+        for (const callback of this.onChangeFontSizeBeforeSyncCallbacks) {
+            callback()
+        }
         runAllInstances((instance) => {
             instance.changeFontSize(value)
         })
@@ -813,8 +1050,38 @@ class PromptEditor extends HTMLElement {
 
     syncFontFamily() {
         const value = this.getContext(this.createContextKey("fontFamily"))
+        for (const callback of this.onChangeFontFamilyBeforeSyncCallbacks) {
+            callback()
+        }
         runAllInstances((instance) => {
             instance.changeFontFamily(value)
+        })
+    }
+
+    updateAutoCompleteToggle() {
+        const values = this.getLocalContextValues<boolean>("csv")
+        const enables = Object.entries(values).filter(([contextKey, value]) => {
+            return value
+        }).map(([contextKey, value]) => {
+            return contextKey.split('.').slice(-1)[0]
+        })
+
+        addLoadedCSV(enables)
+    }
+
+    syncAutoCompleteToggle() {
+        const values = this.getLocalContextValues<boolean>("csv")
+
+        this.updateAutoCompleteToggle()
+
+        for (const callback of this.onChangeAutoCompleteToggleBeforeSyncCallbacks) {
+            callback()
+        }
+
+        runAllInstances((instance) => {
+            for (const [contextKey, value] of Object.entries(values)) {
+                instance.changeAutoCompleteToggle(contextKey, value, true)
+            }
         })
     }
 
@@ -853,13 +1120,18 @@ class PromptEditor extends HTMLElement {
         callback: (label: HTMLLabelElement, select: HTMLSelectElement) => void,
         isSelectedCallback: (dataValue: any) => boolean,
         changeCallback: (ev: Event) => void,
-        getValue?: (value: any) => string
+        getValue?: (value: any) => string,
+        multiple: boolean = false,
     ) {
         const labelElement = document.createElement('label')
         Object.assign(labelElement.style, {
             display: "flex",
         })
         const selectElement = document.createElement('select')
+        if (multiple) {
+            selectElement.multiple = true
+            selectElement.size = 1
+        }
         Object.assign(selectElement.style, {
             marginLeft: "0.5rem",
         })
@@ -967,6 +1239,7 @@ class PromptEditor extends HTMLElement {
             mode: this.mode,
             fontSize: this.getContext(this.createContextKey("fontSize")),
             fontFamily: this.getContext(this.createContextKey("fontFamily")),
+            csvToggle: this.getLocalContextValues<boolean>("csv"),
         } as PromptEditorSettings
     }
 
@@ -1047,42 +1320,99 @@ class PromptEditor extends HTMLElement {
         ) {
             this.changeFontFamily(settings.fontFamily)
         }
+
+        if (
+            settings.csvToggle !== void 0 && (
+                force ||
+                !deepEqual(settings.csvToggle, currentSettings.csvToggle)
+            )
+        ) {
+            for (const [contextKey, enabled] of Object.entries(settings.csvToggle)) {
+                if (currentSettings.csvToggle[contextKey] !== enabled) {
+                    this.changeAutoCompleteToggle(contextKey, enabled, true)
+                }
+            }
+            this.updateAutoCompleteToggle()
+        }
     }
 
     onChangeShowHeader(callback: () => void) {
         this.onChangeShowHeaderCallbacks.push(callback)
     }
 
+    onChangeShowHeaderBeforeSync(callback: () => void) {
+        this.onChangeShowHeaderBeforeSyncCallbacks.push(callback)
+    }
+
     onChangeShowLineNumbers(callback: () => void) {
         this.onChangeShowLineNumbersCallbacks.push(callback)
+    }
+
+    onChangeShowLineNumbersBeforeSync(callback: () => void) {
+        this.onChangeShowLineNumbersBeforeSyncCallbacks.push(callback)
     }
 
     onChangeShowMinimap(callback: () => void) {
         this.onChangeShowMinimapCallbacks.push(callback)
     }
 
+    onChangeShowMinimapBeforeSync(callback: () => void) {
+        this.onChangeShowMinimapBeforeSyncCallbacks.push(callback)
+    }
+
     onChangeReplaceUnderscore(callback: () => void) {
         this.onChangeReplaceUnderscoreCallbacks.push(callback)
+    }
+
+    onChangeReplaceUnderscoreBeforeSync(callback: () => void) {
+        this.onChangeReplaceUnderscoreBeforeSyncCallbacks.push(callback)
     }
 
     onChangeTheme(callback: () => void) {
         this.onChangeThemeCallbacks.push(callback)
     }
 
+    onChangeThemeBeforeSync(callback: () => void) {
+        this.onChangeThemeBeforeSyncCallbacks.push(callback)
+    }
+
     onChangeMode(callback: () => void) {
         this.onChangeModeCallbacks.push(callback)
     }
 
+    onChangeModeBeforeSync(callback: () => void) {
+        this.onChangeModeBeforeSyncCallbacks.push(callback)
+    }
     onChangeLanguage(callback: () => void) {
         this.onChangeLanguageCallbacks.push(callback)
+    }
+
+    onChangeLanguageBeforeSync(callback: () => void) {
+        this.onChangeLanguageBeforeSyncCallbacks.push(callback)
     }
 
     onChangeFontSize(callback: () => void) {
         this.onChangeFontSizeCallbacks.push(callback)
     }
 
+    onChangeFontSizeBeforeSync(callback: () => void) {
+        this.onChangeFontSizeBeforeSyncCallbacks.push(callback)
+    }
+
     onChangeFontFamily(callback: () => void) {
         this.onChangeFontFamilyCallbacks.push(callback)
+    }
+
+    onChangeFontFamilyBeforeSync(callback: () => void) {
+        this.onChangeFontFamilyBeforeSyncCallbacks.push(callback)
+    }
+
+    onChangeAutoCompleteToggle(callback: () => void) {
+        this.onChangeAutoCompleteToggleCallbacks.push(callback)
+    }
+
+    onChangeAutoCompleteToggleBeforeSync(callback: () => void) {
+        this.onChangeAutoCompleteToggleBeforeSyncCallbacks.push(callback)
     }
 
     onChange(callback: () => void) {
@@ -1095,25 +1425,69 @@ class PromptEditor extends HTMLElement {
         this.onChangeLanguage(callback)
         this.onChangeFontSize(callback)
         this.onChangeFontFamily(callback)
+        this.onChangeAutoCompleteToggle(callback)
+    }
+
+    onChangeBeforeSync(callback: () => void) {
+        this.onChangeShowHeaderBeforeSync(callback)
+        this.onChangeShowLineNumbersBeforeSync(callback)
+        this.onChangeShowMinimapBeforeSync(callback)
+        this.onChangeReplaceUnderscoreBeforeSync(callback)
+        this.onChangeThemeBeforeSync(callback)
+        this.onChangeModeBeforeSync(callback)
+        this.onChangeLanguageBeforeSync(callback)
+        this.onChangeFontSizeBeforeSync(callback)
+        this.onChangeFontFamilyBeforeSync(callback)
+        this.onChangeAutoCompleteToggleBeforeSync(callback)
     }
 }
 window.customElements.define('prompt-editor', PromptEditor);
 
-const runAllInstances = (callback: (instance: PromptEditor) => boolean|void) => {
+const runAllInstances = <T extends PromptEditor = PromptEditor>(callback: (instance: T) => boolean|void) => {
     for (const instanceId of (Object.keys(settings.instances) as unknown as number[]).sort()) {
-        if (callback(settings.instances[instanceId])) {
+        if (callback(settings.instances[instanceId] as T)) {
             break
         }
     }
 }
 
+
+const updateAutoComplete = () => {
+    const files = getLoadedCSV()
+    runAllInstances((instance) => {
+        instance.updateAutoComplete()
+        return
+    })
+} 
+
+const _loadCSV = (filename: string, csv: string) => {
+    const retval = loadCSV.call(this, filename, csv)
+    updateAutoComplete()
+    return retval
+}
+
+const _addCSV = (filename: string, csv: string) => {
+    const retval = addCSV.call(this, filename, csv)
+    updateAutoComplete()
+    return retval
+}
+
+const _clearCSV = () => {
+    const retval = clearCSV.call(this)
+    updateAutoComplete()
+    return retval
+}
+
 export {
     PromptEditor,
     getCount,
-    loadCSV,
-    addCSV,
+    _loadCSV as loadCSV,
+    _addCSV as addCSV,
+    _clearCSV as clearCSV,
+    getLoadedCSV,
+    addLoadedCSV,
     addData,
-    clearCSV,
     runAllInstances,
     PromptEditorSettings,
+    ContextKeyExpr,
 }

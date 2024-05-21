@@ -1,6 +1,6 @@
 import * as MonacoPrompt from './index'
 import { deepEqual } from 'fast-equals'
-import { EndPoint, GetEmbeddings } from '../extension.json'
+import { EndPoint, GetEmbeddings, CSV } from '../extension.json'
 declare const gradio_config: any;
 
 const me = "webui-monaco-prompt";
@@ -146,15 +146,18 @@ const me = "webui-monaco-prompt";
             }
         })
 
+        const csvs = await fetch(CSV).then(res => res.json()).catch(e => new Error(`fetch error: ${e}`))
         const pathname = srcURL.pathname
         // -2 = *.js -> javascript = extension base directory
         const basename = pathname.split('/').slice(0, -2)
-        for (const filename of ["danbooru.csv", "extra-quality-tags.csv"]) {
-            const path = basename.concat(["csv", filename]).join('/')
+        for (const filename of csvs) {
+            const path = basename.concat(["csv", filename]).join('/') + ".csv"
 
             MonacoPrompt.clearCSV()
             fetch(path).then(res => res.text()).then((value) => {
-                MonacoPrompt.addCSV(value)
+                console.log("add:", filename, path)
+                MonacoPrompt.addCSV(filename, value)
+                return
             })
         }
 

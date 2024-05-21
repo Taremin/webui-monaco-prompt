@@ -3,10 +3,12 @@ const common = require('./webpack.common.js')
 const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin')
 const CopyWebpackPlugin = require('copy-webpack-plugin')
 
+const projectRootDir = path.dirname(__filename)
+
 module.exports = Object.assign(common, {
   mode: 'production',
 	entry: {
-		main: './src/comfy.ts',
+		main: './src/comfyui/index.ts',
 	},
 	resolve: {
 		extensions: ['.ts', '.js', 'tsx']
@@ -32,10 +34,15 @@ module.exports.plugins.push(
       {
         from: 'csv/*.csv', 
         to: (pathData) => {
-            console.log(pathData)
-            return path.join(pathData.context, "comfy", path.basename(pathData.absoluteFilename))
+            return path.join(projectRootDir, "comfy", path.basename(pathData.absoluteFilename))
         }
       },
+      {
+        from: 'src/comfyui/static/*',
+        to: (pathData) => {
+            return path.join(projectRootDir, "comfy", path.basename(pathData.absoluteFilename))
+        }
+      }
     ]
   })
 )

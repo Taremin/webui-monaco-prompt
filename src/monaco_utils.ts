@@ -30,7 +30,7 @@ const addActionWithSubMenu = function(
     editor: editor.IStandaloneCodeEditor,
     descriptor: SubMenuDescriptor
 ) {
-    const submenu = new MenuId(descriptor.context)
+    const submenu = createMenuId(descriptor.context)
     const list = new LinkedList()
 
     MenuRegistry._menuItems.set(submenu, list);
@@ -60,7 +60,38 @@ const addActionWithSubMenu = function(
         order: descriptor.order,
         submenu: submenu,
         title: descriptor.title,
-    });
+    })
+}
+
+const removeSubMenu = (id: string) => {
+    const menuId = getMenuId(id)
+
+    if (!menuId) {
+        throw new Error(`MenuId(${id}) is not found`)
+    }
+
+    console.log("remove submenu:", menuId)
+    MenuRegistry._menuItems.delete(menuId)
+}
+
+const updateSubMenu = (editor: editor.IStandaloneCodeEditor, descriptor: SubMenuDescriptor) => {
+    removeSubMenu(descriptor.context)
+    addActionWithSubMenu(editor, descriptor)
+}
+
+const getMenuId = (id: string) => {
+    return MenuId._instances.get(id)
+
+}
+
+const createMenuId = (id: string) => {
+    const menuId = getMenuId(id)
+
+    if (!menuId) {
+        return new MenuId(id)
+    }
+
+    return menuId
 }
 
 const addActionWithCommandOption = function(
@@ -108,6 +139,11 @@ const findItem = (items: LinkedList, id: string): any => {
 }
 
 export {
+    ActionsPartialDescripter,
     addActionWithSubMenu,
     addActionWithCommandOption,
+    updateSubMenu,
+    createMenuId,
+    removeSubMenu,
+    getMenuId,
 }
