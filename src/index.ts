@@ -805,6 +805,9 @@ class PromptEditor extends HTMLElement {
     }
 
     setValue(value: string) {
+        if (value === void 0) {
+            return
+        }
         if (value === this.monaco.getValue()) {
             return
         }
