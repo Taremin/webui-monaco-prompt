@@ -31,3 +31,19 @@
     height: 100%;
     line-height: normal;
 }
+
+.find-lines-table {
+    border-spacing: 0;
+}
+.find-line-number {
+    text-align: right;
+    vertical-align: text-top;
+    white-space: nowrap;
+    padding: 0;
+    padding-right: 1rem;
+    opacity: 0.5;
+}
+
+.find-line-active {
+    background-color: rgba(255, 255, 192, 0.1)
+}

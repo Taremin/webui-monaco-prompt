@@ -239,5 +239,18 @@ const register = (app: any) => {
             refreshCSV()
         }
     })
+
+    if (app.extensionManager && app.extensionManager.registerSidebarTab) {
+        app.extensionManager.registerSidebarTab({
+            id: "webuimonacoprompt-search",
+            icon: "pi pi-search",
+            title: FindWidget.SidebarTitle,
+            tooltip: FindWidget.SidebarTooltip,
+            type: "custom",
+            render: (el: HTMLElement) => {
+                FindWidget.sidebar(app, el)
+            },
+        })
+    }
 }
 register(app)

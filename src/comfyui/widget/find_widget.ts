@@ -1,9 +1,14 @@
 
 import * as utils from "../utils"
+import { ui } from "../api"
 import { link } from "../link"
 import * as Monaco from 'monaco-editor/esm/vs/editor/editor.api' // for typing
 
 import {default as style} from "./index.css"
+
+const $el = ui.$el
+const TooltipSurroundingLines = 2
+const TooltipDistance = 20
 
 interface FindWidgetElements {
     header: HTMLDivElement
@@ -22,6 +27,9 @@ class FindWidget {
     _onNodeCreatedOriginal?: any
     elements: FindWidgetElements
     isInitialized: boolean
+
+    static SidebarTitle = "WebuiMonacoPrompt Search"
+    static SidebarTooltip = "WebuiMonacoPrompt Search"
 
     constructor(app: any) {
         this._app = app
@@ -45,6 +53,86 @@ class FindWidget {
         widget.isInitialized = true
         node.find = widget
     }
+    static sidebar(app: any, sidebar: HTMLElement) {
+        const instance = new this(app)
+
+        instance.initializeContainer()
+        instance.elements.header.classList.add("comfy-vue-side-bar-header")
+        instance.elements.tableContainer.classList.add("comfy-vue-side-bar-body")
+        instance.elements.tableContainer.style.height = "auto"
+
+        const iconfield = $el("div.p-iconfield", {
+            style: {
+                display: "flex",
+                alignItems: "center",
+            }
+        }, [
+            $el("span.pi.pi-search"),
+            instance.elements.inputContainer,
+        ])
+        const container = $el("div.comfy-vue-side-bar-container.flex.flex-col.h-full.workflows-sidebar-tab", [
+            $el("div.comfy-vue-side-bar-header", [
+                $el("div.p-toolbar.p-component.flex-shrink-0.border-x-0.border-t-0.rounded-none.px-2.py-1.min-h-8", {
+                    "role": "toolbar",
+                    "data-pc-name": "toolbar",
+                    "data-pc-section": "root",
+                    style: {
+                        border: "1px solid rgb(63,63,70)",
+                        display: "flex",
+                        //border: "var(--p-toolbar-border-color)",
+                    }
+                }, [
+                    $el("div.p-toolbar-start", {
+                        style: {
+                                display: "flex",
+                                alignItems: "center",
+                        },
+                        "data-pc-section": "start"
+                    },[
+                        $el("span.text-sm", [
+                            this.SidebarTitle
+                        ])
+                    ]),
+                    $el("div.p-toolbar-center", {
+                        style: {
+                                display: "flex",
+                                alignItems: "center",
+                        },
+                        "data-pc-section": "center"
+                    }),
+                    $el("div.p-toolbar-end", {
+                        style: {
+                                display: "flex",
+                                alignItems: "center",
+                        },
+                        "data-pc-section": "end"
+                    }, [
+                        $el("span.p-button.pi", {
+                            style: {
+                                "visibility": "hidden",
+                                "padding": "0.25rem 0",
+                            }
+                        }, [
+                            $el("span.p-button-label", {
+                                style: {
+                                    display: "inline-flex",
+                                    height: "18px",
+                                    width: 0,
+                                }
+                            },"&nbsp;"),
+                        ]),
+                    ]),
+                ]),
+                $el("div.p-2.2xl:p-4",[
+                    iconfield,
+                ])
+            ]),
+            $el("div", [
+                instance.elements.tableContainer,
+            ]),
+        ])
+        sidebar.appendChild(container)
+    }
     onNodeCreated(node: LitegraphNode) {
         this.callOriginalCallback.apply(node, arguments as any)
         this.initializeWidget(node)
@@ -54,16 +142,19 @@ class FindWidget {
             this._onNodeCreatedOriginal.apply(this, arguments)
         }
     }
-    initializeWidget(node: LitegraphNode) {
+    initializeContainer() {
         // custom widget
         const containerEl = this.elements.container = document.createElement("div")
         containerEl.classList.add(style["webui-monaco-prompt-container"])
 
         this.createWidgetHeader()
         this.createWidgetBody()
+    }
+    initializeWidget(node: LitegraphNode) {
+        this.initializeContainer()
 
-        const widget = node.addDOMWidget("webui-monaco-prompt-find", "webui-monaco-prompt-find-widget", containerEl, {})
-        widget.containerEl = containerEl
+        const widget = node.addDOMWidget("webui-monaco-prompt-find", "webui-monaco-prompt-find-widget", this.elements.container, {})
+        widget.containerEl = this.elements.container
     }
     createWidgetBody() {
         const tableContainerEl = this.elements.tableContainer = document.createElement("div")
@@ -234,6 +325,8 @@ class FindWidget {
                 utils.setActiveNode(app, node)
             })
 
+            setTooltip(trEl)
+
             tbodyEl.appendChild(trEl)
         }
     }
@@ -243,6 +336,51 @@ class FindWidget {
             element.removeChild(element.firstChild!)
         }
     }
+}
+
+const createFindWidgetTooltip = () => {
+    const tooltip = $el("div", {
+        style: {
+            display: "none",
+            position: "fixed",
+            backgroundColor: "var(--bg-color)",
+            color: "var(--fg-color)",
+            padding: "0.5rem",
+            border: "1px solid var(--fg-color)",
+            overflowWrap: "anywhere",
+            zIndex: 999999,
+        }
+    }) as HTMLElement
+
+    document.body.appendChild(tooltip)
+
+    return tooltip
+}
+const tooltip = createFindWidgetTooltip()
+const setTooltip = (targetElement: HTMLElement) => {
+    targetElement.addEventListener("mousemove", (ev) => {
+        while (tooltip.firstChild) {
+            tooltip.removeChild(tooltip.firstChild)
+        }
+
+        const monaco = link[targetElement.dataset.instanceId!].monaco
+        const line = +(targetElement.dataset.startLine!)
+        const range = TooltipSurroundingLines
+
+        const contentElement = monaco.getLinesTable(Math.max(1, line - range), line, line + range)
+        tooltip.appendChild(contentElement)
+
+        tooltip.style.display = "block"
+        tooltip.style.left = (ev.clientX + TooltipDistance) + 'px'
+        tooltip.style.top = (ev.clientY + TooltipDistance) + 'px'
+
+        if (document.documentElement.clientHeight < ev.clientY + 20 + tooltip.getBoundingClientRect().height) {
+            tooltip.style.top = (ev.clientY - 20 - tooltip.getBoundingClientRect().height) + 'px'
+        }
+    })
+    targetElement.addEventListener("mouseout", (ev) => {
+        tooltip.style.display = "none"
+    })
 }
 
 export {
