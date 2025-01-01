@@ -52,6 +52,11 @@ await refreshCSV()
 await loadSetting()
 
 function onCreateTextarea(textarea: HTMLTextAreaElement, node: any) {
+    if (textarea.readOnly) {
+        console.log("[WebuiMonacoPrompt] Skip: TextArea is read-only:", textarea)
+        return
+    }
+
     const editor = new MonacoPrompt.PromptEditor(textarea, {
         autoLayout: true,
         handleTextAreaValue: true,
@@ -239,5 +244,18 @@ const register = (app: any) => {
             refreshCSV()
         }
     })
+
+    if (app.extensionManager && app.extensionManager.registerSidebarTab) {
+        app.extensionManager.registerSidebarTab({
+            id: "webuimonacoprompt-search",
+            icon: "pi pi-search",
+            title: FindWidget.SidebarTitle,
+            tooltip: FindWidget.SidebarTooltip,
+            type: "custom",
+            render: (el: HTMLElement) => {
+                FindWidget.sidebar(app, el)
+            },
+        })
+    }
 }
 register(app)

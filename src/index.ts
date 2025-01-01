@@ -805,6 +805,9 @@ class PromptEditor extends HTMLElement {
     }
 
     setValue(value: string) {
+        if (value === void 0) {
+            return
+        }
         if (value === this.monaco.getValue()) {
             return
         }
@@ -1439,6 +1442,36 @@ class PromptEditor extends HTMLElement {
         this.onChangeFontSizeBeforeSync(callback)
         this.onChangeFontFamilyBeforeSync(callback)
         this.onChangeAutoCompleteToggleBeforeSync(callback)
+    }
+
+    getLinesTable(start: number, active: number, end: number) {
+        const lines = this.elements.main!.querySelector('.view-lines')! as HTMLDivElement
+        const model = this.monaco.getModel()
+        if (!model) {
+            throw new Error("Model not found in Monaco Editor")
+        }
+        const lineCount = Math.min(end, model.getLineCount())
+        const container = document.createElement("table")
+        container.classList.add(style["find-lines-table"])
+        for (let lineNum = Math.max(start, 1); lineNum <= lineCount; ++lineNum) {
+            const trEl = document.createElement("tr")
+            const line = monaco.editor.colorizeModelLine(model, lineNum)
+            const lineNumberContainer = document.createElement("td")
+            const lineContentContainer = document.createElement("td")
+
+            lineNumberContainer.textContent = lineNum as unknown as string
+            lineNumberContainer.classList.add(style["find-line-number"])
+            if (active === lineNum) {
+                trEl.classList.add(style["find-line-active"])
+            }
+            lineContentContainer.innerHTML = line
+            lineContentContainer.classList.add(style["find-line-content"])
+
+            trEl.appendChild(lineNumberContainer)
+            trEl.appendChild(lineContentContainer)
+            container.appendChild(trEl)
+        }
+        return container
     }
 }
 window.customElements.define('prompt-editor', PromptEditor);
