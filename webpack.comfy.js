@@ -28,20 +28,17 @@ module.exports = Object.assign(common, {
 	]
 })
 
+const staticPathFormat = path.join(projectRootDir, "comfy", "[name][ext]")
 module.exports.plugins.push(
   new CopyWebpackPlugin({
     patterns: [
       {
         from: 'csv/*.csv', 
-        to: (pathData) => {
-            return path.join(projectRootDir, "comfy", path.basename(pathData.absoluteFilename))
-        }
+        to: staticPathFormat
       },
       {
         from: 'src/comfyui/static/*',
-        to: (pathData) => {
-            return path.join(projectRootDir, "comfy", path.basename(pathData.absoluteFilename))
-        }
+        to: staticPathFormat
       }
     ]
   })
