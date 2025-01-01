@@ -17,11 +17,11 @@
   "author": "Taremin",
   "license": "MIT",
   "dependencies": {
-    "csv-parse": "^5.5.6",
+    "csv-parse": "^5.6.0",
     "fast-equals": "^5.0.1",
-    "monaco-editor": "^0.48.0",
+    "monaco-editor": "^0.52.2",
     "monaco-vim": "github:Taremin/monaco-vim",
-    "multiple-select-vanilla": "^3.2.1"
+    "multiple-select-vanilla": "^3.4.4"
   },
   "devDependencies": {
     "copy-webpack-plugin": "^12.0.2",
@@ -29,11 +29,11 @@
     "file-loader": "^6.2.0",
     "monaco-editor-webpack-plugin": "^7.1.0",
     "npm-check-updates": "^16.14.20",
-    "rimraf": "^5.0.7",
+    "rimraf": "^5.0.10",
     "style-loader": "^3.3.4",
     "ts-loader": "^9.5.1",
-    "typescript": "^5.4.5",
-    "webpack": ">=5.91.0",
+    "typescript": "^5.7.2",
+    "webpack": ">=5.97.1",
     "webpack-cli": "^5.1.4"
   }
 }
