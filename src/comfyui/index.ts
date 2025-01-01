@@ -52,6 +52,11 @@ await refreshCSV()
 await loadSetting()
 
 function onCreateTextarea(textarea: HTMLTextAreaElement, node: any) {
+    if (textarea.readOnly) {
+        console.log("[WebuiMonacoPrompt] Skip: TextArea is read-only:", textarea)
+        return
+    }
+
     const editor = new MonacoPrompt.PromptEditor(textarea, {
         autoLayout: true,
         handleTextAreaValue: true,
