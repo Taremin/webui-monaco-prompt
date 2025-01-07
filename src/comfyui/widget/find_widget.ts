@@ -335,47 +335,67 @@ class FindWidget {
         while (element.hasChildNodes()) {
             element.removeChild(element.firstChild!)
         }
+        tooltip.style.display = "none"
     }
 }
 
 const createFindWidgetTooltip = () => {
     const tooltip = $el("div", {
+        className: ["text-sm"].join(" "),
         style: {
             display: "none",
             position: "fixed",
             backgroundColor: "var(--bg-color)",
             color: "var(--fg-color)",
-            padding: "0.5rem",
-            border: "1px solid var(--fg-color)",
             overflowWrap: "anywhere",
             zIndex: 999999,
         }
     }) as HTMLElement
+
+    const scopedStyle = document.createElement("style")
+    const body = document.createElement("div")
+
+    tooltip.appendChild(scopedStyle)
+    tooltip.appendChild(body)
 
     document.body.appendChild(tooltip)
 
     return tooltip
 }
 const tooltip = createFindWidgetTooltip()
+const tooltipBody = tooltip.querySelector("div") as HTMLDivElement
+const tooltipStyle = tooltip.querySelector("style") as HTMLStyleElement
 const setTooltip = (targetElement: HTMLElement) => {
-    targetElement.addEventListener("mousemove", (ev) => {
-        while (tooltip.firstChild) {
-            tooltip.removeChild(tooltip.firstChild)
+    targetElement.addEventListener("mouseenter", (ev) => {
+        while (tooltipBody.firstChild) {
+            tooltipBody.removeChild(tooltipBody.firstChild)
         }
 
         const monaco = link[targetElement.dataset.instanceId!].monaco
         const line = +(targetElement.dataset.startLine!)
         const range = TooltipSurroundingLines
 
+        if (monaco.instanceStyle) {
+            tooltipStyle.textContent = `@scope {
+                ${monaco.instanceStyle.textContent}
+                .monaco-editor {
+                    padding: 1rem;
+                }
+            }`
+        }
+
         const contentElement = monaco.getLinesTable(Math.max(1, line - range), line, line + range)
-        tooltip.appendChild(contentElement)
+        tooltipBody.appendChild(contentElement)
 
         tooltip.style.display = "block"
+    })
+
+    targetElement.addEventListener("mousemove", (ev) => {
         tooltip.style.left = (ev.clientX + TooltipDistance) + 'px'
         tooltip.style.top = (ev.clientY + TooltipDistance) + 'px'
 
         if (document.documentElement.clientHeight < ev.clientY + 20 + tooltip.getBoundingClientRect().height) {
-            tooltip.style.top = (ev.clientY - 20 - tooltip.getBoundingClientRect().height) + 'px'
+            tooltip.style.top = (ev.clientY - 20 - tooltipBody.getBoundingClientRect().height) + 'px'
         }
     })
     targetElement.addEventListener("mouseout", (ev) => {
