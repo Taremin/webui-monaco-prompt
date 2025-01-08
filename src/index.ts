@@ -10,6 +10,30 @@ import { ContextKeyExpr } from 'monaco-editor/esm/vs/platform/contextkey/common/
 import { IQuickInputService } from 'monaco-editor/esm/vs/platform/quickinput/common/quickinput'
 // @ts-ignore
 import { StandaloneThemeService } from 'monaco-editor/esm/vs/editor/standalone/browser/standaloneThemeService'
+// @ts-ignore
+import { StringBuilder } from 'monaco-editor/esm/vs/editor/common/core/stringBuilder'
+// @ts-ignore
+import { ViewLineOptions } from 'monaco-editor/esm/vs/editor/browser/viewParts/lines/viewLine'
+// @ts-ignore
+import { RenderLineInput, renderViewLine } from 'monaco-editor/esm/vs/editor/common/viewLayout/viewLineRenderer'
+// @ts-ignore
+import { EditorFontLigatures } from 'monaco-editor/esm/vs/editor/common/config/editorOptions'
+// @ts-ignore
+import { InlineDecoration } from 'monaco-editor/esm/vs/editor/common/viewModel'
+// @ts-ignore
+import { ViewportData } from 'monaco-editor/esm/vs/editor/common/viewLayout/viewLinesViewportData'
+// @ts-ignore
+import { LineDecoration } from 'monaco-editor/esm/vs/editor/common/viewLayout/lineDecorations'
+// @ts-ignore
+import { View } from 'monaco-editor/esm/vs/editor/browser/view'
+// copy from viewModel.ts
+const enum InlineDecorationType {
+	Regular = 0,
+	Before = 1,
+	After = 2,
+	RegularAffectingLetterSpacing = 3
+}
+
 import "multiple-select-vanilla/dist/styles/css/multiple-select.css"
 
 
@@ -38,6 +62,9 @@ interface PromptEditorGlobal {
 type CodeEditor = monaco.editor.IStandaloneCodeEditor & {
     _themeService: StandaloneThemeService,
     getConfiguration: () => typeof monaco.editor.EditorOptions,
+    _modelData: {
+        view: View
+    },
 }
 
 // global settings
@@ -1451,26 +1478,84 @@ class PromptEditor extends HTMLElement {
             throw new Error("Model not found in Monaco Editor")
         }
         const lineCount = Math.min(end, model.getLineCount())
-        const container = document.createElement("table")
-        container.classList.add(style["find-lines-table"])
-        for (let lineNum = Math.max(start, 1); lineNum <= lineCount; ++lineNum) {
+        const container = document.createElement("div")
+        const styleContainer = document.createElement("style")
+        const table = document.createElement("table")
+
+        container.appendChild(styleContainer)
+        styleContainer.textContent = `@scope { ${ this.monaco._themeService._themeCSS } }`
+
+        table.classList.add(style["find-lines-table"], "monaco-editor")
+
+        const options = new ViewLineOptions({ options: this.monaco.getOptions() }, this.getThemeId())
+        for (let currentLineNum = Math.max(start, 1); currentLineNum <= lineCount; ++currentLineNum) {
             const trEl = document.createElement("tr")
-            const line = monaco.editor.colorizeModelLine(model, lineNum)
             const lineNumberContainer = document.createElement("td")
             const lineContentContainer = document.createElement("td")
 
-            lineNumberContainer.textContent = lineNum as unknown as string
+            lineNumberContainer.textContent = currentLineNum as unknown as string
             lineNumberContainer.classList.add(style["find-line-number"])
-            if (active === lineNum) {
-                trEl.classList.add(style["find-line-active"])
-            }
-            lineContentContainer.innerHTML = line
             lineContentContainer.classList.add(style["find-line-content"])
 
+            // monaco.editor.colorize* は Decoration の処理をしないため ViewLine を元に自力でHTMLを生成する必要がある
+            const lineDecorations = model.getLineDecorations(currentLineNum)
+
+            const view = this.monaco._modelData.view
+            const partialViewportData = Object.assign(view._context.viewLayout.getLinesViewportData(), {
+                startLineNumber: currentLineNum,
+                endLineNumber: currentLineNum+1,
+            })
+            const viewportData = new ViewportData(view._selections, partialViewportData, view._context.viewLayout.getWhitespaceViewportData(), view._context.viewModel)
+
+            const lineData = viewportData.getViewLineRenderingData(currentLineNum)
+            const inlineDecorations = lineDecorations.map(lineDecoration => new InlineDecoration(
+                lineDecoration.range,
+                lineDecoration.options.inlineClassName,
+                lineDecoration.options.inlineClassNameAffectsLetterSpacing ? InlineDecorationType.RegularAffectingLetterSpacing : InlineDecorationType.Regular
+            ))
+            const lineContent = model.getLineContent(currentLineNum)
+            const actualInlineDecorations = LineDecoration.filter(inlineDecorations, currentLineNum, 1, lineContent.length + 1);
+            const renderLineInput = new RenderLineInput(
+                options.useMonospaceOptimizations,
+                options.canUseHalfwidthRightwardsArrow,
+
+                lineContent,
+
+                lineData.continuesWithWrappedLine,
+                lineData.isBasicASCII,
+                lineData.containsRTL,
+                0,
+                // ITextModel.tokenization はドキュメントに記載されていない
+                // see: https://github.com/microsoft/vscode/blob/12c1d4fb1753aeda4b55de73b8a8ee58c607d780/src/vs/editor/common/model/textModel.ts#L286
+                (model as any).tokenization.getLineTokens(currentLineNum),
+                actualInlineDecorations,
+                lineData.tabSize,
+                lineData.startVisibleColumn,
+                options.spaceWidth,
+                options.middotWidth,
+                options.wsmiddotWidth,
+                options.stopRenderingLineAfter,
+                options.renderWhitespace,
+                options.renderControlCharacters,
+                options.fontLigatures !== EditorFontLigatures.OFF,
+                null
+            )
+
+            const sb = new StringBuilder(10000)
+            const output = renderViewLine(renderLineInput, sb)
+
+            if (lineContent.length === 0) {
+                // 行の内容が空だとheightが小さくなってしまうので空白文字を入れる
+                lineContentContainer.innerHTML = "&nbsp;"
+            } else {
+                lineContentContainer.innerHTML = sb.build()
+            }
             trEl.appendChild(lineNumberContainer)
             trEl.appendChild(lineContentContainer)
-            container.appendChild(trEl)
+            table.appendChild(trEl)
         }
+
+        container.appendChild(table)
         return container
     }
 }
