@@ -394,8 +394,8 @@ const setTooltip = (targetElement: HTMLElement) => {
         tooltip.style.left = (ev.clientX + TooltipDistance) + 'px'
         tooltip.style.top = (ev.clientY + TooltipDistance) + 'px'
 
-        if (document.documentElement.clientHeight < ev.clientY + 20 + tooltip.getBoundingClientRect().height) {
-            tooltip.style.top = (ev.clientY - 20 - tooltipBody.getBoundingClientRect().height) + 'px'
+        if (document.documentElement.clientHeight < ev.clientY + TooltipDistance + tooltip.getBoundingClientRect().height) {
+            tooltip.style.top = (ev.clientY - TooltipDistance  - tooltipBody.getBoundingClientRect().height) + 'px'
         }
     })
     targetElement.addEventListener("mouseout", (ev) => {
