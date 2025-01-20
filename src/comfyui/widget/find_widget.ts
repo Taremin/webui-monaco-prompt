@@ -288,11 +288,18 @@ class FindWidget {
             trEl.addEventListener("click", (ev) => {
                 const nodeId = trEl.dataset.nodeId
                 const node = app.graph.getNodeById(nodeId)
-                const monaco = link[trEl.dataset.instanceId!].monaco.monaco
+                const instance = link[trEl.dataset.instanceId!]
+
+                ev.stopPropagation()
+
+                if (!instance) {
+                    return
+                }
+
+                const monaco = instance.monaco.monaco
                 const lineNumber = (trEl.dataset.startLine as unknown as number) | 0
                 const column = (trEl.dataset.startCol as unknown as number) | 0
 
-                ev.stopPropagation()
 
                 // 描画範囲外にいるときにエディタのスクロールなどの設定が無効化されることがあるため
                 // ノードが描画範囲にはいるように移動後、次の描画タイミングでスクロール等を設定
@@ -370,8 +377,14 @@ const setTooltip = (targetElement: HTMLElement) => {
         while (tooltipBody.firstChild) {
             tooltipBody.removeChild(tooltipBody.firstChild)
         }
+        const instance = link[targetElement.dataset.instanceId!]
 
-        const monaco = link[targetElement.dataset.instanceId!].monaco
+        // instance removed
+        if (!instance) {
+            return
+        }
+
+        const monaco = instance.monaco
         const line = +(targetElement.dataset.startLine!)
         const range = TooltipSurroundingLines
 
