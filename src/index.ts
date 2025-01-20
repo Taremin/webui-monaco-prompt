@@ -45,15 +45,19 @@ import { deepEqual } from 'fast-equals'
 
 
 // define prompt language
-for (const {id, lang} of [
+const sdLanguages = [
     {id: "sd-prompt", lang: sdPrompt},
     {id: "sd-dynamic-prompt", lang: sdDynamicPrompt}
-]) {
-    monaco.languages.register({id: id})
-    monaco.languages.setMonarchTokensProvider(id, lang.language)
-    monaco.languages.setLanguageConfiguration(id, lang.conf)
-    monaco.languages.registerCompletionItemProvider(id, provider)
+]
+const addLanguages = (languages: typeof sdLanguages) => {
+    for (const {id, lang} of languages) {
+        monaco.languages.register({id: id})
+        monaco.languages.setMonarchTokensProvider(id, lang.language)
+        monaco.languages.setLanguageConfiguration(id, lang.conf)
+        monaco.languages.registerCompletionItemProvider(id, provider)
+    }
 }
+addLanguages(sdLanguages)
 
 const ContextPrefix = "monacoPromptEditor"
 const FontSizePreset = [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48]
@@ -1659,6 +1663,7 @@ export {
     addLoadedCSV,
     addData,
     addCustomSuggest,
+    addLanguages,
     runAllInstances,
     PromptEditorSettings,
     ContextKeyExpr,

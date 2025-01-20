@@ -27,6 +27,12 @@ utils.loadCodicon(dir)
 const MonacoPrompt = require("../index") as typeof WebuiMonacoPrompt
 window.WebuiMonacoPrompt = MonacoPrompt
 
+const languages = [
+    {id: "comfy-prompt", lang: comfyPrompt},
+    {id: "comfy-dynamic-prompt", lang: comfyDynamicPrompt},
+]
+MonacoPrompt.addLanguages(languages)
+
 const models = [
     {
         keybinding: WebuiMonacoPrompt.KeyMod.chord(
