@@ -1,7 +1,7 @@
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.api'
 import { initVimMode } from 'monaco-vim'
 import { sdPrompt, sdDynamicPrompt } from './languages'
-import { provider, addCSV, loadCSV, getCount, addData, clearCSV, getReplaceUnderscore, updateReplaceUnderscore, getLoadedCSV, addLoadedCSV, getEnabledCSV } from './completion'
+import { provider, createDynamicSuggest, addCSV, loadCSV, getCount, addData, clearCSV, getReplaceUnderscore, updateReplaceUnderscore, getLoadedCSV, addLoadedCSV, getEnabledCSV } from './completion'
 import { addActionWithCommandOption, addActionWithSubMenu, ActionsPartialDescripter, getMenuId, updateSubMenu, removeSubMenu } from './monaco_utils'
 import { MultipleSelectInstance, multipleSelect} from 'multiple-select-vanilla'
 // @ts-ignore
@@ -26,6 +26,9 @@ import { ViewportData } from 'monaco-editor/esm/vs/editor/common/viewLayout/view
 import { LineDecoration } from 'monaco-editor/esm/vs/editor/common/viewLayout/lineDecorations'
 // @ts-ignore
 import { View } from 'monaco-editor/esm/vs/editor/browser/view'
+// @ts-ignore
+import { SuggestController } from 'monaco-editor/esm/vs/editor/contrib/suggest/browser/suggestController'
+
 // copy from viewModel.ts
 const enum InlineDecorationType {
 	Regular = 0,
@@ -1558,6 +1561,37 @@ class PromptEditor extends HTMLElement {
         container.appendChild(table)
         return container
     }
+    addCustomSuggest(id: string) {
+        const context = customSuggestContext[id]
+        if (!context) {
+            throw new Error(`Custom Suggest Context not found: ${id}`)
+        }
+
+        const createSuggest = context.createSuggest
+        if (!createSuggest) {
+            throw new Error(`create suggest function not found: ${id}`)
+        }
+
+        const keybinding = context.keybinding
+
+        const command = this.monaco.addCommand(
+            keybinding,
+            () => {
+                if (this.mode === PromptEditorMode.VIM && this.vim && this.vim.state.keyMap !== "vim-insert") {
+                    return
+                }
+                const languageId = this.getContext(this.createContextKey("language"))
+                const completionItemProvider = createDynamicSuggest(createSuggest, () => {
+                    if (provider) {
+                        provider.dispose()
+                    }
+                })
+                const provider = monaco.languages.registerCompletionItemProvider(languageId, completionItemProvider)
+                const suggestController = this.monaco.getContribution<SuggestController>(SuggestController.ID) as SuggestController
+                suggestController.triggerSuggest(new Set([completionItemProvider]))
+            }
+        )
+    }
 }
 window.customElements.define('prompt-editor', PromptEditor);
 
@@ -1569,6 +1603,20 @@ const runAllInstances = <T extends PromptEditor = PromptEditor>(callback: (insta
     }
 }
 
+const customSuggestContext: {[key: string]: {
+    keybinding: number,
+    createSuggest: () => Promise<Partial<monaco.languages.CompletionItem>[]>,
+}} = {}
+const addCustomSuggest = (id: string, keybinding: number, createSuggests: () => Promise<Partial<monaco.languages.CompletionItem>[]>) => {
+    customSuggestContext[id] = {
+        keybinding: keybinding,
+        createSuggest: createSuggests,
+    }
+
+    runAllInstances((instance) => {
+        instance.addCustomSuggest(id)
+    })
+}
 
 const updateAutoComplete = () => {
     const files = getLoadedCSV()
@@ -1596,6 +1644,11 @@ const _clearCSV = () => {
     return retval
 }
 
+const KeyMod = monaco.KeyMod
+const KeyCode = monaco.KeyCode
+type CompletionItem = monaco.languages.CompletionItem
+const CompletionItemKind = monaco.languages.CompletionItemKind
+
 export {
     PromptEditor,
     getCount,
@@ -1605,7 +1658,12 @@ export {
     getLoadedCSV,
     addLoadedCSV,
     addData,
+    addCustomSuggest,
     runAllInstances,
     PromptEditorSettings,
     ContextKeyExpr,
+    KeyMod,
+    KeyCode,
+    CompletionItem,
+    CompletionItemKind,
 }
