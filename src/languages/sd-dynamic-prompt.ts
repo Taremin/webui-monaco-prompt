@@ -33,7 +33,7 @@ const language: languages.IMonarchLanguage = Object.assign({}, baseLanguage, {
 			{ include: '@whitespace' },
 			{ include: '@numbers' },
 
-			[/[,:]/, 'delimiter'],
+			[/[,:|]/, 'delimiter'],
 			[/[{}\[\]()<>]/, '@brackets'],
 		],
 		whitespace: baseLanguage.tokenizer.whitespace.concat([
