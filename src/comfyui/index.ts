@@ -2,8 +2,9 @@ import * as utils from "./utils"
 import * as WebuiMonacoPrompt from "../index" // for typing
 import { link } from "./link"
 import { FindWidget, ReplaceWidget } from "./widget"
-import { app } from "./api"
+import { app, api } from "./api"
 import { loadSetting, saveSettings, updateInstanceSettings } from "./settings"
+import { comfyPrompt, comfyDynamicPrompt } from "./languages"
 
 declare let __webpack_public_path__: any;
 
@@ -25,6 +26,66 @@ utils.loadCodicon(dir)
 // import は __webpack_public_path__ を使う場合は処理順の関係で使えない
 const MonacoPrompt = require("../index") as typeof WebuiMonacoPrompt
 window.WebuiMonacoPrompt = MonacoPrompt
+
+const languages = [
+    {id: "comfy-prompt", lang: comfyPrompt},
+    {id: "comfy-dynamic-prompt", lang: comfyDynamicPrompt},
+]
+MonacoPrompt.addLanguages(languages)
+
+const models = [
+    {
+        keybinding: WebuiMonacoPrompt.KeyMod.chord(
+            WebuiMonacoPrompt.KeyMod.CtrlCmd | WebuiMonacoPrompt.KeyCode.KeyM,
+            WebuiMonacoPrompt.KeyMod.CtrlCmd | WebuiMonacoPrompt.KeyCode.KeyM
+        ),
+        model: "checkpoints"
+    },
+    {
+        keybinding: WebuiMonacoPrompt.KeyMod.chord(
+            WebuiMonacoPrompt.KeyMod.CtrlCmd | WebuiMonacoPrompt.KeyCode.KeyM,
+            WebuiMonacoPrompt.KeyMod.CtrlCmd | WebuiMonacoPrompt.KeyCode.KeyL
+        ),
+        model: "loras"
+    },
+    {
+        keybinding: WebuiMonacoPrompt.KeyMod.chord(
+            WebuiMonacoPrompt.KeyMod.CtrlCmd | WebuiMonacoPrompt.KeyCode.KeyM,
+            WebuiMonacoPrompt.KeyMod.CtrlCmd | WebuiMonacoPrompt.KeyCode.KeyE
+        ),
+        model: "embeddings"
+    },
+    {
+        keybinding: WebuiMonacoPrompt.KeyMod.chord(
+            WebuiMonacoPrompt.KeyMod.CtrlCmd | WebuiMonacoPrompt.KeyCode.KeyM,
+            WebuiMonacoPrompt.KeyMod.CtrlCmd | WebuiMonacoPrompt.KeyCode.KeyH
+        ),
+        model: "hypernetworks"
+    },
+    {
+        keybinding: WebuiMonacoPrompt.KeyMod.chord(
+            WebuiMonacoPrompt.KeyMod.CtrlCmd | WebuiMonacoPrompt.KeyCode.KeyM,
+            WebuiMonacoPrompt.KeyMod.CtrlCmd | WebuiMonacoPrompt.KeyCode.KeyA
+        ),
+        model: "vae"
+    },
+]
+type ComfyAPIModels = string[] | {name: string, pathIndex: number}[]
+for (const {keybinding, model} of models) {
+    MonacoPrompt.addCustomSuggest(model, keybinding, async () => {
+        const items: Partial<WebuiMonacoPrompt.CompletionItem>[] = []
+        const models = await api.getModels(model) as ComfyAPIModels
+        models.forEach(model => {
+            const label = typeof model === "string" ? model : model.name
+            items.push({
+                label: label,
+                kind: WebuiMonacoPrompt.CompletionItemKind.File,
+                insertText: label,
+            })
+        })
+        return items
+    })
+}
 
 let csvfiles: string[]
 async function loadCSV (files: string[]) {
@@ -61,6 +122,9 @@ function onCreateTextarea(textarea: HTMLTextAreaElement, node: any) {
         autoLayout: true,
         handleTextAreaValue: true,
     })
+    for(const {keybinding, model} of models) {
+        editor.addCustomSuggest(model)
+    }
 
     // style 同期
     const observer = new MutationObserver((mutations, observer) => {

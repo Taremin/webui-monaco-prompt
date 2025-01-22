@@ -281,8 +281,38 @@ const provider: languages.CompletionItemProvider = {
     },
 }
 
+type CreateDynamicSuggestFunc = () => Promise<Partial<languages.CompletionItem>[]>
+type CreateDynamicSuggest = (suggestFunc: CreateDynamicSuggestFunc, suggestCallback: () => void) => languages.CompletionItemProvider
+const createDynamicSuggest: CreateDynamicSuggest = (suggestFunc, suggestOnDispose) => {
+    return {
+        provideCompletionItems: async function(model: editor.ITextModel, position: Position, context: languages.CompletionContext) {
+            const suggestWordList = await suggestFunc()
+
+            suggestWordList.forEach(partialCompletionItem => {
+                if (!partialCompletionItem.kind) {
+                    partialCompletionItem.kind = languages.CompletionItemKind.Text
+                }
+                partialCompletionItem.range = {
+                    startLineNumber: position.lineNumber,
+                    startColumn: position.column,
+                    endLineNumber: position.lineNumber,
+                    endColumn: position.column,
+                }
+            })
+
+            return {
+                suggestions: suggestWordList as languages.CompletionItem[],
+                dispose: () => {
+                    suggestOnDispose()
+                }
+            }
+        }
+    }
+}
+
 export {
     provider,
+    createDynamicSuggest,
     clearCSV,
     addCSV,
     loadCSV,
