@@ -1587,7 +1587,10 @@ class PromptEditor extends HTMLElement {
                 const languageId = this.getContext(this.createContextKey("language"))
                 const completionItemProvider = createDynamicSuggest(createSuggest, () => {
                     if (provider) {
-                        provider.dispose()
+                        // snippet に choice が含まれていると即時 dispose で候補がサジェストされなくなる
+                        setTimeout(() => {
+                            provider.dispose()
+                        }, 0)
                     }
                 })
                 const provider = monaco.languages.registerCompletionItemProvider(languageId, completionItemProvider)
@@ -1652,6 +1655,7 @@ const KeyMod = monaco.KeyMod
 const KeyCode = monaco.KeyCode
 type CompletionItem = monaco.languages.CompletionItem
 const CompletionItemKind = monaco.languages.CompletionItemKind
+const CompletionItemInsertTextRule = monaco.languages.CompletionItemInsertTextRule
 
 export {
     PromptEditor,
@@ -1671,4 +1675,5 @@ export {
     KeyCode,
     CompletionItem,
     CompletionItemKind,
+    CompletionItemInsertTextRule,
 }
