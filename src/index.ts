@@ -79,6 +79,7 @@ const settings: PromptEditorGlobal = {
     instances: {},
 }
 let id = 0
+let currentFocusInstance: number | null = null
 
 interface PromptEditorOptions {
     focus: boolean;
@@ -236,6 +237,10 @@ class PromptEditor extends HTMLElement {
 
         this.changeMode(PromptEditorMode.VIM)
 
+        editor.onDidFocusEditorWidget(() => {
+            currentFocusInstance = this.getInstanceId()
+        })
+
         if (options.focus) {
             editor.focus()
         }
@@ -279,6 +284,24 @@ class PromptEditor extends HTMLElement {
         this.setEventHandler()
 
         settings.instances[this._id] = this
+    }
+
+    getCurrentFocus() {
+        if (!settings) {
+            return null
+        }
+        if (!settings.instances) {
+            return null
+        }
+        if (currentFocusInstance === null) {
+            return null
+        }
+        if (!settings.instances[currentFocusInstance]) {
+            console.warn("instance not found: ", currentFocusInstance, settings.instances)
+            return null
+        }
+
+        return settings.instances[currentFocusInstance]
     }
 
     dispose() {
@@ -1581,10 +1604,16 @@ class PromptEditor extends HTMLElement {
         const command = this.monaco.addCommand(
             keybinding,
             () => {
-                if (this.mode === PromptEditorMode.VIM && this.vim && this.vim.state.keyMap !== "vim-insert") {
+                // A1111 で最後のインスタンスで command が実行されてしまうため,
+                // thisを使用せず最後にフォーカスしたインスタンスで処理を行う
+                const instance = this.getCurrentFocus()
+                if (instance === null) {
                     return
                 }
-                const languageId = this.getContext(this.createContextKey("language"))
+                if (instance && instance.mode === PromptEditorMode.VIM && instance.vim && instance.vim.state.keyMap !== "vim-insert") {
+                    return
+                }
+                const languageId = instance.getContext(instance.createContextKey("language"))
                 const completionItemProvider = createDynamicSuggest(createSuggest, () => {
                     if (provider) {
                         // snippet に choice が含まれていると即時 dispose で候補がサジェストされなくなる
@@ -1594,7 +1623,7 @@ class PromptEditor extends HTMLElement {
                     }
                 })
                 const provider = monaco.languages.registerCompletionItemProvider(languageId, completionItemProvider)
-                const suggestController = this.monaco.getContribution<SuggestController>(SuggestController.ID) as SuggestController
+                const suggestController = instance.monaco.getContribution<SuggestController>(SuggestController.ID) as SuggestController
                 suggestController.triggerSuggest(new Set([completionItemProvider]))
             }
         )
