@@ -87,6 +87,39 @@ for (const {keybinding, model} of models) {
     })
 }
 
+// snippet
+MonacoPrompt.addCustomSuggest(
+    "snippet",
+    WebuiMonacoPrompt.KeyMod.chord(
+        WebuiMonacoPrompt.KeyMod.CtrlCmd | WebuiMonacoPrompt.KeyCode.KeyM,
+        WebuiMonacoPrompt.KeyMod.CtrlCmd | WebuiMonacoPrompt.KeyCode.KeyS,
+    ),
+    async () => {
+        const items: Partial<WebuiMonacoPrompt.CompletionItem>[] = []
+        const snippets = await api.fetchApi("/webui-monaco-prompt/snippet").then((res: Response) => res.json())
+
+        for (const snippet of snippets) {
+            items.push({
+                label: snippet.label,
+                kind: WebuiMonacoPrompt.CompletionItemKind.Snippet,
+                insertText: snippet.insertText,
+                insertTextRules: WebuiMonacoPrompt.CompletionItemInsertTextRule.InsertAsSnippet,
+                detail: snippet.path,
+                documentation: {
+                    supportHtml: true,
+                    value: 'doc: <span style="color: red">&lt;lora:${1}:${2:1.0}&gt;</span>',
+                },
+            })
+        }
+
+        return items
+    }
+)
+async function refreshSnippets() {
+    await api.fetchApi("/webui-monaco-prompt/snippet-refresh").then((res: Response) => res.json())
+    return
+}
+
 let csvfiles: string[]
 async function loadCSV (files: string[]) {
     MonacoPrompt.clearCSV()
@@ -125,6 +158,7 @@ function onCreateTextarea(textarea: HTMLTextAreaElement, node: any) {
     for(const {keybinding, model} of models) {
         editor.addCustomSuggest(model)
     }
+    editor.addCustomSuggest("snippet")
 
     // style 同期
     const observer = new MutationObserver((mutations, observer) => {
@@ -303,9 +337,10 @@ const register = (app: any) => {
             }
             customNode.widget.fromNode(app, node)
         },
+        // refresh button
         refreshComboInNodes: async function(nodeDef: any, app: any) {
-            // refresh で csv一覧 リロード
             refreshCSV()
+            refreshSnippets()
         }
     })
 

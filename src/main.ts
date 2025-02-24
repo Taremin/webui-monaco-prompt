@@ -8,6 +8,130 @@ const me = "webui-monaco-prompt";
 ((srcURL) => {
     let isLoaded = false
 
+    const models = [
+        {
+            keybinding: MonacoPrompt.KeyMod.chord(
+                MonacoPrompt.KeyMod.CtrlCmd | MonacoPrompt.KeyCode.KeyM,
+                MonacoPrompt.KeyMod.CtrlCmd | MonacoPrompt.KeyCode.KeyM
+            ),
+            model: "sd-models"
+        },
+        {
+            keybinding: MonacoPrompt.KeyMod.chord(
+                MonacoPrompt.KeyMod.CtrlCmd | MonacoPrompt.KeyCode.KeyM,
+                MonacoPrompt.KeyMod.CtrlCmd | MonacoPrompt.KeyCode.KeyL
+            ),
+            model: "loras"
+        },
+        {
+            keybinding: MonacoPrompt.KeyMod.chord(
+                MonacoPrompt.KeyMod.CtrlCmd | MonacoPrompt.KeyCode.KeyM,
+                MonacoPrompt.KeyMod.CtrlCmd | MonacoPrompt.KeyCode.KeyE
+            ),
+            model: "embeddings"
+        },
+        {
+            keybinding: MonacoPrompt.KeyMod.chord(
+                MonacoPrompt.KeyMod.CtrlCmd | MonacoPrompt.KeyCode.KeyM,
+                MonacoPrompt.KeyMod.CtrlCmd | MonacoPrompt.KeyCode.KeyH
+            ),
+            model: "hypernetworks"
+        },
+        {
+            keybinding: MonacoPrompt.KeyMod.chord(
+                MonacoPrompt.KeyMod.CtrlCmd | MonacoPrompt.KeyCode.KeyM,
+                MonacoPrompt.KeyMod.CtrlCmd | MonacoPrompt.KeyCode.KeyA
+            ),
+            model: "sd-vae"
+        },
+    ]
+    for (const {keybinding, model} of models) {
+        MonacoPrompt.addCustomSuggest(model, keybinding, async () => {
+            const items: Partial<MonacoPrompt.CompletionItem>[] = []
+            const models = await fetch(`/sdapi/v1/${model}`).then(res => res.json())
+            switch (model) {
+                case "sd-models":
+                case "sd-vae":
+                    (models as {model_name: string, filename: string}[]).forEach(model => {
+                        const label = model.model_name
+                        items.push({
+                            label: label,
+                            kind: MonacoPrompt.CompletionItemKind.File,
+                            insertText: label,
+                        })
+                    })
+                    break
+                case "hypernetworks":
+                    (models as {name: string, path: string}[]).forEach(model => {
+                        const label = model.name
+                        items.push({
+                            label: label,
+                            kind: MonacoPrompt.CompletionItemKind.File,
+                            insertText: label,
+                        })
+                    })
+                    break
+                case "embeddings":
+                    Object.keys((models as {
+                        loaded: {[key: string]: {sd_checkpoint: string, sd_checkpoint_name: string}},
+                        skipped: {[key: string]: {sd_checkpoint: string, sd_checkpoint_name: string}},
+                    }).loaded).forEach(key => {
+                        const label = key
+                        items.push({
+                            label: label,
+                            kind: MonacoPrompt.CompletionItemKind.File,
+                            insertText: label,
+                        })
+                    })
+                    break
+                case "loras":
+                    (models as {name: string, path: string, prompt: string }[]).forEach(model => {
+                        const label = model.name
+                        items.push({
+                            label: label,
+                            kind: MonacoPrompt.CompletionItemKind.File,
+                            insertText: label,
+                        })
+                    })
+                    break
+                default:
+                    throw new Error("Unknown model type: " + model)
+            }
+            return items
+        })
+    }
+
+    // snippet
+    /*
+    MonacoPrompt.addCustomSuggest(
+        "snippet",
+        MonacoPrompt.KeyMod.chord(
+            MonacoPrompt.KeyMod.CtrlCmd | MonacoPrompt.KeyCode.KeyM,
+            MonacoPrompt.KeyMod.CtrlCmd | MonacoPrompt.KeyCode.KeyS,
+        ),
+        async () => {
+            const items: Partial<MonacoPrompt.CompletionItem>[] = []
+            const snippets = await api.fetchApi("/webui-monaco-prompt/snippet").then((res: Response) => res.json())
+
+            for (const snippet of snippets) {
+                items.push({
+                    label: snippet.label,
+                    kind: MonacoPrompt.CompletionItemKind.Snippet,
+                    insertText: snippet.insertText,
+                    insertTextRules: MonacoPrompt.CompletionItemInsertTextRule.InsertAsSnippet,
+                    detail: snippet.path,
+                    documentation: {
+                        supportHtml: true,
+                        value: 'doc: <span style="color: red">&lt;lora:${1}:${2:1.0}&gt;</span>',
+                    },
+                })
+            }
+
+            return items
+        }
+    )
+    */
+
     const onLoad = async () => {
         if (isLoaded) {
             return
@@ -92,6 +216,13 @@ const me = "webui-monaco-prompt";
                     handleTextAreaValue: true,
                     overlayZIndex: 99999,
                 })
+
+                // custom suggest
+                for(const {keybinding, model} of models) {
+                    editor.addCustomSuggest(model)
+                }
+                editor.addCustomSuggest("snippet")
+
                 editor.addEventListener('keydown', (ev) => {
                     switch (ev.key) {
                         case 'Esc':

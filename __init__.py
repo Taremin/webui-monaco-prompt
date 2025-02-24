@@ -3,14 +3,17 @@
 #
 import os
 import server
+import folder_paths
 from aiohttp import web
 import glob
 import json
 import shutil
+from . import snippets
 
 WEB_DIRECTORY = "./comfy"
 
 extension_root_path = os.path.dirname(__file__)
+custom_nodes_path = folder_paths.get_folder_paths("custom_nodes")[0]
 
 
 @server.PromptServer.instance.routes.get("/webui-monaco-prompt/csv")
@@ -28,6 +31,20 @@ async def get_csv_fils(request):
     ))
 
     return web.Response(text=json.dumps(files), content_type='application/json')
+
+
+@server.PromptServer.instance.routes.get("/webui-monaco-prompt/snippet")
+async def get_snippets(request):
+    if (snippets.get_snippets() is None):
+        snippets.load_snippets(custom_nodes_path)
+    return web.Response(text=json.dumps(snippets.get_snippets()), content_type='application/json')
+
+
+@server.PromptServer.instance.routes.get("/webui-monaco-prompt/snippet-refresh")
+async def reload_snippets(request):
+    snippets.load_snippets(custom_nodes_path)
+
+    return web.Response(text=json.dumps(snippets.get_snippets()), content_type='application/json')
 
 
 class WebuiMonacoPromptFind:
