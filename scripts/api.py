@@ -7,7 +7,7 @@ from gradio import Blocks
 import fastapi
 from fastapi import FastAPI, HTTPException, status
 from modules.api.api import Api
-from .. import snippets
+import snippets
 
 import os
 extension_base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -74,7 +74,7 @@ def on_app_started(demo: Optional[Blocks], app: FastAPI):
         return list(map(lambda path: os.path.splitext(os.path.basename(path))[0], paths))
 
     def get_snippets(request: fastapi.Request):
-        snippets.get_snippets(extension_base_dir)
+        snippets.load_snippets(os.path.join(extension_base_dir, ".."))
         return snippets.get_snippets()
 
     app.add_api_route(extension_settings.get("EndPoint"), get, methods=["GET"])

@@ -1,6 +1,6 @@
 import * as MonacoPrompt from './index'
 import { deepEqual } from 'fast-equals'
-import { EndPoint, GetEmbeddings, CSV } from '../extension.json'
+import { EndPoint, GetEmbeddings, GetSnippets, CSV } from '../extension.json'
 declare const gradio_config: any;
 
 const me = "webui-monaco-prompt";
@@ -110,7 +110,7 @@ const me = "webui-monaco-prompt";
         ),
         async () => {
             const items: Partial<MonacoPrompt.CompletionItem>[] = []
-            const snippets = await api.fetchApi("/webui-monaco-prompt/snippet").then((res: Response) => res.json())
+            const snippets = await fetch(GetSnippets).then((res: Response) => res.json())
 
             for (const snippet of snippets) {
                 items.push({
