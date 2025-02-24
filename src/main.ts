@@ -102,7 +102,6 @@ const me = "webui-monaco-prompt";
     }
 
     // snippet
-    /*
     MonacoPrompt.addCustomSuggest(
         "snippet",
         MonacoPrompt.KeyMod.chord(
@@ -130,7 +129,6 @@ const me = "webui-monaco-prompt";
             return items
         }
     )
-    */
 
     const onLoad = async () => {
         if (isLoaded) {
