@@ -31,7 +31,44 @@ v0.1.2からはこの方法ではインストールできなくなりました�
 - オートコンプリート対応
     - デフォルトでは `danbooru.csv`, `extra-quality-tags.csv` を読み込んでいるので既に `a1111-sd-webui-tagcompete` を使用している方は違和感なく使えます
     - `<` を入力すると Extra Networks (HN/LoRA/LyCORIS) のみの候補を出せます
-        - LyCORISは[a1111-sd-webui-lycoris](https://github.com/KohakuBlueleaf/a1111-sd-webui-lycoris)拡張導入時に使用可能です
+        - LyCORISは[a1111-sd-webui-lycoris](https://github.com/KohakuBlueleaf/
+        a1111-sd-webui-lycoris)拡張導入時に使用可能です
+        - **この機能は Deprecated (非推奨)になりました**
+            - 今後のアップデートで削除される予定です
+            - スニペットとモデル名サジェストを使用してください
+- モデル名サジェスト
+    - `Ctrl-M` から始まるショートカットキーでモデル名の挿入が行えます
+
+      | モデル       | ショートカットキー     |
+      |--------------|----------------------|
+      | Checkpoint   | `Ctrl-M` -> `Ctrl-M` |
+      | LoRA         | `Ctrl-M` -> `Ctrl-L` |
+      | Embedding    | `Ctrl-M` -> `Ctrl-E` |
+      | Hypernetwork | `Ctrl-M` -> `Ctrl-H` |
+      | VAE          | `Ctrl-M` -> `Ctrl-A` |
+
+- スニペット
+    - `Ctrl-M` -> `Ctrl-S` で挿入可能
+    - 詳細は後述
+
+また、他にも Monaco に備わっている VSCode 互換のショートカットキーなども使用可能です。
+
+### スニペット
+
+スニペット(断片)はよく使う入力をテンプレートで行えるようにする機能です。
+
+#### 追加方法
+
+スニペットはこの拡張の `snippets` ディレクトリか、各カスタムノード/拡張機能以下の `snippets` ディレクトリに含まれる `.json` を読み込みます。
+
+JSONのフォーマットは `{"label": string, "insertText": string}` か、その配列です。
+`insertText` では下記のスニペット構文が使用可能です。
+
+#### 構文
+
+スニペット構文は VSCode 互換のものが使用できます。
+https://code.visualstudio.com/docs/editor/userdefinedsnippets#_snippet-syntax
+
 
 ## 注意
 
