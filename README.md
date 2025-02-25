@@ -37,11 +37,16 @@ v0.1.2からはこの方法ではインストールできなくなりました�
             - 今後のアップデートで削除される予定です
             - スニペットとモデル名サジェストを使用してください
 - モデル名サジェスト
-    - Checkpoint: `Ctrl-M` -> `Ctrl-M`
-    - LoRA: `Ctrl-M` -> `Ctrl-L`
-    - Embedding: `Ctrl-M` -> `Ctrl-E`
-    - Hypernetwork: `Ctrl-M` -> `Ctrl-H`
-    - VAE: `Ctrl-M` -> `Ctrl-A`
+    - `Ctrl-M` から始まるショートカットキーでモデル名の挿入が行えます
+
+      | モデル       | ショートカットキー     |
+      |--------------|----------------------|
+      | Checkpoint   | `Ctrl-M` -> `Ctrl-M` |
+      | LoRA         | `Ctrl-M` -> `Ctrl-L` |
+      | Embedding    | `Ctrl-M` -> `Ctrl-E` |
+      | Hypernetwork | `Ctrl-M` -> `Ctrl-H` |
+      | VAE          | `Ctrl-M` -> `Ctrl-A` |
+
 - スニペット
     - `Ctrl-M` -> `Ctrl-S` で挿入可能
     - 詳細は後述
@@ -49,6 +54,8 @@ v0.1.2からはこの方法ではインストールできなくなりました�
 また、他にも Monaco に備わっている VSCode 互換のショートカットキーなども使用可能です。
 
 ### スニペット
+
+スニペット(断片)はよく使う入力をテンプレートで行えるようにする機能です。
 
 #### 追加方法
 
