@@ -119,10 +119,6 @@ const me = "webui-monaco-prompt";
                     insertText: snippet.insertText,
                     insertTextRules: MonacoPrompt.CompletionItemInsertTextRule.InsertAsSnippet,
                     detail: snippet.path,
-                    documentation: {
-                        supportHtml: true,
-                        value: 'doc: <span style="color: red">&lt;lora:${1}:${2:1.0}&gt;</span>',
-                    },
                 })
             }
 
