@@ -35,6 +35,10 @@ def load_snippets(target_dir: str):
                         if detail_text is not None:
                             snippet["detail"] = detail_text
 
+                        documentation_text = loaded_snippet.get("documentation")
+                        if documentation_text is not None:
+                            snippet["documentation"] = documentation_text
+
                         snippets.append(snippet)
         except Exception:
             print("[SKIP] Webui Monaco Prompt: invalid json:", path)
