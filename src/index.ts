@@ -118,7 +118,8 @@ interface PromptEditorElements {
     minimap: HTMLInputElement
     replaceUnderscore: HTMLInputElement
     overflowGuard: HTMLDivElement
-    overlay: HTMLDivElement
+    overflowContent: HTMLDivElement
+    overflowOverlay: HTMLDivElement
     fontsize: HTMLSelectElement
     autocomplete: MultipleSelectInstance
     autocompleteElement: HTMLLabelElement
@@ -269,9 +270,11 @@ class PromptEditor extends HTMLElement {
 
         const overflowGuard = this.elements.main!.querySelector('.overflow-guard')! as HTMLDivElement
         this.elements.overflowGuard = overflowGuard
-        const overlay = this.elements.main!.querySelector('.overflowingContentWidgets')! as HTMLDivElement
-        this.elements.overlay = overlay
-        this.fixedOverflowWidgetWorkaround(options)
+        const overflowContent = this.elements.main!.querySelector('.overflowingContentWidgets')! as HTMLDivElement
+        this.elements.overflowContent = overflowContent
+        const overflowOverlay = this.elements.main!.querySelector('.overflowingOverlayWidgets')! as HTMLDivElement
+        this.elements.overflowOverlay = overflowOverlay
+        this.fixedOverflowWidgetWorkaround([overflowContent, overflowOverlay], options)
 
         this.updateAutoComplete()
         this.setContextMenu()
@@ -316,12 +319,13 @@ class PromptEditor extends HTMLElement {
     }
 
     // fixedOverflowWidget相当のworkaroundを行う
-    fixedOverflowWidgetWorkaround(options: Partial<PromptEditorOptions>) {
-        const overlay = this.elements.overlay!
+    fixedOverflowWidgetWorkaround(elements: HTMLElement[], options: Partial<PromptEditorOptions>) {
         const overflowGuard = this.elements.overflowGuard!
-
         overflowGuard.style.position = 'absolute'
-        overlay.style.position = 'fixed'
+
+        for (const overlay of elements) {
+            overlay.style.position = 'fixed'
+        }
 
         const scrollbar = overflowGuard.querySelector(".scrollbar.vertical") as HTMLElement
         if (scrollbar) {
@@ -649,10 +653,16 @@ class PromptEditor extends HTMLElement {
     }
 
     setOverlayZIndex(zIndex: number) {
-        if (!this.elements.overlay) {
+        if (!this.elements.overflowContent) {
             return
+        } else {
+            this.elements.overflowContent.style.zIndex = "" + zIndex
         }
-        this.elements.overlay.style.zIndex = "" + zIndex
+        if (!this.elements.overflowOverlay) {
+            return
+        } else {
+            this.elements.overflowOverlay.style.zIndex = "" + (zIndex + 1)
+        }
     }
 
     setContext(key:string, value: any) {

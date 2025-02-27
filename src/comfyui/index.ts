@@ -5,6 +5,7 @@ import { FindWidget, ReplaceWidget } from "./widget"
 import { app, api } from "./api"
 import { loadSetting, saveSettings, updateInstanceSettings } from "./settings"
 import { comfyPrompt, comfyDynamicPrompt } from "./languages"
+import { escapeHTML } from "../utils"
 
 declare let __webpack_public_path__: any;
 
@@ -99,6 +100,7 @@ MonacoPrompt.addCustomSuggest(
         const snippets = await api.fetchApi("/webui-monaco-prompt/snippet").then((res: Response) => res.json())
 
         for (const snippet of snippets) {
+            const usage = `**${escapeHTML(snippet.insertText)}**`
             items.push({
                 label: snippet.label,
                 kind: WebuiMonacoPrompt.CompletionItemKind.Snippet,
@@ -107,7 +109,12 @@ MonacoPrompt.addCustomSuggest(
                 detail: snippet.path,
                 documentation: {
                     supportHtml: true,
-                    value: 'doc: <span style="color: red">&lt;lora:${1}:${2:1.0}&gt;</span>',
+                    value: snippet.documentation ?
+                        [
+                            usage,
+                            snippet.documentation
+                        ].join("<br><br>") :
+                        usage
                 },
             })
         }

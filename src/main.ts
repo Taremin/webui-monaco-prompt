@@ -1,4 +1,5 @@
 import * as MonacoPrompt from './index'
+import { escapeHTML } from "./utils"
 import { deepEqual } from 'fast-equals'
 import { EndPoint, GetEmbeddings, GetSnippets, CSV } from '../extension.json'
 declare const gradio_config: any;
@@ -113,12 +114,22 @@ const me = "webui-monaco-prompt";
             const snippets = await fetch(GetSnippets).then((res: Response) => res.json())
 
             for (const snippet of snippets) {
+                const usage = `**${escapeHTML(snippet.insertText)}**`
                 items.push({
                     label: snippet.label,
                     kind: MonacoPrompt.CompletionItemKind.Snippet,
                     insertText: snippet.insertText,
                     insertTextRules: MonacoPrompt.CompletionItemInsertTextRule.InsertAsSnippet,
                     detail: snippet.path,
+                    documentation: {
+                        supportHtml: true,
+                        value: snippet.documentation ?
+                            [
+                                usage,
+                                snippet.documentation
+                            ].join("<br><br>") :
+                            usage
+                    },
                 })
             }
 

@@ -61,8 +61,9 @@ v0.1.2からはこの方法ではインストールできなくなりました�
 
 スニペットはこの拡張の `snippets` ディレクトリか、各カスタムノード/拡張機能以下の `snippets` ディレクトリに含まれる `.json` を読み込みます。
 
-JSONのフォーマットは `{"label": string, "insertText": string}` か、その配列です。
+JSONのフォーマットは `{"label": string, "insertText": string, documentation: string}` か、その配列です。
 `insertText` では下記のスニペット構文が使用可能です。
+`documentation` では `Markdown` 及び一部の HTML タグが使用可能です。
 
 #### 構文
 
