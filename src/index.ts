@@ -525,7 +525,7 @@ class PromptEditor extends HTMLElement {
         if (!getMenuId(menuContext)) {
             addActionWithSubMenu(this.monaco, subMenu)
         } else {
-            updateSubMenu(this.monaco, subMenu)
+            // updateSubMenu(this.monaco, subMenu)
         }
 
         return menuContext
