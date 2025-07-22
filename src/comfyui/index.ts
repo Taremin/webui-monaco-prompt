@@ -152,6 +152,56 @@ async function refreshCSV() {
 await refreshCSV()
 await loadSetting()
 
+function getCSSRules(target: string[]) {
+    const targetSet = new Set(target)
+    const result: {[key: string]: CSSStyleDeclaration[]} = {}
+
+    for (const  styleSheet of  document.styleSheets) {
+        for (const rule of styleSheet.cssRules) {
+            if (rule instanceof CSSStyleRule) {
+                if (targetSet.has(rule.selectorText)) {
+                    if (!Array.isArray(result[rule.selectorText])) {
+                        result[rule.selectorText] = []
+                    }
+                    result[rule.selectorText].push(rule.style)
+                }
+            }
+        }
+    }
+
+    return result
+}
+
+function getZIndex(styles: CSSStyleDeclaration[] = []) {
+    for (const style of styles) {
+        const zIndex = style.getPropertyValue("z-index")
+        if (zIndex) {
+            return ((zIndex as unknown as number) | 0)
+        }
+    }
+
+    return 0
+}
+
+const rules = getCSSRules([".graphdialog"])
+const graphDialogZIndex = getZIndex(rules[".graphdialog"])
+
+function styleToString(s: CSSStyleDeclaration, list: string[], isExclude=true) {
+    const result = []
+    const listset = new Set(list)
+
+    for (let i = 0, il = s.length; i < il; ++i) {
+        const prop = s[i]
+        if (listset.has(prop) === isExclude) {
+           continue
+        }
+        const priority = s.getPropertyPriority(s[i])
+        result.push(`${prop}: ${s.getPropertyValue(prop)}${priority === "" ? "" : " !" + priority};`)
+    }
+
+    return result.join("\n")
+}
+
 function onCreateTextarea(textarea: HTMLTextAreaElement, node: any) {
     if (textarea.readOnly) {
         console.log("[WebuiMonacoPrompt] Skip: TextArea is read-only:", textarea)
@@ -173,9 +223,11 @@ function onCreateTextarea(textarea: HTMLTextAreaElement, node: any) {
             if (mutation.target !== textarea) {
                 continue
             }
-            editor.style.cssText = (mutation.target as HTMLTextAreaElement).style.cssText
+            editor.style.cssText = styleToString((mutation.target as HTMLTextAreaElement).style, ["z-index"]) +
+                `z-index: ${graphDialogZIndex - 1};`
         }
     })
+    editor.style.zIndex = "" + (graphDialogZIndex - 1)
     observer.observe(textarea, {
         attributes: true,
         attributeFilter: ["style"]
