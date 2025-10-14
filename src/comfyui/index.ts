@@ -232,7 +232,7 @@ function onCreateTextarea(textarea: HTMLTextAreaElement, node: any) {
         attributes: true,
         attributeFilter: ["style"]
     })
-    editor.style.cssText = textarea.style.cssText
+    editor.style.cssText = styleToString(textarea.style, ["display"])
 
     Object.assign(editor.elements.header!.style, {
         backgroundColor: "#444",
