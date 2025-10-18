@@ -1,7 +1,7 @@
 [project]
 name = "webui-monaco-prompt"
 description = "Make it possible to edit the prompt using the Monaco Editor, an editor implementation used in VSCode.\nNOTE: This extension supports both ComfyUI and A1111 simultaneously."
-version = "0.2.6"
+version = "0.3.0"
 license = { text = "MIT License" }
 
 [project.urls]
