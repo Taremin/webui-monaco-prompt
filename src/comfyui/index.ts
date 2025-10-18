@@ -223,8 +223,7 @@ function onCreateTextarea(textarea: HTMLTextAreaElement, node: any) {
             if (mutation.target !== textarea) {
                 continue
             }
-            editor.style.cssText = styleToString((mutation.target as HTMLTextAreaElement).style, ["z-index"]) +
-                `z-index: ${graphDialogZIndex - 1};`
+            editor.style.cssText = styleToString((mutation.target as HTMLTextAreaElement).style, [])
         }
     })
     editor.style.zIndex = "" + (graphDialogZIndex - 1)
@@ -255,11 +254,8 @@ function onCreateTextarea(textarea: HTMLTextAreaElement, node: any) {
 
     editor.addEventListener('keydown', (ev: KeyboardEvent) => {
         switch (ev.key) {
-            case 'Esc':
-            case 'Escape':
-                ev.stopPropagation()
-                break
             default:
+                ev.stopPropagation()
                 break
         }
     })
@@ -379,6 +375,42 @@ for (const node of app.graph._nodes) {
     }
     customNode.widget.fromNode(app, node)
 }
+
+const observer = new MutationObserver((mutations, observer) => {
+    for (const mutation of mutations) {
+        if (mutation.type !== "childList") {
+            continue
+        }
+        for (const node of mutation.addedNodes) {
+            if (!(node instanceof HTMLTextAreaElement)) {
+                continue
+            }
+            const id = node.dataset.webuiMonacoPromptTextareaId
+            if (!id) {
+                continue
+            }
+            if (!node.parentNode) {
+                continue
+            }
+            const parent = node.parentElement
+            if (!parent) {
+                continue
+            }
+            if (parent.contains(link[id].monaco)) {
+                continue
+            }
+            //parent.insertBefore(link[id].monaco, link[id].textarea)
+            parent.append(link[id].monaco)
+        }
+    }
+})
+observer.observe(
+    document.getElementById("graph-canvas-container")!,
+    {
+        subtree: true,
+        childList: true
+    }
+)
 
 // これから追加されるノードの設定
 const register = (app: any) => {
