@@ -7,19 +7,19 @@ import { MultipleSelectInstance, multipleSelect} from 'multiple-select-vanilla'
 // @ts-ignore
 import { ContextKeyExpr } from 'monaco-editor/esm/vs/platform/contextkey/common/contextkey'
 // @ts-ignore
-import { IQuickInputService } from 'monaco-editor/esm/vs/platform/quickinput/common/quickinput'
+import { IQuickInputService } from 'monaco-editor/esm/vs/platform/quickinput/common/quickInput'
 // @ts-ignore
 import { StandaloneThemeService } from 'monaco-editor/esm/vs/editor/standalone/browser/standaloneThemeService'
 // @ts-ignore
 import { StringBuilder } from 'monaco-editor/esm/vs/editor/common/core/stringBuilder'
 // @ts-ignore
-import { ViewLineOptions } from 'monaco-editor/esm/vs/editor/browser/viewParts/lines/viewLine'
+import { ViewLineOptions } from 'monaco-editor/esm/vs/editor/browser/viewParts/viewLines/viewLineOptions'
 // @ts-ignore
 import { RenderLineInput, renderViewLine } from 'monaco-editor/esm/vs/editor/common/viewLayout/viewLineRenderer'
 // @ts-ignore
 import { EditorFontLigatures } from 'monaco-editor/esm/vs/editor/common/config/editorOptions'
 // @ts-ignore
-import { InlineDecoration } from 'monaco-editor/esm/vs/editor/common/viewModel'
+import { InlineDecoration } from 'monaco-editor/esm/vs/editor/common/viewModel/inlineDecorations'
 // @ts-ignore
 import { ViewportData } from 'monaco-editor/esm/vs/editor/common/viewLayout/viewLinesViewportData'
 // @ts-ignore
