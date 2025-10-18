@@ -152,6 +152,56 @@ async function refreshCSV() {
 await refreshCSV()
 await loadSetting()
 
+function getCSSRules(target: string[]) {
+    const targetSet = new Set(target)
+    const result: {[key: string]: CSSStyleDeclaration[]} = {}
+
+    for (const  styleSheet of  document.styleSheets) {
+        for (const rule of styleSheet.cssRules) {
+            if (rule instanceof CSSStyleRule) {
+                if (targetSet.has(rule.selectorText)) {
+                    if (!Array.isArray(result[rule.selectorText])) {
+                        result[rule.selectorText] = []
+                    }
+                    result[rule.selectorText].push(rule.style)
+                }
+            }
+        }
+    }
+
+    return result
+}
+
+function getZIndex(styles: CSSStyleDeclaration[] = []) {
+    for (const style of styles) {
+        const zIndex = style.getPropertyValue("z-index")
+        if (zIndex) {
+            return ((zIndex as unknown as number) | 0)
+        }
+    }
+
+    return 0
+}
+
+const rules = getCSSRules([".graphdialog"])
+const graphDialogZIndex = getZIndex(rules[".graphdialog"])
+
+function styleToString(s: CSSStyleDeclaration, list: string[], isExclude=true) {
+    const result = []
+    const listset = new Set(list)
+
+    for (let i = 0, il = s.length; i < il; ++i) {
+        const prop = s[i]
+        if (listset.has(prop) === isExclude) {
+           continue
+        }
+        const priority = s.getPropertyPriority(s[i])
+        result.push(`${prop}: ${s.getPropertyValue(prop)}${priority === "" ? "" : " !" + priority};`)
+    }
+
+    return result.join("\n")
+}
+
 function onCreateTextarea(textarea: HTMLTextAreaElement, node: any) {
     if (textarea.readOnly) {
         console.log("[WebuiMonacoPrompt] Skip: TextArea is read-only:", textarea)
@@ -173,14 +223,15 @@ function onCreateTextarea(textarea: HTMLTextAreaElement, node: any) {
             if (mutation.target !== textarea) {
                 continue
             }
-            editor.style.cssText = (mutation.target as HTMLTextAreaElement).style.cssText
+            editor.style.cssText = styleToString((mutation.target as HTMLTextAreaElement).style, [])
         }
     })
+    editor.style.zIndex = "" + (graphDialogZIndex - 1)
     observer.observe(textarea, {
         attributes: true,
         attributeFilter: ["style"]
     })
-    editor.style.cssText = textarea.style.cssText
+    editor.style.cssText = styleToString(textarea.style, ["display"])
 
     Object.assign(editor.elements.header!.style, {
         backgroundColor: "#444",
@@ -203,11 +254,8 @@ function onCreateTextarea(textarea: HTMLTextAreaElement, node: any) {
 
     editor.addEventListener('keydown', (ev: KeyboardEvent) => {
         switch (ev.key) {
-            case 'Esc':
-            case 'Escape':
-                ev.stopPropagation()
-                break
             default:
+                ev.stopPropagation()
                 break
         }
     })
@@ -305,7 +353,13 @@ const CustomNodeFromNodeType = Object.fromEntries(
 )
 
 // 既存ノードの textarea 置き換えと検索ノードの初期化
-for (const node of app.graph._nodes) {
+const nodes = app.graph._nodes
+if (app.graph.subgraphs) {
+    for (const [k, v] of app.graph.subgraphs.entries()) {
+        nodes.push(...v._nodes)
+    }
+}
+for (const node of nodes) {
     // textarea 置き換え
     hookNodeWidgets(node)
 
@@ -327,6 +381,42 @@ for (const node of app.graph._nodes) {
     }
     customNode.widget.fromNode(app, node)
 }
+
+const observer = new MutationObserver((mutations, observer) => {
+    for (const mutation of mutations) {
+        if (mutation.type !== "childList") {
+            continue
+        }
+        for (const node of mutation.addedNodes) {
+            if (!(node instanceof HTMLTextAreaElement)) {
+                continue
+            }
+            const id = node.dataset.webuiMonacoPromptTextareaId
+            if (!id) {
+                continue
+            }
+            if (!node.parentNode) {
+                continue
+            }
+            const parent = node.parentElement
+            if (!parent) {
+                continue
+            }
+            if (parent.contains(link[id].monaco)) {
+                continue
+            }
+            //parent.insertBefore(link[id].monaco, link[id].textarea)
+            parent.append(link[id].monaco)
+        }
+    }
+})
+observer.observe(
+    document.getElementById("graph-canvas-container")!,
+    {
+        subtree: true,
+        childList: true
+    }
+)
 
 // これから追加されるノードの設定
 const register = (app: any) => {

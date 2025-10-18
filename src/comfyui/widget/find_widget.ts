@@ -225,7 +225,7 @@ class FindWidget {
     }
 
     getMatchFlags() {
-        const headEl = this.elements.header as HTMLDivElement
+        const headEl = this.elements.inputContainer as HTMLDivElement
 
         const matchCase = headEl.querySelector<HTMLElement>(".codicon-case-sensitive")?.dataset.checked === "on"
         const matchWordOnly = headEl.querySelector<HTMLElement>(".codicon-whole-word")?.dataset.checked === "on"
