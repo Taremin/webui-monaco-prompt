@@ -353,7 +353,13 @@ const CustomNodeFromNodeType = Object.fromEntries(
 )
 
 // 既存ノードの textarea 置き換えと検索ノードの初期化
-for (const node of app.graph._nodes) {
+const nodes = app.graph._nodes
+if (app.graph.subgraphs) {
+    for (const [k, v] of app.graph.subgraphs.entries()) {
+        nodes.push(...v._nodes)
+    }
+}
+for (const node of nodes) {
     // textarea 置き換え
     hookNodeWidgets(node)
 
