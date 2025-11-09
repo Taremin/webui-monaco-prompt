@@ -76,12 +76,18 @@ for (const {keybinding, model} of models) {
     MonacoPrompt.addCustomSuggest(model, keybinding, async () => {
         const items: Partial<WebuiMonacoPrompt.CompletionItem>[] = []
         const models = await api.getModels(model) as ComfyAPIModels
+        const modelNames = new Set<string>()
+
         models.forEach(model => {
-            const label = typeof model === "string" ? model : model.name
+            const name = typeof model === "string" ? model : model.name
+            modelNames.add(name)
+        })
+
+        modelNames.forEach(modelName => {
             items.push({
-                label: label,
+                label: modelName,
                 kind: WebuiMonacoPrompt.CompletionItemKind.File,
-                insertText: label,
+                insertText: modelName,
             })
         })
         return items
