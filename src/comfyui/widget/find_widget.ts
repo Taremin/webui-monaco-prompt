@@ -6,9 +6,20 @@ import * as Monaco from 'monaco-editor/esm/vs/editor/editor.api' // for typing
 
 import {default as style} from "./index.css"
 
-const $el = ui.$el
+const $el = (...args: any[]) => ui.$el(...args)
 const TooltipSurroundingLines = 2
 const TooltipDistance = 20
+
+let tooltip: HTMLElement
+let tooltipBody: HTMLDivElement
+let tooltipStyle: HTMLStyleElement
+
+function initTooltip() {
+    if (tooltip) return
+    tooltip = createFindWidgetTooltip()
+    tooltipBody = tooltip.querySelector("div") as HTMLDivElement
+    tooltipStyle = tooltip.querySelector("style") as HTMLStyleElement
+}
 
 interface FindWidgetElements {
     header: HTMLDivElement
@@ -339,6 +350,7 @@ class FindWidget {
     }
 
     clearElements(element: HTMLElement) {
+        initTooltip()
         while (element.hasChildNodes()) {
             element.removeChild(element.firstChild!)
         }
@@ -369,11 +381,9 @@ const createFindWidgetTooltip = () => {
 
     return tooltip
 }
-const tooltip = createFindWidgetTooltip()
-const tooltipBody = tooltip.querySelector("div") as HTMLDivElement
-const tooltipStyle = tooltip.querySelector("style") as HTMLStyleElement
 const setTooltip = (targetElement: HTMLElement) => {
     targetElement.addEventListener("mouseenter", (ev) => {
+        initTooltip()
         while (tooltipBody.firstChild) {
             tooltipBody.removeChild(tooltipBody.firstChild)
         }

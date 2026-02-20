@@ -138,8 +138,8 @@ const PromptEditorMode = {
     VIM: 'VIM',
 }
 type PromptEditorMode = typeof PromptEditorMode[keyof typeof PromptEditorMode]
-
 class PromptEditor extends HTMLElement {
+    textarea: HTMLTextAreaElement
     elements: Partial<PromptEditorElements> = {}
     mode: PromptEditorMode = PromptEditorMode.NORMAL
     monaco: CodeEditor
@@ -172,7 +172,7 @@ class PromptEditor extends HTMLElement {
     
     constructor(textarea: HTMLTextAreaElement, options: Partial<PromptEditorOptions>={}) {
         super()
-
+        this.textarea = textarea
         this._id = id++
         this.textareaDescriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(textarea), 'value')!
 
@@ -307,7 +307,16 @@ class PromptEditor extends HTMLElement {
         return settings.instances[currentFocusInstance]
     }
 
+    restore() {
+        if (this.textarea) {
+            this.textarea.style.display = this.textareaDisplay;
+            delete this.textarea.dataset.webuiMonacoPromptTextareaId;
+            Object.defineProperty(this.textarea, 'value', this.textareaDescriptor)
+        }
+    }
+
     dispose() {
+        this.restore()
         if (this.monaco) {
             const model = this.monaco.getModel()
             if (model) {
@@ -893,6 +902,8 @@ class PromptEditor extends HTMLElement {
                 return defaultDescriptor.set!.call(this, val)
             },
             get: defaultDescriptor.get,
+            configurable: true,
+            enumerable: true,
         })
     }
 

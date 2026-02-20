@@ -155,8 +155,6 @@ async function refreshCSV() {
     await loadCSV(csvfiles)
 }
 
-await refreshCSV()
-await loadSetting()
 
 function getCSSRules(target: string[]) {
     const targetSet = new Set(target)
@@ -208,13 +206,23 @@ function styleToString(s: CSSStyleDeclaration, list: string[], isExclude=true) {
     return result.join("\n")
 }
 
-function onCreateTextarea(textarea: HTMLTextAreaElement, node: any) {
+function onCreateTextarea(textarea: HTMLTextAreaElement, node: any, force = false) {
+    if (!force) {
+        const isReplace = app.ui.settings.getSettingValue("WebuiMonacoPrompt.ReplaceTextarea")
+        if (!isReplace) {
+            return
+        }
+    }
+
+    if (textarea.dataset.webuiMonacoPromptTextareaId) {
+        return
+    }
     if (textarea.readOnly) {
         console.log("[WebuiMonacoPrompt] Skip: TextArea is read-only:", textarea)
         return
     }
 
-    const editor = new MonacoPrompt.PromptEditor(textarea, {
+    const editor = new WebuiMonacoPrompt.PromptEditor(textarea, {
         autoLayout: true,
         handleTextAreaValue: true,
     })
@@ -316,7 +324,10 @@ function hookNodeWidgets(node: any) {
             continue
         }
         if (widget.element instanceof HTMLTextAreaElement) {
-            onCreateTextarea(widget.element, node)
+            const isReplace = app.ui.settings.getSettingValue("WebuiMonacoPrompt.ReplaceTextarea")
+            if (isReplace) {
+                onCreateTextarea(widget.element, node, true)
+            }
         }
     }
     const onRemovedOriginal = node.onRemoved
@@ -358,77 +369,95 @@ const CustomNodeFromNodeType = Object.fromEntries(
     })
 )
 
-// 既存ノードの textarea 置き換えと検索ノードの初期化
-const nodes = app.graph._nodes
-if (app.graph.subgraphs) {
-    for (const [k, v] of app.graph.subgraphs.entries()) {
-        nodes.push(...v._nodes)
-    }
-}
-for (const node of nodes) {
-    // textarea 置き換え
-    hookNodeWidgets(node)
-
-    // 検索ノード初期化
-    /*
-    const nodeTypes: {[key: string]: CustomNodeWidget} = {}
-    const keys = Object.keys(CustomNode) as (keyof typeof CustomNode)[]
-    keys.forEach((type: keyof typeof CustomNode) => {
-        nodeTypes[CustomNode[type].nodeType] = CustomNode[type]
-    })
-    if (nodeTypes[node.type] && nodeTypes[node.type].widget) {
-        console.log("widget:", node.type, node)
-        nodeTypes[node.type].widget.fromNode(app, node)
-    }
-    */
-    const customNode = CustomNodeFromNodeType[node.comfyClass]
-    if (!customNode) {
-        continue
-    }
-    customNode.widget.fromNode(app, node)
-}
-
-const observer = new MutationObserver((mutations, observer) => {
-    for (const mutation of mutations) {
-        if (mutation.type !== "childList") {
-            continue
-        }
-        for (const node of mutation.addedNodes) {
-            if (!(node instanceof HTMLTextAreaElement)) {
-                continue
-            }
-            const id = node.dataset.webuiMonacoPromptTextareaId
-            if (!id) {
-                continue
-            }
-            if (!node.parentNode) {
-                continue
-            }
-            const parent = node.parentElement
-            if (!parent) {
-                continue
-            }
-            if (parent.contains(link[id].monaco)) {
-                continue
-            }
-            //parent.insertBefore(link[id].monaco, link[id].textarea)
-            parent.append(link[id].monaco)
-        }
-    }
-})
-observer.observe(
-    document.getElementById("graph-canvas-container")!,
-    {
-        subtree: true,
-        childList: true
-    }
-)
 
 // これから追加されるノードの設定
 const register = (app: any) => {
-    //const classNames = Object.values(CustomNode).map(node => node.nodeType)
     app.registerExtension({
         name: ["Taremin", "WebuiMonacoPrompt"].join('.'),
+        async setup() {
+            await refreshCSV()
+            await loadSetting()
+
+            // 既存ノードの textarea 置き換えと検索ノードの初期化
+            const nodes = app.graph._nodes
+            if (app.graph.subgraphs) {
+                for (const [k, v] of app.graph.subgraphs.entries()) {
+                    nodes.push(...v._nodes)
+                }
+            }
+            for (const node of nodes) {
+                // textarea 置き換え
+                hookNodeWidgets(node)
+
+                // 検索ノード初期化
+                const customNode = CustomNodeFromNodeType[node.comfyClass]
+                if (customNode) {
+                    customNode.widget.fromNode(app, node)
+                }
+            }
+
+            const observer = new MutationObserver((mutations, observer) => {
+                for (const mutation of mutations) {
+                    if (mutation.type !== "childList") {
+                        continue
+                    }
+                    for (const node of mutation.addedNodes) {
+                        if (!(node instanceof HTMLTextAreaElement)) {
+                            continue
+                        }
+                        const id = node.dataset.webuiMonacoPromptTextareaId
+                        if (!id) {
+                            continue
+                        }
+                        if (!node.parentNode) {
+                            continue
+                        }
+                        const parent = node.parentElement
+                        if (!parent) {
+                            continue
+                        }
+                        if (parent.contains(link[id].monaco)) {
+                            continue
+                        }
+                        parent.append(link[id].monaco)
+                    }
+                }
+            })
+            const canvasContainer = document.getElementById("graph-canvas-container")
+            if (canvasContainer) {
+                observer.observe(canvasContainer, {
+                    subtree: true,
+                    childList: true
+                })
+            }
+
+            app.ui.settings.addSetting({
+                id: "WebuiMonacoPrompt.ReplaceTextarea",
+                name: "Replace Textarea",
+                type: "boolean",
+                default: true,
+                onChange: (value: boolean) => {
+                    const nodes = app.graph._nodes
+                    if (app.graph.subgraphs) {
+                        for (const [k, v] of app.graph.subgraphs.entries()) {
+                            nodes.push(...v._nodes)
+                        }
+                    }
+                    for (const node of nodes) {
+                        if (!node.widgets) continue;
+                        for (const widget of node.widgets) {
+                            if (widget.element instanceof HTMLTextAreaElement) {
+                                if (value) {
+                                    onCreateTextarea(widget.element, node, true);
+                                } else {
+                                    onRemoveTextarea(widget.element);
+                                }
+                            }
+                        }
+                    }
+                },
+            });
+        },
         nodeCreated(node:any, app: any) {
             // 既存ノードの widget 置き換え(textarea)
             hookNodeWidgets(node)
@@ -460,4 +489,10 @@ const register = (app: any) => {
         })
     }
 }
-register(app)
+
+// 登録実行
+if (app) {
+    register(app)
+} else {
+    console.error("ComfyUI app instance not found")
+}
