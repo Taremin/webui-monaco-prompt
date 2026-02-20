@@ -1,0 +1,5 @@
+{
+    "comfyui_path": "../../..",
+    "python_executable": "../../../../python_embeded/python.exe",
+    "test_port": 9876
+}

@@ -2,3 +2,11 @@ node_modules/
 .gitignore
 settings/*
 *.pyc
+# Agent rules
+.agent/
+!.agent/rules/
+tests/test_settings.json
+tests/*.html
+tests/*.png
+tests/*.log
+tmp/
