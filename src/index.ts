@@ -86,6 +86,7 @@ interface PromptEditorOptions {
     autoLayout: boolean;
     handleTextAreaValue: boolean;
     overlayZIndex: number;
+    mode?: PromptEditorMode;
 }
 
 interface PromptEditorSettings {
@@ -236,7 +237,7 @@ class PromptEditor extends HTMLElement {
         this.showHeader = true
         this.theme = this.getThemeId()
 
-        this.changeMode(PromptEditorMode.VIM)
+        this.changeMode(options.mode || PromptEditorMode.VIM)
 
         editor.onDidFocusEditorWidget(() => {
             currentFocusInstance = this.getInstanceId()
@@ -878,6 +879,14 @@ class PromptEditor extends HTMLElement {
 
     getInstanceId() {
         return this._id
+    }
+
+    focus() {
+        this.monaco.focus()
+    }
+
+    getValue() {
+        return this.monaco.getValue()
     }
 
     setValue(value: string) {
