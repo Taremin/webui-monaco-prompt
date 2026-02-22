@@ -1,7 +1,7 @@
 import * as utils from "./utils"
 import * as WebuiMonacoPrompt from "../index" // for typing
 import { link } from "./link"
-import { FindWidget, ReplaceWidget } from "./widget"
+import { FindWidget, ReplaceWidget, MultiTextWidget } from "./widget"
 import { app, api } from "./api"
 import { loadSetting, saveSettings, updateInstanceSettings } from "./settings"
 import { comfyPrompt, comfyDynamicPrompt } from "./languages"
@@ -226,10 +226,6 @@ function onCreateTextarea(textarea: HTMLTextAreaElement, node: any, force = fals
         autoLayout: true,
         handleTextAreaValue: true,
     })
-    for(const {keybinding, model} of models) {
-        editor.addCustomSuggest(model)
-    }
-    editor.addCustomSuggest("snippet")
 
     // style 同期
     const observer = new MutationObserver((mutations, observer) => {
@@ -266,20 +262,7 @@ function onCreateTextarea(textarea: HTMLTextAreaElement, node: any, force = fals
         node: node,
     }
 
-    editor.addEventListener('keydown', (ev: KeyboardEvent) => {
-        switch (ev.key) {
-            default:
-                ev.stopPropagation()
-                break
-        }
-    })
-    const mouseHandler = (ev: MouseEvent) => {
-        const id = (ev.target as typeof editor).dataset.webuiMonacoPromptTextareaId!
-        const node = link[id].node
-        utils.setActiveNode(app, node)
-    }
-    editor.addEventListener("contextmenu", mouseHandler, {capture: true})
-    editor.addEventListener("click", mouseHandler, {capture: true})
+    utils.applyCommonEditorSetup(app, editor, node)
 
     if (textarea.parentElement) {
         textarea.parentElement.append(editor)
@@ -355,11 +338,15 @@ interface CustomNodeWidget {
 const CustomNode: {[key: string]: CustomNodeWidget} = {
     find: {
         nodeType: "WebuiMonacoPromptFind",
-        widget: FindWidget,
+        widget: FindWidget as any,
     },
     replace: {
         nodeType: "WebuiMonacoPromptReplace",
-        widget: ReplaceWidget,
+        widget: ReplaceWidget as any,
+    },
+    multitext: {
+        nodeType: "WebuiMonacoPromptMultiText",
+        widget: MultiTextWidget as any,
     },
 }
 

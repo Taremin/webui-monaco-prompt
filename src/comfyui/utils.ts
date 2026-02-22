@@ -71,46 +71,69 @@ function find(searchString: string, isRegex: boolean, matchCase: boolean, matchW
 }
 
 function findInstance(instance: PromptEditor, searchString: string, isRegex: boolean, matchCase: boolean, matchWordOnly: boolean, decoration: boolean = true) {
+    const allMatches: NodeFindMatch[] = []
     const editor = instance.monaco
-    const model = editor.getModel()
-    if (!model) {
-        return []
-    }
-
     const editorConfig = editor.getConfiguration()
     const wordSeparators = editorConfig.wordSeparators as unknown as string
-    const matches = model.findMatches(
-        searchString,
-        false,
-        isRegex,
-        matchCase,
-        matchWordOnly ? wordSeparators : null,
-        true,
-    )
 
-    if (instance.findDecorations) {
-        instance.findDecorations.clear()
-    }
-
-    if (decoration) {
-        instance.findDecorations = editor.createDecorationsCollection(
-            matches.map((findMatch) => {
-                return {
-                    range: findMatch.range,
-                    options: {
-                        inlineClassName: getThemeClassName()
-                    },
-                }
-            })
+    // メインモデルの検索
+    const mainModel = editor.getModel()
+    if (mainModel) {
+        const matches = mainModel.findMatches(
+            searchString,
+            false,
+            isRegex,
+            matchCase,
+            matchWordOnly ? wordSeparators : null,
+            true,
         )
+        Array.prototype.push.apply(allMatches, matches.map(match => ({
+            match,
+            instanceId: instance.getInstanceId(),
+        })))
+
+        // デコレーション（メインモデルのみ）
+        if (decoration) {
+            if (instance.findDecorations) {
+                instance.findDecorations.clear()
+            }
+            instance.findDecorations = editor.createDecorationsCollection(
+                matches.map((findMatch) => {
+                    return {
+                        range: findMatch.range,
+                        options: {
+                            inlineClassName: getThemeClassName()
+                        },
+                    }
+                })
+            )
+        }
     }
 
-    return matches.map((match) => {
-        return {
-            match: match,
-            instanceId: instance.getInstanceId(),
-        } as NodeFindMatch
-    })
+    // 追加モデル (ExtraModels) の検索
+    if (instance.extraModels) {
+        for (const extra of instance.extraModels) {
+            // メインモデルと同じモデルはスキップ（既に検索済み）
+            if (extra.model === mainModel) continue
+
+            const matches = extra.model.findMatches(
+                searchString,
+                false,
+                isRegex,
+                matchCase,
+                matchWordOnly ? wordSeparators : null,
+                true,
+            )
+            Array.prototype.push.apply(allMatches, matches.map(match => ({
+                match,
+                instanceId: instance.getInstanceId(),
+                filename: extra.filename,
+                extraModel: extra,
+            })))
+        }
+    }
+
+    return allMatches
 }
 
 function replace(searchString: string, replaceString: string, isRegex: boolean, matchCase: boolean, matchWordOnly: boolean) {
@@ -150,6 +173,31 @@ const setActiveNode = (app: any, node: any) => {
     app.canvas.selectNode(node, false)
 }
 
+// エディタ（PromptEditor）に共通のセットアップを施す（イベントハイドと補完など）
+const applyCommonEditorSetup = (app: any, editor: PromptEditor, node: any) => {
+    const defaultModels = ["checkpoints", "loras", "embeddings", "hypernetworks", "vae"]
+    for(const model of defaultModels) {
+        editor.addCustomSuggest(model)
+    }
+    editor.addCustomSuggest("snippet")
+
+    // ComfyUI（LiteGraph）のキーボードショートカット（Hキーなど）と衝突しないようイベント伝播を止める
+    editor.addEventListener('keydown', (ev: KeyboardEvent) => {
+        switch (ev.key) {
+            default:
+                ev.stopPropagation()
+                break
+        }
+    })
+
+    // クリック（フォーカス）時に該当のノードをアクティブにする
+    const mouseHandler = () => {
+        setActiveNode(app, node)
+    }
+    editor.addEventListener("contextmenu", mouseHandler, {capture: true})
+    editor.addEventListener("click", mouseHandler, {capture: true})
+}
+
 export {
     loadCodicon,
     getThemeClassName,
@@ -157,4 +205,5 @@ export {
     find,
     replace,
     setActiveNode,
+    applyCommonEditorSetup,
 }

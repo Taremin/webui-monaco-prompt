@@ -31,7 +31,7 @@ module.exports = {
 				use: [
 					'style-loader',
 					{
-						loader:'css-loader',
+						loader: 'css-loader',
 						options: {
 							modules: {
 								localIdentName: '[name]__[local]___[hash:base64:5]',
@@ -54,8 +54,11 @@ module.exports = {
 		},
 	},
 	plugins: [
-        new MonacoWebpackPlugin({
+		new MonacoWebpackPlugin({
 			languages: [],
-        })
-	]
+		})
+	],
+	performance: {
+		hints: false
+	}
 };

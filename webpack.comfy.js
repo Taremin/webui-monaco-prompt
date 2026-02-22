@@ -5,27 +5,38 @@ const CopyWebpackPlugin = require('copy-webpack-plugin')
 
 const projectRootDir = path.dirname(__filename)
 
-module.exports = Object.assign(common, {
+module.exports = Object.assign({}, common, {
   mode: 'production',
-	entry: {
-		main: './src/comfyui/index.ts',
-	},
-	resolve: {
-		extensions: ['.ts', '.js', 'tsx']
-	},
-	output: {
-		filename: '[name].bundle.js',
-		library: 'MonacoPrompt',
-		libraryTarget: 'umd',
-		path: path.resolve(__dirname, 'comfy'),
-    publicPath: "",
+  entry: {
+    main: './src/comfyui/index.ts',
   },
-	plugins: [
+  resolve: {
+    extensions: ['.ts', '.js', 'tsx']
+  },
+  experiments: {
+    outputModule: true,
+  },
+  output: {
+    filename: '[name].bundle.js',
+    path: path.resolve(__dirname, 'comfy'),
+    publicPath: "",
+    library: {
+      type: "module",
+    },
+    chunkFormat: "module",
+  },
+  externalsType: 'module',
+  externals: {
+    "../../scripts/app.js": "../../scripts/app.js",
+    "../../scripts/api.js": "../../scripts/api.js",
+    "../../scripts/ui.js": "../../scripts/ui.js",
+  },
+  plugins: [
     new MonacoWebpackPlugin({
       filename: '[name].worker.mjs',
       languages: [],
     }),
-	]
+  ]
 })
 
 const staticPathFormat = path.join(projectRootDir, "comfy", "[name][ext]")
@@ -33,7 +44,7 @@ module.exports.plugins.push(
   new CopyWebpackPlugin({
     patterns: [
       {
-        from: 'csv/*.csv', 
+        from: 'csv/*.csv',
         to: staticPathFormat
       },
       {
@@ -43,9 +54,3 @@ module.exports.plugins.push(
     ]
   })
 )
- /*
- module.exports.module.rules.push({
-  test: /api\.js$/,
-  type: 'asset/resource',
- })
- */
