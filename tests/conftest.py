@@ -32,7 +32,7 @@ def wait_for_server(url, timeout=300.0):
         except Exception:
             if time.time() - start_time > timeout:
                 return False
-            time.sleep(2)
+            time.sleep(0.5)
 
 @pytest.fixture(scope="session")
 def comfyui_server(test_settings):
@@ -42,8 +42,15 @@ def comfyui_server(test_settings):
     python_exe = Path(test_settings["python_executable"]).resolve()
     port = test_settings["test_port"]
 
-    # ComfyUIの起動コマンド
-    cmd = [str(python_exe), "main.py", "--port", str(port), "--listen", "127.0.0.1"]
+    # ComfyUIの起動コマンド (E2Eテスト用に軽量化)
+    cmd = [
+        str(python_exe), "main.py", 
+        "--port", str(port), 
+        "--listen", "127.0.0.1",
+        "--cpu",
+        "--disable-smart-memory",
+        "--disable-xformers"
+    ]
     
     # 環境変数の準備
     env = os.environ.copy()
@@ -63,35 +70,100 @@ def comfyui_server(test_settings):
         universal_newlines=True
     )
 
-    # サーバーの出力をリアルタイムで監視しつつ、サーバーの応答を待機
+    # サーバーの出力を非ブロッキングで読み取りつつ、サーバーの応答を待機
     start_time = time.time()
     base_url = f"http://127.0.0.1:{port}"
     
-    def check_output():
-        # 非ブロッキングで読み取るか、別スレッドで回すべきだが、
-        # ここではポーリングとreadlineを組み合わせて簡易的に実装
-        while True:
-            line = process.stdout.readline()
-            if line:
-                print(f"ComfyUI: {line.strip()}")
-            
-            if wait_for_server(base_url, timeout=0.1):
-                return True
-            
-            if time.time() - start_time > 300:
-                break
-        return False
+    print(f"\nWaiting for ComfyUI server to respond at {base_url}...")
+    
+    # stdoutを非ブロッキングで読み取るための準備 (Windows対応)
+    import threading
+    import queue
+    
+    output_queue = queue.Queue()
+    def enqueue_output(out, queue):
+        for line in iter(out.readline, ''):
+            queue.put(line)
+        out.close()
+    
+    t = threading.Thread(target=enqueue_output, args=(process.stdout, output_queue))
+    t.daemon = True
+    t.start()
 
-    if not check_output():
+    # サーバーの応答をポーリング
+    is_ready = False
+    while True:
+        # ログの出力
+        try:
+            while True:
+                line = output_queue.get_nowait()
+                print(f"ComfyUI: {line.strip()}")
+        except queue.Empty:
+            pass
+
+        # サーバーが立ち上がったか確認
+        if wait_for_server(base_url, timeout=0.1):
+            elapsed = time.time() - start_time
+            print(f"\nComfyUI server is READY! (Startup time: {elapsed:.2f} seconds)")
+            is_ready = True
+            break
+        
+        if process.poll() is not None:
+            print("ComfyUI process exited prematurely.")
+            break
+            
+        if time.time() - start_time > 120:
+            print("Timeout waiting for ComfyUI server.")
+            break
+        
+        time.sleep(0.5)
+
+    if not is_ready:
         process.terminate()
         pytest.fail(f"ComfyUI server failed to respond at {base_url} within timeout.")
 
     yield base_url
 
-    # サーバーの停止
     print("\nShutting down ComfyUI server...")
     process.terminate()
     try:
         process.wait(timeout=10)
     except subprocess.TimeoutExpired:
         process.kill()
+
+@pytest.fixture
+def wait_for_comfyui():
+    """ComfyUIのUIがロードされるまで待機する共通ヘルパーフィクスチャ"""
+    from playwright.sync_api import Page
+    
+    def _wait(page: Page):
+        print("Waiting for basic ComfyUI elements...")
+        try:
+            page.wait_for_selector(".comfy-menu, .comfyui-menu, .side-bar-button, #comfy-canvas-container, body", state="attached", timeout=60000)
+        except Exception as e:
+            print(f"Wait for selector failed: {e}")
+            page.screenshot(path="tests/debug_selector_fail.png")
+        
+        # app.graph が準備できるまで待つ (複数のパスを試行)
+        print("Waiting for window.app.graph...")
+        try:
+            page.wait_for_function("""
+                () => {
+                    const getApp = () => window.app || (window.comfyAPI && window.comfyAPI.app) || window.ComfyApp || (window.parent && window.parent.app);
+                    const app = getApp();
+                    return !!(app && app.graph);
+                }
+            """, timeout=180000)
+        except Exception as e:
+            print(f"Wait for function failed: {e}")
+            page.screenshot(path="tests/debug_function_fail.png")
+            print(f"Current URL: {page.url}")
+            raise e
+        
+        # ローディング画面が消えるのを待つ
+        try:
+            page.wait_for_selector("#comfy-file-input-overlay", state="hidden", timeout=30000)
+        except:
+            pass
+            
+    return _wait

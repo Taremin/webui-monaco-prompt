@@ -264,12 +264,15 @@ class FindWidget {
             const app = this._app
             const webuiMonacoPromptId = nodeFindMatch.instanceId
             const node = link[webuiMonacoPromptId].node
+            const filename = nodeFindMatch.filename || ""
 
             const trEl = document.createElement("tr")
             trEl.dataset.nodeId = node.id
             trEl.dataset.instanceId = "" + webuiMonacoPromptId
             trEl.dataset.startLine = "" + nodeFindMatch.match.range.startLineNumber
             trEl.dataset.startCol = "" + nodeFindMatch.match.range.startColumn
+
+            const displayTitle = filename ? `${node.title} (${filename})` : node.title
 
             for (const {cssClass, value, elementStyle} of [
                 {
@@ -279,7 +282,7 @@ class FindWidget {
                 },
                 {
                     cssClass: style["webui-monaco-prompt-td-expand"],
-                    value: node.title
+                    value: displayTitle
                 },
                 {
                     cssClass: style["webui-monaco-prompt-td"],
@@ -305,6 +308,11 @@ class FindWidget {
 
                 if (!instance) {
                     return
+                }
+
+                // 非活性タブの場合は切り替える
+                if (nodeFindMatch.extraModel) {
+                    nodeFindMatch.extraModel.onActivate()
                 }
 
                 const monaco = instance.monaco.monaco

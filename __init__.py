@@ -68,7 +68,37 @@ class WebuiMonacoPromptReplace(WebuiMonacoPromptFind):
     pass
 
 
+class WebuiMonacoPromptMultiText:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "text": ("STRING", {"multiline": True, "default": '{}'}),
+            }
+        }
+
+    RETURN_TYPES = ("STRING",)
+    OUTPUT_IS_LIST = (True,)
+    FUNCTION = "process"
+    CATEGORY = "WebuiMonacoPrompt"
+
+    def process(self, text):
+        import json
+        try:
+            data = json.loads(text)
+            if isinstance(data, dict) and "files" in data:
+                 return ([file_data["content"] for file_data in data["files"].values()],)
+            elif isinstance(data, dict):
+                 return (list(data.values()),)
+            elif isinstance(data, list):
+                 return (data,)
+            return ([str(data)],)
+        except Exception:
+            return ([text],)
+
+
 NODE_CLASS_MAPPINGS = {
     "WebuiMonacoPromptFind": WebuiMonacoPromptFind,
     "WebuiMonacoPromptReplace": WebuiMonacoPromptReplace,
+    "WebuiMonacoPromptMultiText": WebuiMonacoPromptMultiText,
 }
