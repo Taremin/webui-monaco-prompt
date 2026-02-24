@@ -44,33 +44,45 @@ def test_multitext_full_search(page: Page, comfyui_server, wait_for_comfyui):
         node.multitext_widget.editorInstance.monaco.setValue("content in default.txt");
     }""")
 
-    # 2つ目のファイルを追加 (createNewFile で text1.txt が自動生成される)
+    # 2つ目のファイルを追加
     page.evaluate("""() => {
         const app = window.app || window.ComfyApp;
         const node = app.graph._nodes.find(n => n.multitext_widget);
-        node.multitext_widget.createNewFile();
+        node.multitext_widget.addItemWithName('file', 'test1.txt');
     }""")
     time.sleep(0.5)
 
     # 新しいファイル名を取得して、テキストを入力
-    second_file = page.evaluate("""() => {
-        const app = window.app || window.ComfyApp;
-        const node = app.graph._nodes.find(n => n.multitext_widget);
-        return node.multitext_widget.data.activeFile;
-    }""")
+    second_file = "test1.txt"
+    print(f"Second file created: {second_file}")
     print(f"Second file created: {second_file}")
 
-    page.evaluate("""() => {
+    page.evaluate(f"""() => {{
         const app = window.app || window.ComfyApp;
         const node = app.graph._nodes.find(n => n.multitext_widget);
+        const findFile = (items, name) => {{
+            for (const item of items) {{
+                if (item.name === name) return item;
+                if (item.children) {{ const res = findFile(item.children, name); if (res) return res; }}
+            }}
+        }};
+        const f = findFile(node.multitext_widget.data.tree, '{second_file}');
+        node.multitext_widget.openFile(f.id);
         node.multitext_widget.editorInstance.monaco.setValue("secret search word in hidden file");
-    }""")
+    }}""")
 
     # 3. 再び default.txt をアクティブにする (second_file は非表示になる)
     page.evaluate("""() => {
         const app = window.app || window.ComfyApp;
         const node = app.graph._nodes.find(n => n.multitext_widget);
-        node.multitext_widget.setActiveFile("default.txt");
+        const findFile = (items, name) => {
+            for (const item of items) {
+                if (item.name === name) return item;
+                if (item.children) { const res = findFile(item.children, name); if (res) return res; }
+            }
+        };
+        const f = findFile(node.multitext_widget.data.tree, 'default.txt');
+        if (f) node.multitext_widget.openFile(f.id);
     }""")
 
     print("Step 3: Execute search for hidden content")
@@ -132,7 +144,15 @@ def test_multitext_full_search(page: Page, comfyui_server, wait_for_comfyui):
     active_file = page.evaluate("""() => {
         const app = window.app || window.ComfyApp;
         const node = app.graph._nodes.find(n => n.multitext_widget);
-        return node.multitext_widget.data.activeFile;
+        const findFile = (items, id) => {
+            for (const item of items) {
+                if (item.id === id) return item;
+                if (item.children) { const res = findFile(item.children, id); if (res) return res; }
+            }
+        };
+        const activeId = node.multitext_widget.data.activeFileId;
+        const file = findFile(node.multitext_widget.data.tree, activeId);
+        return file ? file.name : null;
     }""")
     assert active_file == second_file, f"Active file did not switch to '{second_file}', stayed at '{active_file}'"
 

@@ -294,13 +294,6 @@ def test_multitext_reload(page, comfyui_server, wait_for_comfyui):
         const node = app.graph._nodes.find(n => n.type && n.type.includes('MultiText'));
         if (node && node.multitext_widget && node.multitext_widget.editorInstance) {{
             node.multitext_widget.editorInstance.monaco.setValue("{test_text}");
-            // 同期を促す
-            node.multitext_widget.syncData();
-            // ComfyUIに確実に変更を通知するため、標準ウィジェットのコールバックを叩く
-            const dataWidget = node.widgets.find(w => w.name === "text");
-            if (dataWidget && typeof dataWidget.callback === 'function') {{
-                dataWidget.callback(dataWidget.value, app.canvas, node, node.pos);
-            }}
         }}
     }}""")
     

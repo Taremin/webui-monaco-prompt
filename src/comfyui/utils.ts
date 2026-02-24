@@ -24,6 +24,15 @@ const loadCodicon = (baseurl: string) => {
     document.body.appendChild(codiconStyle)
 }
 
+// 静的な CSS ファイルをロード
+const loadStyle = (baseurl: string, filename: string) => {
+    const link = document.createElement("link")
+    link.rel = "stylesheet"
+    link.type = "text/css"
+    link.href = [baseurl, filename].join("/")
+    document.head.appendChild(link)
+}
+
 // Monaco のテーマに合わせて検索マッチ部分の style 要素を生成・更新
 const themeStyleClassName = "webui-monaco-prompt-findmatch"
 const getThemeClassName = () => themeStyleClassName
@@ -198,12 +207,21 @@ const applyCommonEditorSetup = (app: any, editor: PromptEditor, node: any) => {
     editor.addEventListener("click", mouseHandler, {capture: true})
 }
 
+const guid = () => {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
+
 export {
     loadCodicon,
+    loadStyle,
     getThemeClassName,
     updateThemeStyle,
     find,
     replace,
     setActiveNode,
     applyCommonEditorSetup,
+    guid,
 }

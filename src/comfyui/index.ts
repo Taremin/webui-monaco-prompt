@@ -23,6 +23,7 @@ __webpack_public_path__ = dir + "/"
 
 // codicon
 utils.loadCodicon(dir)
+utils.loadStyle(dir, "multitext.css")
 
 // import は __webpack_public_path__ を使う場合は処理順の関係で使えない
 const MonacoPrompt = require("../index") as typeof WebuiMonacoPrompt
@@ -306,6 +307,10 @@ function hookNodeWidgets(node: any) {
         if (!widget.element) {
             continue
         }
+        // Skip hooking the internal data widget for MultiText node
+        if (node.comfyClass === "WebuiMonacoPromptMultiText" && widget.name === "text") {
+            continue
+        }
         if (widget.element instanceof HTMLTextAreaElement) {
             const isReplace = app.ui.settings.getSettingValue("WebuiMonacoPrompt.ReplaceTextarea")
             if (isReplace) {
@@ -321,6 +326,9 @@ function hookNodeWidgets(node: any) {
 
         for (const widget of node.widgets) {
             if (!widget.element) {
+                continue
+            }
+            if (node.comfyClass === "WebuiMonacoPromptMultiText" && widget.name === "text") {
                 continue
             }
             if (widget.element instanceof HTMLTextAreaElement) {
@@ -433,6 +441,9 @@ const register = (app: any) => {
                     for (const node of nodes) {
                         if (!node.widgets) continue;
                         for (const widget of node.widgets) {
+                            if (node.comfyClass === "WebuiMonacoPromptMultiText" && widget.name === "text") {
+                                continue;
+                            }
                             if (widget.element instanceof HTMLTextAreaElement) {
                                 if (value) {
                                     onCreateTextarea(widget.element, node, true);

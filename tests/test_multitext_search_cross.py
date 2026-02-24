@@ -43,41 +43,49 @@ def test_multitext_cross_file_search(page: Page, comfyui_server, wait_for_comfyu
         node.multitext_widget.editorInstance.monaco.setValue("COMMON_WORD in first file");
     }""")
 
-    # 2つ目のファイルを作成 (text1.txt が自動生成)
+    # 2つ目のファイルを作成
     page.evaluate("""() => {
         const app = window.app || window.ComfyApp;
         const node = app.graph._nodes.find(n => n.multitext_widget);
-        node.multitext_widget.createNewFile();
+        node.multitext_widget.addItemWithName('file', 'test1.txt');
     }""")
     time.sleep(0.5)
-    file2_name = page.evaluate("""() => {
+    file2_name = "test1.txt"
+    page.evaluate(f"""() => {{
         const app = window.app || window.ComfyApp;
         const node = app.graph._nodes.find(n => n.multitext_widget);
-        return node.multitext_widget.data.activeFile;
-    }""")
-    page.evaluate("""() => {
-        const app = window.app || window.ComfyApp;
-        const node = app.graph._nodes.find(n => n.multitext_widget);
+        const findFile = (items, name) => {{
+            for (const item of items) {{
+                if (item.name === name) return item;
+                if (item.children) {{ const res = findFile(item.children, name); if (res) return res; }}
+            }}
+        }};
+        const f = findFile(node.multitext_widget.data.tree, '{file2_name}');
+        node.multitext_widget.openFile(f.id);
         node.multitext_widget.editorInstance.monaco.setValue("COMMON_WORD in second file with UNIQUE_TWO");
-    }""")
+    }}""")
 
-    # 3つ目のファイルを作成 (text2.txt が自動生成)
+    # 3つ目のファイルを作成
     page.evaluate("""() => {
         const app = window.app || window.ComfyApp;
         const node = app.graph._nodes.find(n => n.multitext_widget);
-        node.multitext_widget.createNewFile();
+        node.multitext_widget.addItemWithName('file', 'test2.txt');
     }""")
     time.sleep(0.5)
-    file3_name = page.evaluate("""() => {
+    file3_name = "test2.txt"
+    page.evaluate(f"""() => {{
         const app = window.app || window.ComfyApp;
         const node = app.graph._nodes.find(n => n.multitext_widget);
-        return node.multitext_widget.data.activeFile;
-    }""")
-    page.evaluate("""() => {
-        const app = window.app || window.ComfyApp;
-        const node = app.graph._nodes.find(n => n.multitext_widget);
+        const findFile = (items, name) => {{
+            for (const item of items) {{
+                if (item.name === name) return item;
+                if (item.children) {{ const res = findFile(item.children, name); if (res) return res; }}
+            }}
+        }};
+        const f = findFile(node.multitext_widget.data.tree, '{file3_name}');
+        node.multitext_widget.openFile(f.id);
         node.multitext_widget.editorInstance.monaco.setValue("COMMON_WORD in third file with UNIQUE_THREE");
-    }""")
+    }}""")
 
     print(f"Created files: default.txt, {file2_name}, {file3_name}")
 
@@ -85,7 +93,14 @@ def test_multitext_cross_file_search(page: Page, comfyui_server, wait_for_comfyu
     page.evaluate("""() => {
         const app = window.app || window.ComfyApp;
         const node = app.graph._nodes.find(n => n.multitext_widget);
-        node.multitext_widget.setActiveFile("default.txt");
+        const findFile = (items, name) => {
+            for (const item of items) {
+                if (item.name === name) return item;
+                if (item.children) { const res = findFile(item.children, name); if (res) return res; }
+            }
+        };
+        const f = findFile(node.multitext_widget.data.tree, 'default.txt');
+        if (f) node.multitext_widget.openFile(f.id);
     }""")
     time.sleep(1)
 
@@ -135,7 +150,15 @@ def test_multitext_cross_file_search(page: Page, comfyui_server, wait_for_comfyu
     active_file = page.evaluate("""() => {
         const app = window.app || window.ComfyApp;
         const node = app.graph._nodes.find(n => n.multitext_widget);
-        return node.multitext_widget.data.activeFile;
+        const findFile = (items, id) => {
+            for (const item of items) {
+                if (item.id === id) return item;
+                if (item.children) { const res = findFile(item.children, id); if (res) return res; }
+            }
+        };
+        const activeId = node.multitext_widget.data.activeFileId;
+        const file = findFile(node.multitext_widget.data.tree, activeId);
+        return file ? file.name : null;
     }""")
     assert active_file == file3_name, f"Failed to switch to {file3_name}, got {active_file}"
     print("Verification successful!")

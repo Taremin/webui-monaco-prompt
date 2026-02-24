@@ -1,74 +1,215 @@
-div.webui-monaco-prompt-container {
-    display: flex;
-    flex-flow: column;
-}
-div.webui-monaco-prompt-header {
-    display: flex;
-    flex-direction: column;
-}
-div.webui-monaco-prompt-input {
-    display: flex;
-    width: 100%;
-    margin: 2px 0;
-}
-div.webui-monaco-prompt-control {
-    display: flex;
-    flex-flow: nowrap;
-}
-div.webui-monaco-prompt-toggle {
-}
-div.webui-monaco-prompt-toggle-checked {
-    border-width: 1px;
-    border-color: var(--fg-color);
+/* MultiText Sidebar and Tree Styles - High Priority CSS Modules Update */
+
+/* 全体のコンテナ */
+.webui-monaco-prompt-multitext-container {
+    display: flex !important;
+    flex-direction: row !important;
+    width: 100% !important;
+    height: 100% !important;
+    background-color: #1e1e1e !important;
+    pointer-events: auto !important;
+    /* 強制的にイベントを受け取る */
 }
 
-input.webui-monaco-prompt-input-text[type="text"] {
-    color: var(--input-text);
-    background-color: var(--comfy-input-bg);
-    width: 100%;
-}
-.webui-monaco-prompt-table-container {
-    color: var(--input-text);
-    display: flex;
-    height: 100vh;
-    overflow: auto;
-    margin-top: 11px;
-}
-.webui-monaco-prompt-table {
-    font-size: 11px;
-    width: 100%;
-    height: 0;
-}
-.webui-monaco-prompt-table-container thead > tr > th {
-    border-bottom: 1px solid var(--fg-color);
-}
-.webui-monaco-prompt-table-container tbody > tr {
-    cursor: pointer;
-    /*
-    display: flex;
-    */
-}
-.webui-monaco-prompt-table-container tbody > tr:hover {
-    background-color: var(--fg-color) !important;
-    color: var(--bg-color) !important;
-}
-.webui-monaco-prompt-table-container tbody > tr:nth-child(even) {
-    background-color: var(--tr-even-bg-color);
-}
-.webui-monaco-prompt-table-container tbody > tr:nth-child(odd) {
-    background-color: var(--tr-odd-bg-color);
-}
-.webui-monaco-prompt-td {
-    /*
-    flex: 0 0 auto;
-    */
-    text-wrap: nowrap;
-}
-.webui-monaco-prompt-td-expand {
-    /*
-    flex: 1 1 auto;
-    */
-    width: 100%;
+.webui-monaco-prompt-multitext-sidebar {
+    width: 200px;
+    /* !important を削除してリサイズ可能に */
+    min-width: 50px !important;
+    border-right: 1px solid #333 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    user-select: none !important;
+    background-color: #252526 !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
 }
 
+/* ツールバーのスタイル刷新 */
+.webui-monaco-prompt-multitext-sidebar-toolbar {
+    display: flex !important;
+    padding: 4px 6px !important;
+    gap: 4px !important;
+    background-color: #252526 !important;
+    border-bottom: 1px solid #333 !important;
+    min-height: 32px !important;
+    align-items: center !important;
+    box-sizing: border-box !important;
+}
 
+.webui-monaco-prompt-multitext-toolbar-button {
+    width: 24px !important;
+    height: 24px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: transparent !important;
+    border: none !important;
+    border-radius: 3px !important;
+    color: #cccccc !important;
+    cursor: pointer !important;
+    padding: 0 !important;
+    transition: background-color 0.1s !important;
+}
+
+.webui-monaco-prompt-multitext-toolbar-button:hover {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    color: #ffffff !important;
+}
+
+.webui-monaco-prompt-multitext-toolbar-button svg {
+    width: 16px !important;
+    height: 16px !important;
+    pointer-events: none !important;
+}
+
+/* ツリー構造のスタイル - ドット排除のため徹底的に指定 */
+.webui-monaco-prompt-multitext-tree,
+.webui-monaco-prompt-multitext-tree-children,
+.webui-monaco-prompt-multitext-tree-item-wrapper,
+.webui-monaco-prompt-multitext-tree-item {
+    list-style: none !important;
+    list-style-type: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    text-indent: 0 !important;
+}
+
+.webui-monaco-prompt-multitext-tree-item-wrapper::before,
+.webui-monaco-prompt-multitext-tree-item-wrapper::after,
+.webui-monaco-prompt-multitext-tree-item::before,
+.webui-monaco-prompt-multitext-tree-item::after {
+    display: none !important;
+    content: none !important;
+}
+
+.webui-monaco-prompt-multitext-tree-children {
+    margin-left: 12px !important;
+    border-left: 1px solid #444 !important;
+    display: block !important;
+}
+
+.webui-monaco-prompt-multitext-tree-item {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    height: 22px !important;
+    padding: 0 4px !important;
+    cursor: pointer !important;
+    color: #cccccc !important;
+    font-size: 13px !important;
+    line-height: 22px !important;
+    white-space: nowrap !important;
+    user-select: none !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    position: relative !important;
+    background-color: transparent !important;
+}
+
+.webui-monaco-prompt-multitext-tree-item:hover {
+    background-color: #2a2d2e !important;
+}
+
+.webui-monaco-prompt-multitext-tree-item.active {
+    background-color: #37373d !important;
+    color: #ffffff !important;
+}
+
+/* 整列のための固定幅コンテナ - 矢印 */
+.webui-monaco-prompt-multitext-tree-arrow {
+    width: 16px !important;
+    min-width: 16px !important;
+    height: 22px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-shrink: 0 !important;
+}
+
+/* 整列のための固定幅コンテナ - アイコン */
+.webui-monaco-prompt-multitext-tree-icon {
+    width: 22px !important;
+    min-width: 22px !important;
+    height: 22px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    flex-shrink: 0 !important;
+    margin-right: 4px !important;
+}
+
+.webui-monaco-prompt-multitext-tree-icon svg {
+    width: 16px !important;
+    height: 16px !important;
+}
+
+/* 名前部分 - これが伸びることで右寄せを実現 */
+.webui-monaco-prompt-multitext-tree-name {
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    padding-left: 2px !important;
+    display: block !important;
+}
+
+/* アクションボタンコンテナ */
+.webui-monaco-prompt-multitext-tree-actions {
+    display: none !important;
+    flex-direction: row !important;
+    gap: 2px !important;
+    padding-left: 8px !important;
+    align-items: center !important;
+    background: inherit !important;
+    flex-shrink: 0 !important;
+}
+
+.webui-monaco-prompt-multitext-tree-item:hover .webui-monaco-prompt-multitext-tree-actions {
+    display: flex !important;
+}
+
+.webui-monaco-prompt-multitext-tree-action {
+    width: 18px !important;
+    height: 18px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    opacity: 0.6 !important;
+    border-radius: 3px !important;
+    cursor: pointer !important;
+    background: transparent !important;
+    color: #cccccc !important;
+}
+
+.webui-monaco-prompt-multitext-tree-action:hover {
+    opacity: 1 !important;
+    background-color: #444 !important;
+    color: #ffffff !important;
+}
+
+.webui-monaco-prompt-multitext-tree-action svg {
+    width: 14px !important;
+    height: 14px !important;
+}
+
+/* Resizer: 可視性とヒットエリアを確保 */
+.webui-monaco-prompt-multitext-resizer {
+    width: 4px !important;
+    min-width: 4px !important;
+    cursor: col-resize !important;
+    background-color: #333 !important;
+    /* 常に境界線を表示 */
+    z-index: 100 !important;
+    flex-shrink: 0 !important;
+    transition: background-color 0.2s !important;
+    position: relative !important;
+}
+
+.webui-monaco-prompt-multitext-resizer:hover,
+.webui-monaco-prompt-multitext-resizer.resizing {
+    background-color: #007acc !important;
+    /* 操作時は青く光る */
+}

@@ -24,6 +24,7 @@
     "multiple-select-vanilla": "^3.5.0"
   },
   "devDependencies": {
+    "baseline-browser-mapping": "^2.10.0",
     "copy-webpack-plugin": "^12.0.2",
     "css-loader": "^6.11.0",
     "file-loader": "^6.2.0",

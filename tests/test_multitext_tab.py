@@ -58,20 +58,22 @@ def test_multitext_tab_close_vs_delete(page: Page, comfyui_server, wait_for_comf
     page.evaluate("""() => {
         const app = window.app || window.ComfyApp;
         const node = app.graph._nodes.find(n => n.multitext_widget);
-        node.multitext_widget.createNewFile();
+        node.multitext_widget.addItemWithName('file', 'test_file_1.txt');
     }""")
 
     # ファイルが2つあることを確認
     page.wait_for_function("""() => {
         const app = window.app || window.ComfyApp;
         const node = app.graph._nodes.find(n => n.multitext_widget);
-        return Object.keys(node.multitext_widget.data.files).length >= 2;
+        const countFiles = (items) => items.reduce((acc, item) => acc + (item.type === 'file' ? 1 : 0) + (item.children ? countFiles(item.children) : 0), 0);
+        return countFiles(node.multitext_widget.data.tree) >= 2;
     }""")
 
     filenames = page.evaluate("""() => {
         const app = window.app || window.ComfyApp;
         const node = app.graph._nodes.find(n => n.multitext_widget);
-        return Object.keys(node.multitext_widget.data.files);
+        const getFileNames = (items) => items.flatMap(item => item.type === 'file' ? [item.name] : (item.children ? getFileNames(item.children) : []));
+        return getFileNames(node.multitext_widget.data.tree);
     }""")
     target_file = filenames[-1]
 
@@ -79,7 +81,14 @@ def test_multitext_tab_close_vs_delete(page: Page, comfyui_server, wait_for_comf
     page.evaluate(f"""() => {{
         const app = window.app || window.ComfyApp;
         const node = app.graph._nodes.find(n => n.multitext_widget);
-        node.multitext_widget.closeTab("{target_file}");
+        const findFile = (items, name) => {{
+            for (const item of items) {{
+                if (item.name === name && item.type === 'file') return item.id;
+                if (item.children) {{ const res = findFile(item.children, name); if (res) return res; }}
+            }}
+        }};
+        const id = findFile(node.multitext_widget.data.tree, "{target_file}");
+        if (id) node.multitext_widget.closeTab(id);
     }}""")
 
     # 検証1: タブからは消えているが、データとしては残っている
@@ -87,8 +96,15 @@ def test_multitext_tab_close_vs_delete(page: Page, comfyui_server, wait_for_comf
     data_exists = page.evaluate(f"""() => {{
         const app = window.app || window.ComfyApp;
         const node = app.graph._nodes.find(n => n.multitext_widget);
-        const isOpened = node.multitext_widget.data.openedFiles.includes("{target_file}");
-        const exists = !!node.multitext_widget.data.files["{target_file}"];
+        const findFile = (items, name) => {{
+            for (const item of items) {{
+                if (item.name === name && item.type === 'file') return item.id;
+                if (item.children) {{ const res = findFile(item.children, name); if (res) return res; }}
+            }}
+        }};
+        const id = findFile(node.multitext_widget.data.tree, "{target_file}");
+        const isOpened = id ? node.multitext_widget.data.openedFileIds.includes(id) : false;
+        const exists = !!id;
         return {{ isOpened, exists }};
     }}""")
     assert data_exists['isOpened'] is False
@@ -98,13 +114,27 @@ def test_multitext_tab_close_vs_delete(page: Page, comfyui_server, wait_for_comf
     page.evaluate(f"""() => {{
         const app = window.app || window.ComfyApp;
         const node = app.graph._nodes.find(n => n.multitext_widget);
-        node.multitext_widget.setActiveFile("{target_file}");
+        const findFile = (items, name) => {{
+            for (const item of items) {{
+                if (item.name === name && item.type === 'file') return item.id;
+                if (item.children) {{ const res = findFile(item.children, name); if (res) return res; }}
+            }}
+        }};
+        const id = findFile(node.multitext_widget.data.tree, "{target_file}");
+        if (id) node.multitext_widget.openFile(id);
     }}""")
     
     page.wait_for_function(f"""() => {{
         const app = window.app || window.ComfyApp;
         const node = app.graph._nodes.find(n => n.multitext_widget);
-        return node.multitext_widget.data.openedFiles.includes("{target_file}");
+        const findFile = (items, name) => {{
+            for (const item of items) {{
+                if (item.name === name && item.type === 'file') return item.id;
+                if (item.children) {{ const res = findFile(item.children, name); if (res) return res; }}
+            }}
+        }};
+        const id = findFile(node.multitext_widget.data.tree, "{target_file}");
+        return id ? node.multitext_widget.data.openedFileIds.includes(id) : false;
     }}""")
 
     # 検証3: ファイルを削除する
@@ -112,14 +142,28 @@ def test_multitext_tab_close_vs_delete(page: Page, comfyui_server, wait_for_comf
     page.evaluate(f"""() => {{
         const app = window.app || window.ComfyApp;
         const node = app.graph._nodes.find(n => n.multitext_widget);
-        node.multitext_widget.deleteFile("{target_file}");
+        const findFile = (items, name) => {{
+            for (const item of items) {{
+                if (item.name === name && item.type === 'file') return item.id;
+                if (item.children) {{ const res = findFile(item.children, name); if (res) return res; }}
+            }}
+        }};
+        const id = findFile(node.multitext_widget.data.tree, "{target_file}");
+        if (id) node.multitext_widget.deleteItem(id);
     }}""")
 
     page.wait_for_timeout(1000)
     data_deleted = page.evaluate(f"""() => {{
         const app = window.app || window.ComfyApp;
         const node = app.graph._nodes.find(n => n.multitext_widget);
-        return !!node.multitext_widget.data.files["{target_file}"];
+        const findFile = (items, name) => {{
+            for (const item of items) {{
+                if (item.name === name && item.type === 'file') return item.id;
+                if (item.children) {{ const res = findFile(item.children, name); if (res) return res; }}
+            }}
+        }};
+        const id = findFile(node.multitext_widget.data.tree, "{target_file}");
+        return !!id;
     }}""")
     assert data_deleted is False
 
@@ -144,7 +188,7 @@ def test_multitext_tab_close_vs_delete(page: Page, comfyui_server, wait_for_comf
     page.wait_for_selector(".monaco-editor", state="visible", timeout=30000)
     
     # ウィジェットが準備できるまで待つ（editorInstanceで確認）
-    print("Waiting for multitext_widget.createNewFile function in Phase 4...")
+    print("Waiting for multitext_widget.addItemWithName function in Phase 4...")
     page.wait_for_function("""
         () => {
             const getApp = () => window.app || (window.comfyAPI && window.comfyAPI.app) || window.ComfyApp || (window.parent && window.parent.app);
@@ -155,7 +199,7 @@ def test_multitext_tab_close_vs_delete(page: Page, comfyui_server, wait_for_comf
                 return false;
             }
             const w = node.multitext_widget;
-            const ready = !!w.editorInstance && typeof w.createNewFile === 'function';
+            const ready = !!w.editorInstance && typeof w.addItemWithName === 'function';
             if (ready) console.log("Phase 4: multitext_widget is READY!");
             return ready;
         }
@@ -174,13 +218,27 @@ def test_multitext_tab_close_vs_delete(page: Page, comfyui_server, wait_for_comf
     page.evaluate("""() => {
         const app = window.app || window.ComfyApp;
         const node = app.graph._nodes.find(n => n.multitext_widget);
-        node.multitext_widget.createNewFile();
+        node.multitext_widget.addItemWithName('file', 'file_a.txt');
+        const findFile = (items, name) => {
+            for (const item of items) {
+                if (item.name === name) return item.id;
+                if (item.children) { const res = findFile(item.children, name); if (res) return res; }
+            }
+        };
+        const id = findFile(node.multitext_widget.data.tree, 'file_a.txt');
+        if (id) node.multitext_widget.openFile(id);
     }""")
     time.sleep(0.5)
     file_a = page.evaluate("""() => {
         const app = window.app || window.ComfyApp;
         const node = app.graph._nodes.find(n => n.multitext_widget);
-        return node.multitext_widget.data.activeFile;
+        const findFile = (items, id) => {
+            for (const item of items) {
+                if (item.id === id && item.type === 'file') return item.name;
+                if (item.children) { const res = findFile(item.children, id); if (res) return res; }
+            }
+        };
+        return findFile(node.multitext_widget.data.tree, node.multitext_widget.data.activeFileId) || "unknown";
     }""")
     page.evaluate("""() => {
         const app = window.app || window.ComfyApp;
@@ -192,13 +250,27 @@ def test_multitext_tab_close_vs_delete(page: Page, comfyui_server, wait_for_comf
     page.evaluate("""() => {
         const app = window.app || window.ComfyApp;
         const node = app.graph._nodes.find(n => n.multitext_widget);
-        node.multitext_widget.createNewFile();
+        node.multitext_widget.addItemWithName('file', 'file_b.txt');
+        const findFile = (items, name) => {
+            for (const item of items) {
+                if (item.name === name) return item.id;
+                if (item.children) { const res = findFile(item.children, name); if (res) return res; }
+            }
+        };
+        const id = findFile(node.multitext_widget.data.tree, 'file_b.txt');
+        if (id) node.multitext_widget.openFile(id);
     }""")
     time.sleep(0.5)
     file_b = page.evaluate("""() => {
         const app = window.app || window.ComfyApp;
         const node = app.graph._nodes.find(n => n.multitext_widget);
-        return node.multitext_widget.data.activeFile;
+        const findFile = (items, id) => {
+            for (const item of items) {
+                if (item.id === id && item.type === 'file') return item.name;
+                if (item.children) { const res = findFile(item.children, id); if (res) return res; }
+            }
+        };
+        return findFile(node.multitext_widget.data.tree, node.multitext_widget.data.activeFileId) || "unknown";
     }""")
     page.evaluate("""() => {
         const app = window.app || window.ComfyApp;
@@ -212,7 +284,14 @@ def test_multitext_tab_close_vs_delete(page: Page, comfyui_server, wait_for_comf
     page.evaluate("""() => {
         const app = window.app || window.ComfyApp;
         const node = app.graph._nodes.find(n => n.multitext_widget);
-        node.multitext_widget.setActiveFile("default.txt");
+        const findFile = (items, name) => {
+            for (const item of items) {
+                if (item.name === name && item.type === 'file') return item.id;
+                if (item.children) { const res = findFile(item.children, name); if (res) return res; }
+            }
+        };
+        const id = findFile(node.multitext_widget.data.tree, "default.txt");
+        if (id) node.multitext_widget.openFile(id);
     }""")
     time.sleep(2)
 
@@ -263,7 +342,13 @@ def test_multitext_tab_close_vs_delete(page: Page, comfyui_server, wait_for_comf
     active_file = page.evaluate("""() => {
         const app = window.app || window.ComfyApp;
         const node = app.graph._nodes.find(n => n.multitext_widget);
-        return node.multitext_widget.data.activeFile;
+        const findFile = (items, id) => {
+            for (const item of items) {
+                if (item.id === id && item.type === 'file') return item.name;
+                if (item.children) { const res = findFile(item.children, id); if (res) return res; }
+            }
+        };
+        return findFile(node.multitext_widget.data.tree, node.multitext_widget.data.activeFileId) || "unknown";
     }""")
     print(f"Active file after jump: {active_file}")
     assert active_file == file_b, f"Expected {file_b}, got {active_file}"
