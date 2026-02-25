@@ -370,8 +370,64 @@ const register = (app: any) => {
     app.registerExtension({
         name: ["Taremin", "WebuiMonacoPrompt"].join('.'),
         async setup() {
+            const addSetting = (id: string, name: string, type: string, defaultValue: any, tooltip?: string, options?: any) => {
+                const settingDefinition: any = {
+                    id,
+                    name,
+                    type,
+                    defaultValue,
+                    tooltip,
+                    onChange: (value: any) => {
+                        const map: Record<string, string> = {
+                            "WebuiMonacoPrompt.Minimap": "minimap",
+                            "WebuiMonacoPrompt.LineNumbers": "lineNumbers",
+                            "WebuiMonacoPrompt.ReplaceUnderscore": "replaceUnderscore",
+                            "WebuiMonacoPrompt.KeyBindings": "mode",
+                            "WebuiMonacoPrompt.Theme": "theme",
+                            "WebuiMonacoPrompt.Language": "language",
+                            "WebuiMonacoPrompt.ShowHeader": "showHeader",
+                            "WebuiMonacoPrompt.FontSize": "fontSize",
+                            "WebuiMonacoPrompt.FontFamily": "fontFamily",
+                            "WebuiMonacoPrompt.CsvToggle": "csvToggle",
+                        }
+                        const key = map[id]
+                        if (key) {
+                            WebuiMonacoPrompt.runAllInstances((instance) => {
+                                instance.setSettings({ [key]: value }, true)
+                            })
+                        }
+                    }
+                }
+                if (options) {
+                    Object.assign(settingDefinition, options)
+                }
+                app.ui.settings.addSetting(settingDefinition)
+            }
+
+            addSetting("WebuiMonacoPrompt.ShowHeader", "Show Header", "boolean", false, "Show the Monaco Editor header")
+            addSetting("WebuiMonacoPrompt.Minimap", "Show Minimap", "boolean", true, "Show the Monaco Editor minimap")
+            addSetting("WebuiMonacoPrompt.LineNumbers", "Show Line Numbers", "boolean", true, "Show line numbers")
+            addSetting("WebuiMonacoPrompt.ReplaceUnderscore", "Replace Underscore", "boolean", false, "Replace underscores with spaces in autocomplete")
+            addSetting("WebuiMonacoPrompt.FontSize", "Font Size", "slider", 12, "Font size of the editor", { attrs: { min: 8, max: 48, step: 1 } })
+            addSetting("WebuiMonacoPrompt.FontFamily", "Font Family", "text", "", "Font family of the editor")
+            addSetting("WebuiMonacoPrompt.Language", "Language", "combo", "comfy-prompt", "Default language", { options: MonacoPrompt.getLanguages() })
+            addSetting("WebuiMonacoPrompt.KeyBindings", "Key Bindings", "combo", "VIM", "Keybindings", { options: ["NORMAL", "VIM"] })
+            addSetting("WebuiMonacoPrompt.Theme", "Theme", "combo", "vsc-dark", "Theme", { options: ["vs", "vs-dark", "hc-black", "hc-light"] })
+            addSetting("WebuiMonacoPrompt.CsvToggle", "CSV Toggle", "hidden", {})
+
             await refreshCSV()
             await loadSetting()
+
+            // hook refresh button
+            if (app.refreshComboInNodes) {
+                const originalRefreshComboInNodes = app.refreshComboInNodes
+                app.refreshComboInNodes = async function() {
+                    const res = originalRefreshComboInNodes.apply(this, arguments)
+                    await refreshCSV()
+                    await loadSetting()
+                    return res
+                }
+            }
 
             // 既存ノードの textarea 置き換えと検索ノードの初期化
             const nodes = app.graph._nodes

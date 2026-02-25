@@ -1,40 +1,63 @@
 import { deepEqual } from 'fast-equals'
 import * as utils from "./utils"
 import * as WebuiMonacoPrompt from "../index" // for typing
-import { api } from "./api"
+import { app } from "./api"
 
-const me = "webui-monaco-prompt"
-
-// 設定の読み込み
-let prevSettings: any = null
-let settings: any = {}
-const updateSettings = (newSetting: any) => {
-    if (!newSetting) {
-        return
-    }
-    Object.assign(settings, newSetting)
-
-    WebuiMonacoPrompt.runAllInstances((instance) => updateInstanceSettings(instance))
-
-    if (settings.editor && settings.editor.csvToggle) {
-        const enables = Object.entries(settings.editor.csvToggle).filter(([contextKey, value]) => {
-            return value
-        }).map(([contextKey, value]) => {
-            return contextKey.split('.').slice(-1)[0]
-        })
-        WebuiMonacoPrompt.addLoadedCSV(enables)
-    }
+const SETTING_MAP: Record<string, string> = {
+    minimap: "WebuiMonacoPrompt.Minimap",
+    lineNumbers: "WebuiMonacoPrompt.LineNumbers",
+    replaceUnderscore: "WebuiMonacoPrompt.ReplaceUnderscore",
+    mode: "WebuiMonacoPrompt.KeyBindings",
+    theme: "WebuiMonacoPrompt.Theme",
+    language: "WebuiMonacoPrompt.Language",
+    showHeader: "WebuiMonacoPrompt.ShowHeader",
+    fontSize: "WebuiMonacoPrompt.FontSize",
+    fontFamily: "WebuiMonacoPrompt.FontFamily",
+    csvToggle: "WebuiMonacoPrompt.CsvToggle",
 }
+
+let prevSettings: any = null
+
+function getEnabledCSVs(csvToggle: any) {
+    if (!csvToggle) csvToggle = {}
+    const loadedCSVs = WebuiMonacoPrompt.getLoadedCSV()
+    let changed = false
+    const enables = loadedCSVs.filter(csv => {
+        const key = `csv.${csv}`
+        if (key in csvToggle) {
+            return csvToggle[key]
+        }
+        csvToggle[key] = true
+        changed = true
+        return true
+    })
+    
+    if (changed) {
+        // Update the ComfyUI setting if new CSVs were discovered
+        app.ui.settings.setSettingValue("WebuiMonacoPrompt.CsvToggle", csvToggle)
+    }
+    return enables
+}
+
 function updateInstanceSettings(instance: WebuiMonacoPrompt.PromptEditor) {
-    if (!settings) {
-        return
+    const settings: any = {}
+    for (const [key, comfyId] of Object.entries(SETTING_MAP)) {
+        const val = app.ui.settings.getSettingValue(comfyId)
+        if (val !== undefined) {
+            settings[key] = val
+        }
     }
 
-    if (settings.editor) {
-        instance.setSettings(settings.editor, true)
+    if (Object.keys(settings).length > 0) {
+        instance.setSettings(settings, true)
+        
+        if (settings.csvToggle) {
+            WebuiMonacoPrompt.addLoadedCSV(getEnabledCSVs(settings.csvToggle))
+        }
     }
     
     utils.updateThemeStyle(instance)
+    prevSettings = instance.getSettings()
 }
 
 async function saveSettings(instance: WebuiMonacoPrompt.PromptEditor) {
@@ -42,31 +65,35 @@ async function saveSettings(instance: WebuiMonacoPrompt.PromptEditor) {
     if (deepEqual(prevSettings, currentSettings)) {
         return
     }
-    prevSettings = currentSettings
-
-    if (settings && settings.editor) {
-        settings.editor = currentSettings
+    
+    for (const [key, comfyId] of Object.entries(SETTING_MAP)) {
+        if (!deepEqual(prevSettings?.[key], (currentSettings as any)[key])) {
+            app.ui.settings.setSettingValue(comfyId, (currentSettings as any)[key])
+        }
     }
-
-    api.storeSetting(me, Object.assign(settings, {
-        editor: currentSettings
-    })).then((res: Response) => {
-    })
+    
+    prevSettings = currentSettings
 }
 
 async function loadSetting() {
-    const settings = await api.getSetting(me)
-    updateSettings(settings)
+    const csvToggle = app.ui.settings.getSettingValue("WebuiMonacoPrompt.CsvToggle") || {}
+    WebuiMonacoPrompt.addLoadedCSV(getEnabledCSVs(csvToggle))
 }
 
 function getSettings() {
+    const settings: any = {}
+    for (const [key, comfyId] of Object.entries(SETTING_MAP)) {
+        const val = app.ui.settings.getSettingValue(comfyId)
+        if (val !== undefined) {
+            settings[key] = val
+        }
+    }
     return settings
 }
 
 export {
     loadSetting,
     getSettings,
-    updateSettings,
     updateInstanceSettings,
     saveSettings,
 }

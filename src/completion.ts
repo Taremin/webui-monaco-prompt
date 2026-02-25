@@ -132,7 +132,7 @@ const compareArray = (array1: any[], array2: any[]) => {
 }
 
 const _addCSV = (csv: string, sourceName?: string) => {
-    for (const row of parse(csv, {columns: ["tag", "category", "count", "alias"]})) {
+    for (const row of parse(csv, {columns: ["tag", "category", "count", "alias"], relax_column_count: true})) {
         const countString = isNaN(row.count) ? row.count : (+row.count).toLocaleString()
         const description = sourceName ?
             [`(${sourceName})`, countString].join(" ") :

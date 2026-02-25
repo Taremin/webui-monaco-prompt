@@ -234,7 +234,7 @@ class PromptEditor extends HTMLElement {
         } as any) as CodeEditor
         this.polyfillMonacoEditorConfiguration()
 
-        this.showHeader = true
+        this.showHeader = false
         this.theme = this.getThemeId()
 
         this.changeMode(options.mode || PromptEditorMode.VIM)
@@ -1048,9 +1048,15 @@ class PromptEditor extends HTMLElement {
         for (const callback of this.onChangeLanguageBeforeSyncCallbacks) {
             callback()
         }
-        runAllInstances((instance) => {
-            instance.changeLanguage(value)
-        })
+        
+        const app = (window as any).app;
+        if (app && app.ui && app.ui.settings) {
+            app.ui.settings.setSettingValue("WebuiMonacoPrompt.Language", value)
+        } else {
+            runAllInstances((instance) => {
+                instance.changeLanguage(value)
+            })
+        }
     }
 
     syncKeyBindings() {
@@ -1061,9 +1067,15 @@ class PromptEditor extends HTMLElement {
         for (const callback of this.onChangeModeBeforeSyncCallbacks) {
             callback()
         }
-        runAllInstances((instance) => {
-            instance.changeMode(value)
-        })
+        
+        const app = (window as any).app;
+        if (app && app.ui && app.ui.settings) {
+            app.ui.settings.setSettingValue("WebuiMonacoPrompt.KeyBindings", value)
+        } else {
+            runAllInstances((instance) => {
+                instance.changeMode(value)
+            })
+        }
         this.monaco.focus()
     }
 
@@ -1075,18 +1087,30 @@ class PromptEditor extends HTMLElement {
         for (const callback of this.onChangeThemeBeforeSyncCallbacks) {
             callback()
         }
-        runAllInstances((instance) => {
-            instance.changeTheme(value)
-        })
+        
+        const app = (window as any).app;
+        if (app && app.ui && app.ui.settings) {
+            app.ui.settings.setSettingValue("WebuiMonacoPrompt.Theme", value)
+        } else {
+            runAllInstances((instance) => {
+                instance.changeTheme(value)
+            })
+        }
     }
 
     syncShowHeader() {
         for (const callback of this.onChangeShowHeaderBeforeSyncCallbacks) {
             callback()
         }
-        runAllInstances((instance) => {
-            instance.changeShowHeader(this.showHeader)
-        })
+        
+        const app = (window as any).app;
+        if (app && app.ui && app.ui.settings) {
+            app.ui.settings.setSettingValue("WebuiMonacoPrompt.ShowHeader", this.showHeader)
+        } else {
+            runAllInstances((instance) => {
+                instance.changeShowHeader(this.showHeader)
+            })
+        }
     }
 
     syncLineNumbers() {
@@ -1097,9 +1121,15 @@ class PromptEditor extends HTMLElement {
         for (const callback of this.onChangeShowLineNumbersBeforeSyncCallbacks) {
             callback()
         }
-        runAllInstances((instance) => {
-            instance.changeShowLineNumbers(value)
-        })
+        
+        const app = (window as any).app;
+        if (app && app.ui && app.ui.settings) {
+            app.ui.settings.setSettingValue("WebuiMonacoPrompt.LineNumbers", value)
+        } else {
+            runAllInstances((instance) => {
+                instance.changeShowLineNumbers(value)
+            })
+        }
     }
 
     syncMinimap() {
@@ -1110,9 +1140,15 @@ class PromptEditor extends HTMLElement {
         for (const callback of this.onChangeShowMinimapBeforeSyncCallbacks) {
             callback()
         }
-        runAllInstances((instance) => {
-            instance.changeShowMinimap(value)
-        })
+        
+        const app = (window as any).app;
+        if (app && app.ui && app.ui.settings) {
+            app.ui.settings.setSettingValue("WebuiMonacoPrompt.Minimap", value)
+        } else {
+            runAllInstances((instance) => {
+                instance.changeShowMinimap(value)
+            })
+        }
     }
 
     syncReplaceUnderscore() {
@@ -1123,9 +1159,15 @@ class PromptEditor extends HTMLElement {
         for (const callback of this.onChangeReplaceUnderscoreBeforeSyncCallbacks) {
             callback()
         }
-        runAllInstances((instance) => {
-            instance.changeReplaceUnderscore(value)
-        })
+        
+        const app = (window as any).app;
+        if (app && app.ui && app.ui.settings) {
+            app.ui.settings.setSettingValue("WebuiMonacoPrompt.ReplaceUnderscore", value)
+        } else {
+            runAllInstances((instance) => {
+                instance.changeReplaceUnderscore(value)
+            })
+        }
     }
 
     syncFontSize() {
@@ -1133,9 +1175,15 @@ class PromptEditor extends HTMLElement {
         for (const callback of this.onChangeFontSizeBeforeSyncCallbacks) {
             callback()
         }
-        runAllInstances((instance) => {
-            instance.changeFontSize(value)
-        })
+        
+        const app = (window as any).app;
+        if (app && app.ui && app.ui.settings) {
+            app.ui.settings.setSettingValue("WebuiMonacoPrompt.FontSize", value)
+        } else {
+            runAllInstances((instance) => {
+                instance.changeFontSize(value)
+            })
+        }
     }
 
     syncFontFamily() {
@@ -1143,9 +1191,15 @@ class PromptEditor extends HTMLElement {
         for (const callback of this.onChangeFontFamilyBeforeSyncCallbacks) {
             callback()
         }
-        runAllInstances((instance) => {
-            instance.changeFontFamily(value)
-        })
+        
+        const app = (window as any).app;
+        if (app && app.ui && app.ui.settings) {
+            app.ui.settings.setSettingValue("WebuiMonacoPrompt.FontFamily", value)
+        } else {
+            runAllInstances((instance) => {
+                instance.changeFontFamily(value)
+            })
+        }
     }
 
     updateAutoCompleteToggle() {
@@ -1168,11 +1222,16 @@ class PromptEditor extends HTMLElement {
             callback()
         }
 
-        runAllInstances((instance) => {
-            for (const [contextKey, value] of Object.entries(values)) {
-                instance.changeAutoCompleteToggle(contextKey, value, true)
-            }
-        })
+        const app = (window as any).app;
+        if (app && app.ui && app.ui.settings) {
+            app.ui.settings.setSettingValue("WebuiMonacoPrompt.CsvToggle", values)
+        } else {
+            runAllInstances((instance) => {
+                for (const [contextKey, value] of Object.entries(values)) {
+                    instance.changeAutoCompleteToggle(contextKey, value, true)
+                }
+            })
+        }
     }
 
     createCheckbox(
@@ -1710,6 +1769,8 @@ const _clearCSV = () => {
     return retval
 }
 
+const getLanguages = () => monaco.languages.getLanguages().map(lang => lang.id)
+
 const KeyMod = monaco.KeyMod
 const KeyCode = monaco.KeyCode
 type CompletionItem = monaco.languages.CompletionItem
@@ -1727,6 +1788,7 @@ export {
     addData,
     addCustomSuggest,
     addLanguages,
+    getLanguages,
     runAllInstances,
     PromptEditorSettings,
     ContextKeyExpr,
