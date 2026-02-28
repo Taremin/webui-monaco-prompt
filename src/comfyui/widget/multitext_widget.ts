@@ -155,6 +155,8 @@ class MultiTextWidget {
         containerEl.style.backgroundColor = "#1e1e1e"
         containerEl.style.zIndex = "1000" // 確実に最前面
         containerEl.style.pointerEvents = "auto"
+        containerEl.style.position = "absolute" // 追加
+        containerEl.style.top = "0px"           // 追加
 
         // サイドバー
         const sidebarEl = this.elements.sidebar = document.createElement("div")
@@ -208,10 +210,11 @@ class MultiTextWidget {
         editorWrapper.appendChild(tabsContainer)
 
         const editorContainer = this.elements.editorContainer = document.createElement("div")
+        editorContainer.className = "webui-monaco-prompt-multitext-editor-container"
         editorContainer.style.flex = "1"
         editorContainer.style.position = "relative"
         editorContainer.style.width = "100%"
-        editorContainer.style.minHeight = "300px" // 物理的にサイズを確保
+        editorContainer.style.minHeight = "50px" // 最小限の高さを確保しつつ、リサイズを妨げない
         editorContainer.style.display = "block"   // 確実に表示
         editorWrapper.appendChild(editorContainer)
 
@@ -275,7 +278,7 @@ class MultiTextWidget {
             style.id = styleId;
             style.innerHTML = `
                 .webui-monaco-prompt-multitext-container-parent-fix {
-                    top: 0px !important;
+                    /* LiteGraph による動的な配置を許可するため、位置固定は行わない */
                 }
             `;
             document.head.appendChild(style);
@@ -289,7 +292,6 @@ class MultiTextWidget {
                 style.id = styleId;
                 style.innerHTML = `
                     .webui-monaco-prompt-multitext-container-parent-fix {
-                        top: 0px !important;
                         margin-top: 0px !important;
                         left: 0px !important;
                     }
@@ -303,14 +305,25 @@ class MultiTextWidget {
             
             (domWidget as any).draw = function(ctx: CanvasRenderingContext2D, n: any, widget_width: number, y: number, H: number, ...args: any[]) {
                 if (this.element && n.size) {
-                    const targetHeight = Math.max(100, n.size[1] - 36);
+                    // タイトルバー(36px)と出力ピンエリア(1スロット20px)を考慮して高さを計算
+                    const outputHeight = n.outputs ? n.outputs.length * 20 : 0;
+                    const targetHeight = Math.max(50, n.size[1] - 36 - outputHeight);
+                    
                     // 高さと幅だけを追従
                     this.element.style.setProperty("height", `${targetHeight}px`, "important");
                     containerEl.style.setProperty("height", `${targetHeight}px`, "important");
                     
-                    const targetWidth = Math.max(300, n.size[0] - 20);
+                    const targetWidth = Math.max(50, n.size[0] - 20);
                     this.element.style.setProperty("width", `${targetWidth}px`, "important");
                     containerEl.style.setProperty("width", `${targetWidth}px`, "important");
+                    containerEl.style.setProperty("overflow", "hidden", "important");
+
+                    // サイドバーの幅がノード幅の80%を超えないように制限
+                    const maxSidebarWidth = Math.max(50, targetWidth * 0.8);
+                    const currentSidebarWidth = (this as any)._node?.data?.sidebarWidth || 150;
+                    const finalSidebarWidth = Math.min(currentSidebarWidth, maxSidebarWidth);
+                    sidebarEl.style.setProperty("width", `${finalSidebarWidth}px`, "important");
+                    sidebarEl.style.setProperty("min-width", `${finalSidebarWidth}px`, "important");
                 }
                 
                 // LiteGraphの正常なY座標でそのままオリジナルを呼び出す
@@ -325,9 +338,17 @@ class MultiTextWidget {
         }
 
         // ノードサイズに合わせて全体を占有させる（空白除去の最重要ポイント）
-        ((domWidget as any).computeSize as any) = function(width: number) {
-            // [幅, 最小高さ] を返す。ここで node.size を参照すると無限増殖を引き起こすため絶対に固定値にする
-            return [Math.max(width, 300), 100];
+        ((domWidget as any).computeSize as any) = function(this: any, width: number) {
+            // タイトルバー(36px) + タブ(35px) + 出力ピン(1つ20px) + 最小エディタ(50px)
+            const node = (this as any)._node;
+            const outputHeight = node?.outputs ? node.outputs.length * 20 : 0;
+            const minHeight = 36 + 35 + outputHeight + 50;
+            
+            // 最小幅 = サイドバー幅 + エディタ最小幅(50px)
+            const sidebarWidth = node?.data?.sidebarWidth || 150;
+            const minWidth = Math.max(width, sidebarWidth + 50);
+            
+            return [minWidth, minHeight];
         };
 
         // 既存の text/tree_data ウィジェット（完全無力化でノード高さを汚染させない）

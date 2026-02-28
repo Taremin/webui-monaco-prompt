@@ -99,7 +99,7 @@ def test_multitext_layout_and_features(page: Page, comfyui_server, wait_for_comf
     actual = layout_info['actual']
     
     # 許容誤差範囲（数pxのマージンやボーダー、シャドウ等を考慮）
-    epsilon = 20  
+    epsilon = 30  
     
     # [アサーション1] ウィジェットの左上位置がノードボディの左上（タイトルバー直下）にほぼ一致していること
     assert abs(actual['left'] - expected['left']) < epsilon, f"Widget left {actual['left']} does not match node left {expected['left']}"

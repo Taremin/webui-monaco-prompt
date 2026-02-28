@@ -77,8 +77,9 @@ class WebuiMonacoPromptMultiText:
             }
         }
 
-    RETURN_TYPES = ("STRING",)
-    OUTPUT_IS_LIST = (True,)
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("contents", "json")
+    OUTPUT_IS_LIST = (True, True)
     FUNCTION = "process"
     CATEGORY = "WebuiMonacoPrompt"
 
@@ -86,15 +87,28 @@ class WebuiMonacoPromptMultiText:
         import json
         try:
             data = json.loads(text)
-            if isinstance(data, dict) and "files" in data:
-                 return ([file_data["content"] for file_data in data["files"].values()],)
-            elif isinstance(data, dict):
-                 return (list(data.values()),)
-            elif isinstance(data, list):
-                 return (data,)
-            return ([str(data)],)
+            tree = data.get("tree", [])
+            
+            contents = []
+            json_list = []
+
+            def traverse(items):
+                for item in items:
+                    if item.get("type") == "file":
+                        contents.append(item.get("content", ""))
+                        # ファイルごとのデータをJSON文字列としてリストに追加
+                        json_list.append(json.dumps(item))
+                    
+                    children = item.get("children")
+                    if children:
+                        traverse(children)
+
+            traverse(tree)
+            return (contents, json_list)
         except Exception:
-            return ([text],)
+            # パース失敗時は空リストを返す（あるいは入力テキストをそのまま入れるフォールバックも考えられるが、
+            # 基本的に tree 構造が期待されるため空を優先）
+            return ([], [])
 
 
 NODE_CLASS_MAPPINGS = {
