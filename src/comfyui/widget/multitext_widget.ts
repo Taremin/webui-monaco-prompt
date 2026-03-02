@@ -441,12 +441,12 @@ class MultiTextWidget {
         this.addItemWithName(type, name, parentId);
     }
 
-    public addItemWithName(type: 'file' | 'folder', name: string, parentId?: string) {
+    public addItemWithName(type: 'file' | 'folder', name: string, parentId?: string, content?: string) {
         const newItem: TreeItem = {
             id: utils.guid(),
             name: name,
             type: type,
-            content: type === 'file' ? '' : undefined,
+            content: type === 'file' ? (content || '') : undefined,
             children: type === 'folder' ? [] : undefined,
             expanded: type === 'folder' ? true : undefined
         };

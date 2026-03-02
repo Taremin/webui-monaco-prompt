@@ -1,7 +1,7 @@
 import * as utils from "./utils"
 import * as WebuiMonacoPrompt from "../index" // for typing
 import { link } from "./link"
-import { FindWidget, ReplaceWidget, MultiTextWidget } from "./widget"
+import { FindWidget, ReplaceWidget, MultiTextWidget, FilterWidget } from "./widget"
 import { app, api } from "./api"
 import { loadSetting, saveSettings, updateInstanceSettings } from "./settings"
 import { comfyPrompt, comfyDynamicPrompt } from "./languages"
@@ -356,6 +356,28 @@ const CustomNode: {[key: string]: CustomNodeWidget} = {
         nodeType: "WebuiMonacoPromptMultiText",
         widget: MultiTextWidget as any,
     },
+    json_filter: {
+        nodeType: "WebuiMonacoPromptJsonFilter",
+        widget: class {
+            static fromNode(app: any, node: any) {
+                const rulesWidget = node.widgets.find((w: any) => w.name === "rules");
+                if (rulesWidget) {
+                    rulesWidget.type = "hidden";
+                }
+                const filterWidget = new FilterWidget(node);
+                node.addDOMWidget("webui-monaco-prompt-filter", "filter", filterWidget.container, {
+                    hideOnZoom: false,
+                    serialize: false,
+                });
+                
+                // サイズ計算のフック
+                const widget = node.widgets.find((w: any) => w.name === "filter");
+                if (widget) {
+                    widget.computeSize = () => [300, 200]; // 仮のサイズ
+                }
+            }
+        } as any,
+    },
 }
 
 const CustomNodeFromNodeType = Object.fromEntries(
@@ -367,8 +389,45 @@ const CustomNodeFromNodeType = Object.fromEntries(
 
 // これから追加されるノードの設定
 const register = (app: any) => {
+    const multiTextNodes = new Set<any>()
     app.registerExtension({
         name: ["Taremin", "WebuiMonacoPrompt"].join('.'),
+        async beforeRegisterNodeDef(nodeType: any, nodeData: any, app: any) {
+            const originalGetExtraMenuOptions = nodeType.prototype.getExtraMenuOptions;
+            nodeType.prototype.getExtraMenuOptions = function(canvas: any, options: any[]) {
+                if (originalGetExtraMenuOptions) {
+                    originalGetExtraMenuOptions.apply(this, arguments);
+                }
+
+                if (multiTextNodes.size > 0) {
+                    options.push({
+                        content: "Add to MultiText",
+                        has_submenu: true,
+                        callback: (value: any, options: any, e: MouseEvent, menu: any, node: any) => {
+                            const targetNodes = Array.from(multiTextNodes);
+                            const submenu = new (window as any).LiteGraph.ContextMenu(
+                                targetNodes.map((tn: any) => ({
+                                    content: `#${tn.id}: ${tn.title || tn.type}`,
+                                    callback: () => {
+                                        const selectedNodes = Object.values(app.canvas.selected_nodes);
+                                        for (const sn of selectedNodes as any[]) {
+                                            // 複数のウィジェットがある可能性があるが、最初の HTMLTextAreaElement を持つものを対象とする
+                                            const widget = sn.widgets?.find((w: any) => w.element instanceof HTMLTextAreaElement);
+                                            const text = widget ? widget.value : "";
+                                            if (tn.multitext_widget) {
+                                                tn.multitext_widget.addItemWithName('file', sn.title || sn.type, null, text);
+                                                app.canvas.setDirty(true);
+                                            }
+                                        }
+                                    }
+                                })),
+                                { event: e, parentMenu: menu }
+                            );
+                        }
+                    });
+                }
+            };
+        },
         async setup() {
             const addSetting = (id: string, name: string, type: string, defaultValue: any, tooltip?: string, options?: any) => {
                 const settingDefinition: any = {
@@ -439,6 +498,16 @@ const register = (app: any) => {
             for (const node of nodes) {
                 // textarea 置き換え
                 hookNodeWidgets(node)
+
+                // MultiTextキャッシュ管理
+                if (node.comfyClass === "WebuiMonacoPromptMultiText") {
+                    multiTextNodes.add(node);
+                    const originalOnRemoved = node.onRemoved;
+                    node.onRemoved = function() {
+                        if (originalOnRemoved) originalOnRemoved.apply(this, arguments);
+                        multiTextNodes.delete(node);
+                    }
+                }
 
                 // 検索ノード初期化
                 const customNode = CustomNodeFromNodeType[node.comfyClass]
@@ -515,6 +584,16 @@ const register = (app: any) => {
         nodeCreated(node:any, app: any) {
             // 既存ノードの widget 置き換え(textarea)
             hookNodeWidgets(node)
+
+            // MultiTextキャッシュ管理
+            if (node.comfyClass === "WebuiMonacoPromptMultiText") {
+                multiTextNodes.add(node);
+                const originalOnRemoved = node.onRemoved;
+                node.onRemoved = function() {
+                    if (originalOnRemoved) originalOnRemoved.apply(this, arguments);
+                    multiTextNodes.delete(node);
+                }
+            }
 
             // Find / Replace widget
             const customNode = CustomNodeFromNodeType[node.comfyClass]
