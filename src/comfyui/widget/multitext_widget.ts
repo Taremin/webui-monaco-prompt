@@ -236,6 +236,7 @@ class MultiTextWidget {
                 sidebarEl.style.setProperty("width", `${newWidth}px`, "important");
                 sidebarEl.style.setProperty("min-width", `${newWidth}px`, "important");
                 this.data.sidebarWidth = newWidth
+                this.commitData() // 状態を即時保存
                 if (this.editorInstance) {
                     this.editorInstance.monaco.layout()
                 }
@@ -320,7 +321,7 @@ class MultiTextWidget {
 
                     // サイドバーの幅がノード幅の80%を超えないように制限
                     const maxSidebarWidth = Math.max(50, targetWidth * 0.8);
-                    const currentSidebarWidth = (this as any)._node?.data?.sidebarWidth || 150;
+                    const currentSidebarWidth = self.data.sidebarWidth || 150;
                     const finalSidebarWidth = Math.min(currentSidebarWidth, maxSidebarWidth);
                     sidebarEl.style.setProperty("width", `${finalSidebarWidth}px`, "important");
                     sidebarEl.style.setProperty("min-width", `${finalSidebarWidth}px`, "important");
@@ -345,7 +346,7 @@ class MultiTextWidget {
             const minHeight = 36 + 35 + outputHeight + 50;
             
             // 最小幅 = サイドバー幅 + エディタ最小幅(50px)
-            const sidebarWidth = node?.data?.sidebarWidth || 150;
+            const sidebarWidth = self.data.sidebarWidth || 150;
             const minWidth = Math.max(width, sidebarWidth + 50);
             
             return [minWidth, minHeight];
