@@ -88,7 +88,7 @@ def test_multitext_tree_operations(page: Page, comfyui_server, wait_for_comfyui)
         };
         const file = findFile(node.multitext_widget.data.tree, 'new_file.txt');
         const defaultFile = findFile(node.multitext_widget.data.tree, 'default.txt');
-        node.multitext_widget.moveItem(file.id, defaultFile.id);
+        node.multitext_widget.moveItems([file.id], defaultFile.id);
     }""")
 
     # インデントが 0 になったか確認

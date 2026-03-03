@@ -49,15 +49,11 @@ class MultiTextWidget {
         resizer?: HTMLDivElement;
     } = {};
 
-    public data: MultiTextData = {
-        tree: [],
-        activeFileId: undefined,
-        openedFileIds: []
-    };
-
-    private editor?: any; // Monaco Editor instance
-    private isSidebarVisible = true;
-    private models: Record<string, Monaco.editor.ITextModel> = {};
+    public data: MultiTextData = { tree: [], activeFileId: undefined, openedFileIds: [], sidebarWidth: 150 };
+    private editor: any;
+    private models: { [id: string]: Monaco.editor.ITextModel } = {};
+    private lastSelectedId: string | undefined = undefined;
+    private _selectedIds: Set<string> = new Set();
 
     private syncModels() {
         if (!this.editor) return;
@@ -668,6 +664,15 @@ class MultiTextWidget {
 
             this.elements.tabsContainer.appendChild(tab);
         }
+
+        // スクロール処理: アクティブなタブが画面外にある場合に備えて表示領域に移動
+        setTimeout(() => {
+            const activeTab = this.elements.tabsContainer?.querySelector('.webui-monaco-prompt-multitext-tab.active') as HTMLElement;
+            if (activeTab) {
+                // block: 'nearest' により、すでに表示されている場合はスクロールしない
+                activeTab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+            }
+        }, 100); // DOMレンダリング後の実行を確実にするため少し長めに設定
     }
 
     public closeTab(id: string) {
@@ -712,14 +717,12 @@ class MultiTextWidget {
             const itemEl = document.createElement("div")
             itemEl.className = "webui-monaco-prompt-multitext-tree-item"
             if (this.data.activeFileId === item.id) itemEl.classList.add("active")
+            if (this._selectedIds.has(item.id)) itemEl.classList.add("selected")
             
             itemEl.draggable = true
-            itemEl.addEventListener('dragstart', (e) => {
-                e.dataTransfer?.setData("text/plain", item.id)
-            })
             itemEl.addEventListener('dragover', (e) => {
                 e.preventDefault()
-                itemEl.classList.add("drag-over")
+                itemEl.classList.add('drag-over'); // Keep drag-over for visual feedback during drag
             })
             itemEl.addEventListener('dragleave', () => {
                 itemEl.classList.remove("drag-over")
@@ -727,9 +730,19 @@ class MultiTextWidget {
             itemEl.addEventListener('drop', (e) => {
                 e.preventDefault()
                 itemEl.classList.remove("drag-over")
+                const jsonData = e.dataTransfer?.getData("application/json")
+                if (jsonData) {
+                    try {
+                        const draggedIds = JSON.parse(jsonData);
+                        if (Array.isArray(draggedIds) && !draggedIds.includes(item.id)) {
+                            this.moveItems(draggedIds, item.id);
+                            return;
+                        }
+                    } catch (err) {}
+                }
                 const draggedId = e.dataTransfer?.getData("text/plain")
                 if (draggedId && draggedId !== item.id) {
-                    this.moveItem(draggedId, item.id)
+                    this.moveItems([draggedId], item.id)
                 }
             })
 
@@ -810,14 +823,59 @@ class MultiTextWidget {
 
             itemEl.appendChild(actionsEl)
 
-            itemEl.onclick = (e) => {
-                if (item.type === 'folder') {
-                    item.expanded = !item.expanded
-                    this.renderTree()
+            itemEl.addEventListener('click', (e) => {
+                e.stopPropagation();
+
+                // 複数選択ロジック
+                if (e.ctrlKey || e.metaKey) {
+                    if (this._selectedIds.has(item.id)) {
+                        this._selectedIds.delete(item.id);
+                    } else {
+                        this._selectedIds.add(item.id);
+                    }
+                } else if (e.shiftKey && this.lastSelectedId) {
+                    // Shift選択: 前回の選択位置から今回までを範囲選択
+                    const allItems = this.getAllItemIds(this.data.tree); 
+                    const startIdx = allItems.indexOf(this.lastSelectedId);
+                    const endIdx = allItems.indexOf(item.id);
+                    if (startIdx !== -1 && endIdx !== -1) {
+                        const [min, max] = [Math.min(startIdx, endIdx), Math.max(startIdx, endIdx)];
+                        const rangeIds = allItems.slice(min, max + 1);
+                        rangeIds.forEach((id: string) => this._selectedIds.add(id));
+                    }
                 } else {
-                    this.openFile(item.id)
+                    // 通常クリック: 選択をリセットして単一選択
+                    this._selectedIds.clear();
+                    this._selectedIds.add(item.id);
+
+                    // ファイルなら開く、フォルダなら展開
+                    if (item.type === 'file') {
+                        this.openFile(item.id);
+                    } else {
+                        item.expanded = !item.expanded;
+                        this.renderTree();
+                    }
                 }
-            }
+                
+                this.lastSelectedId = item.id;
+                this.renderTree(); // 描画を更新して .selected クラスを反映
+            });
+
+            // ドラッグ開始イベント
+            itemEl.addEventListener('dragstart', (e) => {
+                const draggedIds = this._selectedIds.has(item.id) 
+                    ? Array.from(this._selectedIds) 
+                    : [item.id];
+                e.dataTransfer?.setData('application/json', JSON.stringify(draggedIds));
+                e.dataTransfer?.setData('text/plain', item.id); // フォールバック用
+                
+                // 選択されていないアイテムをドラッグ開始した場合は、それを選択状態にする
+                if (!this._selectedIds.has(item.id)) {
+                    this._selectedIds.clear();
+                    this._selectedIds.add(item.id);
+                    this.renderTree();
+                }
+            });
 
             itemContainer.appendChild(itemEl)
 
@@ -832,25 +890,43 @@ class MultiTextWidget {
         }
     }
 
-    private moveItem(draggedId: string, targetId: string) {
-        let draggedItem: TreeItem | undefined;
-        let draggedParent: TreeItem[] | undefined;
+    private getAllItemIds(items: TreeItem[]): string[] {
+        let ids: string[] = [];
+        for (const item of items) {
+            ids.push(item.id);
+            if (item.children && item.expanded) {
+                ids = ids.concat(this.getAllItemIds(item.children));
+            }
+        }
+        return ids;
+    }
 
-        // ドラッグされたアイテムを探して元の場所から削除
-        const findAndRemove = (items: TreeItem[], parentItems: TreeItem[]) => {
-            for (let i = 0; i < items.length; i++) {
-                if (items[i].id === draggedId) {
-                    draggedItem = items.splice(i, 1)[0];
-                    draggedParent = parentItems;
-                    return true;
-                }
-                if (items[i].children && findAndRemove(items[i].children!, items[i].children!)) return true;
+    private moveItems(draggedIds: string[], targetId: string) {
+        const itemsToMove: TreeItem[] = [];
+
+        // 循環参照チェック（フォルダを自分自身やその子孫に移動させない）
+        const isDescendant = (parent: TreeItem, potentialChildId: string): boolean => {
+            if (parent.id === potentialChildId) return true;
+            if (parent.children) {
+                return parent.children.some(c => isDescendant(c, potentialChildId));
             }
             return false;
         };
-        findAndRemove(this.data.tree, this.data.tree);
 
-        if (!draggedItem) return;
+        // ドラッグされたアイテムを探して元の場所から削除
+        const findAndRemove = (items: TreeItem[]) => {
+            for (let i = 0; i < items.length; i++) {
+                if (draggedIds.includes(items[i].id)) {
+                    itemsToMove.push(items.splice(i, 1)[0]);
+                    i--; // 削除されたのでインデックスを調整
+                    continue;
+                }
+                if (items[i].children) findAndRemove(items[i].children!);
+            }
+        };
+        findAndRemove(this.data.tree);
+
+        if (itemsToMove.length === 0) return;
 
         // 移動先を探して挿入
         const findAndInsert = (items: TreeItem[]) => {
@@ -858,13 +934,13 @@ class MultiTextWidget {
                 if (items[i].id === targetId) {
                     if (items[i].type === 'folder') {
                         // フォルダ内に追加
-                        if (draggedItem) {
-                            items[i].children!.push(draggedItem);
-                        }
+                        // 移動先が動かすアイテム自体、またはその子孫である場合はスキップ
+                        const filteredItems = itemsToMove.filter(m => !isDescendant(m, targetId));
+                        items[i].children!.push(...filteredItems);
                         items[i].expanded = true;
                     } else {
                         // ファイルの隣（同じ階層）に追加
-                        items.splice(i + 1, 0, draggedItem!);
+                        items.splice(i + 1, 0, ...itemsToMove);
                     }
                     return true;
                 }
@@ -875,7 +951,7 @@ class MultiTextWidget {
 
         if (!findAndInsert(this.data.tree)) {
             // 見つからない場合はルート末尾へ
-            this.data.tree.push(draggedItem);
+            this.data.tree.push(...itemsToMove);
         }
 
         this.commitData();

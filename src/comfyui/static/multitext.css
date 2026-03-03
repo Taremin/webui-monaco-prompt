@@ -115,6 +115,17 @@
     color: #ffffff !important;
 }
 
+.webui-monaco-prompt-multitext-tree-item.selected {
+    background-color: #2a2d2e !important;
+    border: 1px solid #3e3e42 !important;
+    box-sizing: border-box !important;
+}
+
+.webui-monaco-prompt-multitext-tree-item.selected.active {
+    background-color: #37373d !important;
+    border: 1px solid #007acc !important;
+}
+
 /* 整列のための固定幅コンテナ - 矢印 */
 .webui-monaco-prompt-multitext-tree-arrow {
     width: 16px !important;
