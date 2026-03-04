@@ -141,6 +141,8 @@ class WebuiMonacoPromptJsonFilter:
         import json
         import re
 
+        print("RULES:", rules)
+
         # rules はリストとして渡される（INPUT_IS_LIST=True のため）
         # 最初の要素を取得してパース。失敗した場合は例外をそのまま投げる
         rules_str = rules[0] if isinstance(rules, list) and len(rules) > 0 else (rules if isinstance(rules, str) else "[]")

@@ -364,6 +364,20 @@ const CustomNode: {[key: string]: CustomNodeWidget} = {
                 const rulesWidget = node.widgets.find((w: any) => w.name === "rules");
                 if (rulesWidget) {
                     rulesWidget.type = "hidden";
+                    
+                    // シリアライズ処理の直前に呼ばれる
+                    rulesWidget.beforeQueued = function() {
+                        const rules = node.properties.rules || [];
+                        console.log(`[FilterWidget] beforeQueued - Syncing rules objects to widget:`, rules);
+                        this.value = rules;
+                    };
+
+                    // シリアライズ時に値を供給する
+                    rulesWidget.serializeValue = function() {
+                        const rules = node.properties.rules || [];
+                        console.log(`[FilterWidget] serializeValue called - returning:`, rules);
+                        return rules;
+                    };
                 }
                 const filterWidget = new FilterWidget(node);
                 node.addDOMWidget("webui-monaco-prompt-filter", "filter", filterWidget.container, {

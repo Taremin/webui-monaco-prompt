@@ -155,8 +155,15 @@ export class FilterWidget {
 
         // widget への保存
         const widget = this._node.widgets?.find((w: any) => w.name === "rules");
-        if (widget && widget.value !== newVal) {
+        if (widget) {
+            console.log(`[FilterWidget] Saving rules to widget: ${newVal.substring(0, 50)}...`);
             widget.value = newVal;
+            // widget.callback が存在する場合、明示的に呼ぶことで確実に変更を伝播させる
+            if (widget.callback) {
+                widget.callback(newVal);
+            }
+        } else {
+            console.warn("[FilterWidget] 'rules' widget not found in node.widgets");
         }
         
         this._node.setDirtyCanvas(true);
