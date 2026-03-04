@@ -575,7 +575,7 @@ class PromptEditor extends HTMLElement {
 
     getCurrentEnableAutoCompleteToggle() {
         return Object.entries(this.getLocalContextValues<boolean>("csv"))
-            .filter(([key, value]) => value)
+            .filter(([key, value]) => value && key.includes("."))
             .map(([key, value]) => key.split(".").pop())
     }
 

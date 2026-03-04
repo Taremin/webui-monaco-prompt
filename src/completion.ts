@@ -153,7 +153,8 @@ const _addCSV = (csv: string, sourceName?: string) => {
             state.filteredTags.push(item)
         }
 
-        for (const alias of row.alias.split(",")) {
+        const aliases = row.alias ? row.alias.split(",") : []
+        for (const alias of aliases) {
             if (alias.length === 0) {
                 continue
             }

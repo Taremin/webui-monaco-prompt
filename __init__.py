@@ -112,11 +112,12 @@ class WebuiMonacoPromptMultiText:
                         traverse(children, path)
 
             traverse(tree)
+            print(f"DEBUG - MultiText process: input_len={len(text)}, output_files={len(contents)}")
             return (contents, json_list)
-        except Exception:
-            # パース失敗時は空リストを返す（あるいは入力テキストをそのまま入れるフォールバックも考えられるが、
-            # 基本的に tree 構造が期待されるため空を優先）
-            return ([], [])
+        except Exception as e:
+            print(f"DEBUG - MultiText process ERROR: {str(e)}")
+            # パース失敗時（非 JSON 入力等）は、入力テキストをそのまま一つのファイルコンテンツとして返す
+            return ([text], [json.dumps({"name": "default.txt", "type": "file", "content": text, "path": "default.txt"})])
 
 
 class WebuiMonacoPromptJsonFilter:
@@ -143,13 +144,23 @@ class WebuiMonacoPromptJsonFilter:
         # rules はリストとして渡される（INPUT_IS_LIST=True のため）
         # 最初の要素を取得してパース。失敗した場合は例外をそのまま投げる
         rules_str = rules[0] if isinstance(rules, list) and len(rules) > 0 else (rules if isinstance(rules, str) else "[]")
-        filter_rules = json.loads(rules_str)
+        try:
+            filter_rules = json.loads(rules_str)
+        except json.JSONDecodeError as e:
+            print(f"WebuiMonacoPrompt [JsonFilter]: Error decoding rules JSON: {e}")
+            print(f"Invalid JSON string: {rules_str}")
+            raise e
         
         # json_list の全要素をパースしてアイテムリストを作成
         items = []
         for j in json_list:
             if isinstance(j, str):
-                items.append(json.loads(j))
+                try:
+                    items.append(json.loads(j))
+                except json.JSONDecodeError as e:
+                    print(f"WebuiMonacoPrompt [JsonFilter]: Error decoding item JSON: {e}")
+                    print(f"Invalid JSON string: {j}")
+                    raise e
             elif isinstance(j, dict):
                 items.append(j)
             else:

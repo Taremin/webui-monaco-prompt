@@ -163,12 +163,31 @@ def test_multitext_layout_and_features(page: Page, comfyui_server, wait_for_comf
     page.wait_for_selector("text=DraggedFile")
     page.wait_for_selector("text=TargetFolder")
 
+    print("DEBUG - Starting D&D verification...")
     # Drag & Drop 実行
     drag_handle = page.locator("text=DraggedFile")
     drop_target = page.locator("text=TargetFolder")
     
-    # playwright の drag_to を使用
-    drag_handle.drag_to(drop_target)
+    # JavaScript による Drag & Drop の実行 (Playwright の drag_to ハング回避)
+    print("DEBUG - Executing D&D via JavaScript events...")
+    page.evaluate("""({sourceSelector, targetSelector}) => {
+        const source = document.evaluate(`//*[text()='${sourceSelector}']`, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+        const target = document.evaluate(`//*[text()='${targetSelector}']`, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+        
+        if (!source || !target) return {ok: false, error: 'Elements not found'};
+
+        const dataTransfer = new DataTransfer();
+        
+        source.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer }));
+        target.dispatchEvent(new DragEvent('dragenter', { bubbles: true, cancelable: true, dataTransfer }));
+        target.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer }));
+        target.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer }));
+        source.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true, dataTransfer }));
+        
+        return {ok: true};
+    }""", {"sourceSelector": "DraggedFile", "targetSelector": "TargetFolder"})
+    
+    print("DEBUG - D&D Events dispatched, waiting for stabilization...")
     page.wait_for_timeout(1000)
     
     is_moved = page.evaluate("""() => {

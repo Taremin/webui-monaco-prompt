@@ -139,6 +139,7 @@ async function loadCSV (files: string[]) {
     MonacoPrompt.clearCSV()
 
     for (const filename of files) {
+        if (!filename) continue
         const path = [dir, filename].join('/')
         const filenameParts = filename.split('.')
         if (filenameParts.length > 2) {

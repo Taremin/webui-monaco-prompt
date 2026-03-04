@@ -23,6 +23,7 @@ def test_settings():
 def wait_for_server(url, timeout=300.0):
     """サーバーがHTTPリクエストに応答するまで待機する"""
     import urllib.request
+    print(f"[{time.strftime('%H:%M:%S')}] Connecting to {url} (timeout_per_try=5s, total_timeout={timeout}s)...")
     start_time = time.time()
     while True:
         try:
@@ -32,7 +33,7 @@ def wait_for_server(url, timeout=300.0):
         except Exception:
             if time.time() - start_time > timeout:
                 return False
-            time.sleep(0.5)
+            time.sleep(1.0)
 
 @pytest.fixture(scope="session")
 def comfyui_server(test_settings):
@@ -102,7 +103,7 @@ def comfyui_server(test_settings):
             pass
 
         # サーバーが立ち上がったか確認
-        if wait_for_server(base_url, timeout=0.1):
+        if wait_for_server(base_url, timeout=2.0):
             elapsed = time.time() - start_time
             print(f"\nComfyUI server is READY! (Startup time: {elapsed:.2f} seconds)")
             is_ready = True
@@ -127,9 +128,11 @@ def comfyui_server(test_settings):
     print("\nShutting down ComfyUI server...")
     process.terminate()
     try:
-        process.wait(timeout=10)
+        process.wait(timeout=5)
     except subprocess.TimeoutExpired:
+        print("Server termination timed out, killing process...")
         process.kill()
+        process.wait()
 
 @pytest.fixture
 def wait_for_comfyui():
@@ -137,15 +140,16 @@ def wait_for_comfyui():
     from playwright.sync_api import Page
     
     def _wait(page: Page):
-        print("Waiting for basic ComfyUI elements...")
+        print(f"[{time.strftime('%H:%M:%S')}] Waiting for basic ComfyUI elements (timeout 60s)...")
         try:
             page.wait_for_selector(".comfy-menu, .comfyui-menu, .side-bar-button, #comfy-canvas-container, body", state="attached", timeout=60000)
+            print(f"[{time.strftime('%H:%M:%S')}] Basic elements attached.")
         except Exception as e:
-            print(f"Wait for selector failed: {e}")
+            print(f"[{time.strftime('%H:%M:%S')}] Wait for selector failed: {e}")
             page.screenshot(path="tests/debug_selector_fail.png")
         
         # app.graph が準備できるまで待つ (複数のパスを試行)
-        print("Waiting for window.app.graph...")
+        print(f"[{time.strftime('%H:%M:%S')}] Waiting for window.app.graph (timeout 180s)...")
         try:
             page.wait_for_function("""
                 () => {
@@ -154,16 +158,20 @@ def wait_for_comfyui():
                     return !!(app && app.graph);
                 }
             """, timeout=180000)
+            print(f"[{time.strftime('%H:%M:%S')}] window.app.graph is READY.")
         except Exception as e:
-            print(f"Wait for function failed: {e}")
+            print(f"[{time.strftime('%H:%M:%S')}] Wait for function failed: {e}")
             page.screenshot(path="tests/debug_function_fail.png")
             print(f"Current URL: {page.url}")
             raise e
         
         # ローディング画面が消えるのを待つ
+        print(f"[{time.strftime('%H:%M:%S')}] Waiting for loading overlay to hide (timeout 30s)...")
         try:
             page.wait_for_selector("#comfy-file-input-overlay", state="hidden", timeout=30000)
+            print(f"[{time.strftime('%H:%M:%S')}] Loading overlay hidden.")
         except:
+            print(f"[{time.strftime('%H:%M:%S')}] Loading overlay wait timed out or element not found (continuing anyway).")
             pass
             
     return _wait
