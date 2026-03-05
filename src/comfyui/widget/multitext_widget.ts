@@ -52,8 +52,9 @@ class MultiTextWidget {
     public data: MultiTextData = { tree: [], activeFileId: undefined, openedFileIds: [], sidebarWidth: 150 };
     private editor: any;
     private models: { [id: string]: Monaco.editor.ITextModel } = {};
-    private lastSelectedId: string | undefined = undefined;
+    private lastSelectedId: string | null = null;
     private _selectedIds: Set<string> = new Set();
+    private editingId: string | null = null; // 現在編集中のアイテムID
 
     private syncModels() {
         if (!this.editor) return;
@@ -470,20 +471,39 @@ class MultiTextWidget {
     }
 
     private renameItem(id: string, currentName: string) {
-        const newName = prompt("Enter new name:", currentName);
-        if (!newName || newName === currentName) return;
+        this.editingId = id;
+        this.renderTree();
+    }
 
+    private applyRename(id: string, newName: string) {
+        if (!newName || newName.trim() === "") {
+            this.editingId = null;
+            this.renderTree();
+            return;
+        }
+
+        let changed = false;
         const findAndRename = (items: TreeItem[]) => {
             for (const item of items) {
                 if (item.id === id) {
-                    item.name = newName;
+                    if (item.name !== newName) {
+                        item.name = newName;
+                        changed = true;
+                    }
                     return true;
                 }
                 if (item.children && findAndRename(item.children)) return true;
             }
             return false;
         };
+        
         findAndRename(this.data.tree);
+        
+        if (changed) {
+            this.commitData();
+        }
+        
+        this.editingId = null;
         this.renderTree();
     }
 
@@ -782,10 +802,50 @@ class MultiTextWidget {
             itemEl.appendChild(iconEl)
 
             // 名前（これが flex: 1 で伸びてアクションを右に追いやる）
-            const nameEl = document.createElement("span")
-            nameEl.className = "webui-monaco-prompt-multitext-tree-name"
-            nameEl.textContent = item.name
-            itemEl.appendChild(nameEl)
+            if (this.editingId === item.id) {
+                const inputEl = document.createElement("input")
+                inputEl.className = "webui-monaco-prompt-multitext-tree-name-input"
+                inputEl.value = item.name
+                inputEl.style.flex = "1"
+                inputEl.style.minWidth = "0"
+                
+                const finish = () => this.applyRename(item.id, inputEl.value);
+                const cancel = () => {
+                    this.editingId = null;
+                    this.renderTree();
+                };
+
+                inputEl.onblur = () => finish();
+                inputEl.onkeydown = (e) => {
+                    e.stopPropagation(); // ComfyUI のショートカットを防止
+                    if (e.key === "Enter") {
+                        inputEl.onblur = null;
+                        finish();
+                    } else if (e.key === "Escape") {
+                        inputEl.onblur = null;
+                        cancel();
+                    }
+                };
+                inputEl.onclick = (e) => e.stopPropagation();
+                inputEl.onmousedown = (e) => e.stopPropagation();
+                
+                itemEl.appendChild(inputEl)
+                
+                // 描画後にフォーカスを当てる
+                setTimeout(() => {
+                    inputEl.focus();
+                    inputEl.select();
+                }, 0);
+            } else {
+                const nameEl = document.createElement("span")
+                nameEl.className = "webui-monaco-prompt-multitext-tree-name"
+                nameEl.textContent = item.name
+                nameEl.ondblclick = (e) => {
+                    e.stopPropagation();
+                    this.renameItem(item.id, item.name);
+                };
+                itemEl.appendChild(nameEl)
+            }
 
             // アクションボタン（右寄せされるコンテナ）
             const actionsEl = document.createElement("span")
@@ -970,12 +1030,24 @@ class MultiTextWidget {
                     } catch (e) {}
                 }
             }
+            
+            // ノード自体の更新（再描画）を指示
             if (node.setDirtyCanvas) {
                 node.setDirtyCanvas(true, true);
             }
+
+            // グラフ全体の変更（保存対象としてのマーク）を明示的に行う
+            if (node.graph) {
+                node.graph.change();
+            }
         }
-        if ((window as any).app && (window as any).app.graph) {
-            try { (window as any).app.graph.change(); } catch(e) {}
+
+        // ComfyUI アプリケーションレベルでの変更通知 (より広範な環境に対応)
+        const app = (window as any).app || ((window as any).comfyAPI && (window as any).comfyAPI.app) || (window as any).ComfyApp;
+        if (app && app.graph) {
+            try {
+                app.graph.change();
+            } catch(e) {}
         }
     }
 

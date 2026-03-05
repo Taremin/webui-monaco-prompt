@@ -164,6 +164,22 @@
     display: block !important;
 }
 
+/* インライン編集用入力フィールド */
+.webui-monaco-prompt-multitext-tree-name-input {
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+    background-color: #3c3c3c !important;
+    color: #ffffff !important;
+    border: 1px solid #007acc !important;
+    border-radius: 2px !important;
+    outline: none !important;
+    font-size: 12px !important;
+    font-family: inherit !important;
+    height: 18px !important;
+    margin: 0 !important;
+    padding: 0 2px !important;
+}
+
 /* アクションボタンコンテナ */
 .webui-monaco-prompt-multitext-tree-actions {
     display: none !important;
