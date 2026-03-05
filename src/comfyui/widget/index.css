@@ -344,6 +344,36 @@
     color: #f48771;
 }
 
+/* Disabled Rule Style */
+.webui-monaco-prompt-filter-rule-row.disabled {
+    opacity: 0.4;
+}
+
+.webui-monaco-prompt-filter-rule-row.disabled .webui-monaco-prompt-filter-input,
+.webui-monaco-prompt-filter-rule-row.disabled .webui-monaco-prompt-filter-select {
+    background-color: #252526;
+    color: #666;
+}
+
+.webui-monaco-prompt-filter-disable-btn {
+    background-color: transparent;
+    color: #666;
+    border: none;
+    font-size: 14px;
+    cursor: pointer;
+    line-height: 1;
+    padding: 0 4px;
+    transition: color 0.1s;
+}
+
+.webui-monaco-prompt-filter-disable-btn:hover {
+    color: #cccccc;
+}
+
+.webui-monaco-prompt-filter-disable-btn.active {
+    color: #e51400;
+}
+
 .webui-monaco-prompt-filter-status-preview {
     margin-left: 10px;
     color: #888;

@@ -10,6 +10,7 @@ interface FilterRule {
     mode: 'regex' | 'include';
     not: boolean;
     value: string;
+    disabled?: boolean;
     operator?: 'AND' | 'OR';
 }
 
@@ -209,7 +210,7 @@ export class FilterWidget {
 
     private createRuleRow(rule: FilterRule, index: number): HTMLElement {
         const row = $el("div", {
-            className: `${style["webui-monaco-prompt-filter-rule-row"] || ""} webui-monaco-prompt-filter-rule-row`,
+            className: `${style["webui-monaco-prompt-filter-rule-row"] || ""} webui-monaco-prompt-filter-rule-row ${rule.disabled ? (style["disabled"] || "disabled") : ""}`,
             draggable: true,
             ondragstart: (e: DragEvent) => {
                 e.dataTransfer?.setData("text/plain", index.toString());
@@ -232,6 +233,19 @@ export class FilterWidget {
             className: `${style["webui-monaco-prompt-filter-handle"] || ""} webui-monaco-prompt-filter-handle`,
             textContent: "::" 
         }));
+
+        // 無効化トグル
+        const disableBtn = $el("button", {
+            className: `${style["webui-monaco-prompt-filter-disable-btn"] || ""} webui-monaco-prompt-filter-disable-btn ${rule.disabled ? (style["active"] || "active") : ""}`,
+            textContent: "⏻", // Power icon or similar
+            title: rule.disabled ? "Enable rule" : "Disable rule",
+            onclick: () => {
+                rule.disabled = !rule.disabled;
+                this.saveRules();
+                this.render();
+            }
+        });
+        row.appendChild(disableBtn);
 
         // 演算子
         if (index > 0) {
@@ -321,6 +335,7 @@ export class FilterWidget {
             mode: 'include',
             not: false,
             value: '',
+            disabled: false,
             operator: 'AND'
         };
         this.rules.push(newRule);

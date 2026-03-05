@@ -175,6 +175,15 @@ class WebuiMonacoPromptJsonFilter:
             jsons = [json.dumps(item) for item in items]
             return (contents, jsons)
 
+        # フィルタリング対象の有効なルールのみを抽出
+        active_rules = [r for r in filter_rules if not r.get("disabled", False)]
+        
+        if not active_rules:
+            # 有効なルールがない場合は全アイテムを返す
+            contents = [item.get("content", "") for item in items]
+            jsons = [json.dumps(item) for item in items]
+            return (contents, jsons)
+
         filtered_items = []
         
         for item in items:
@@ -199,15 +208,15 @@ class WebuiMonacoPromptJsonFilter:
                 
                 return not match if is_not else match
 
-            # 最初のルール
-            first_rule = filter_rules[0]
+            # 最初の有効なルール
+            first_rule = active_rules[0]
             target = first_rule.get("target", "name")
             target_val = item_name if target == "name" else (item_path if target == "path" else item_content)
             result = match_rule(target_val, first_rule)
 
-            # 2番目以降のルール（AND/OR結合）
-            for i in range(1, len(filter_rules)):
-                rule = filter_rules[i]
+            # 2番目以降の有効なルール（AND/OR結合）
+            for i in range(1, len(active_rules)):
+                rule = active_rules[i]
                 op = rule.get("operator", "AND")
                 target = rule.get("target", "name")
                 target_val = item_name if target == "name" else (item_path if target == "path" else item_content)
