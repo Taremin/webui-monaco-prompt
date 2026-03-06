@@ -265,15 +265,24 @@ class FindWidget {
             const app = this._app
             const webuiMonacoPromptId = nodeFindMatch.instanceId
             const node = link[webuiMonacoPromptId].node
-            const filename = nodeFindMatch.filename || ""
+            const multitext = node.multitext_widget
+            let displayPath = nodeFindMatch.filename || ""
+            if (multitext && nodeFindMatch.extraModel) {
+                const item = multitext.getItemByModel(nodeFindMatch.extraModel.model)
+                if (item) {
+                    displayPath = multitext.getItemPath(item.id)
+                }
+            }
 
             const trEl = document.createElement("tr")
             trEl.dataset.nodeId = node.id
             trEl.dataset.instanceId = "" + webuiMonacoPromptId
             trEl.dataset.startLine = "" + nodeFindMatch.match.range.startLineNumber
             trEl.dataset.startCol = "" + nodeFindMatch.match.range.startColumn
+            trEl.dataset.filename = nodeFindMatch.filename || ""
+            trEl.dataset.modelId = nodeFindMatch.extraModel?.id || ""
 
-            const displayTitle = filename ? `${node.title} (${filename})` : node.title
+            const displayTitle = displayPath ? `${node.title} (${displayPath})` : node.title
 
             for (const { value, cssClass, elementStyle } of [
                 {
@@ -406,6 +415,8 @@ const setTooltip = (targetElement: HTMLElement) => {
         const monaco = instance.monaco
         const line = +(targetElement.dataset.startLine!)
         const range = TooltipSurroundingLines
+        const filename = targetElement.dataset.filename
+        const modelId = targetElement.dataset.modelId
 
         if (monaco.instanceStyle) {
             tooltipStyle.textContent = `@scope {
@@ -416,7 +427,9 @@ const setTooltip = (targetElement: HTMLElement) => {
             }`
         }
 
-        const contentElement = monaco.getLinesTable(Math.max(1, line - range), line, line + range)
+        const extraModel = modelId ? monaco.extraModels?.find((e: any) => e.id === modelId) : monaco.extraModels?.find((e: any) => e.filename === filename)
+        const targetModel = extraModel?.model
+        const contentElement = monaco.getLinesTable(Math.max(1, line - range), line, line + range, targetModel)
         tooltipBody.appendChild(contentElement)
 
         tooltip.style.display = "block"

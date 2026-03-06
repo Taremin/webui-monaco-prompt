@@ -1590,13 +1590,14 @@ class PromptEditor extends HTMLElement {
         this.onChangeAutoCompleteToggleBeforeSync(callback)
     }
 
-    getLinesTable(start: number, active: number, end: number) {
-        const lines = this.elements.main!.querySelector('.view-lines')! as HTMLDivElement
-        const model = this.monaco.getModel()
-        if (!model) {
+    getLinesTable(start: number, active: number, end: number, model?: monaco.editor.ITextModel) {
+        const targetModel = model || this.monaco.getModel()
+        if (!targetModel) {
             throw new Error("Model not found in Monaco Editor")
         }
-        const lineCount = Math.min(end, model.getLineCount())
+        const currentModel = this.monaco.getModel()
+        const isCurrentModel = targetModel === currentModel
+        const lineCount = Math.min(end, targetModel.getLineCount())
         const container = document.createElement("div")
         const styleContainer = document.createElement("style")
         const table = document.createElement("table")
@@ -1617,22 +1618,35 @@ class PromptEditor extends HTMLElement {
             lineContentContainer.classList.add(style["find-line-content"])
 
             // monaco.editor.colorize* は Decoration の処理をしないため ViewLine を元に自力でHTMLを生成する必要がある
-            const lineDecorations = model.getLineDecorations(currentLineNum)
+            const lineDecorations = targetModel.getLineDecorations(currentLineNum)
 
-            const view = this.monaco._modelData.view
-            const partialViewportData = Object.assign(view._context.viewLayout.getLinesViewportData(), {
-                startLineNumber: currentLineNum,
-                endLineNumber: currentLineNum+1,
-            })
-            const viewportData = new ViewportData(view._selections, partialViewportData, view._context.viewLayout.getWhitespaceViewportData(), view._context.viewModel)
-
-            const lineData = viewportData.getViewLineRenderingData(currentLineNum)
             const inlineDecorations = lineDecorations.map(lineDecoration => new InlineDecoration(
                 lineDecoration.range,
                 lineDecoration.options.inlineClassName,
                 lineDecoration.options.inlineClassNameAffectsLetterSpacing ? InlineDecorationType.RegularAffectingLetterSpacing : InlineDecorationType.Regular
             ))
-            const lineContent = model.getLineContent(currentLineNum)
+            const lineContent = targetModel.getLineContent(currentLineNum)
+
+            let lineData: any
+            if (isCurrentModel) {
+                const view = this.monaco._modelData.view
+                const partialViewportData = Object.assign(view._context.viewLayout.getLinesViewportData(), {
+                    startLineNumber: currentLineNum,
+                    endLineNumber: currentLineNum+1,
+                })
+                const viewportData = new ViewportData(view._selections, partialViewportData, view._context.viewLayout.getWhitespaceViewportData(), view._context.viewModel)
+                lineData = viewportData.getViewLineRenderingData(currentLineNum)
+            } else {
+                // 非アクティブなモデルの場合、ViewDataを自前で構築するかデフォルト値を使用する
+                lineData = {
+                    continuesWithWrappedLine: false,
+                    isBasicASCII: /^[\x00-\x7F]*$/.test(lineContent),
+                    containsRTL: false,
+                    tabSize: targetModel.getOptions().tabSize,
+                    startVisibleColumn: 0,
+                }
+            }
+
             const actualInlineDecorations = LineDecoration.filter(inlineDecorations, currentLineNum, 1, lineContent.length + 1);
             const renderLineInput = new RenderLineInput(
                 options.useMonospaceOptimizations,
@@ -1646,7 +1660,7 @@ class PromptEditor extends HTMLElement {
                 0,
                 // ITextModel.tokenization はドキュメントに記載されていない
                 // see: https://github.com/microsoft/vscode/blob/12c1d4fb1753aeda4b55de73b8a8ee58c607d780/src/vs/editor/common/model/textModel.ts#L286
-                (model as any).tokenization.getLineTokens(currentLineNum),
+                (targetModel as any).tokenization.getLineTokens(currentLineNum),
                 actualInlineDecorations,
                 lineData.tabSize,
                 lineData.startVisibleColumn,

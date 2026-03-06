@@ -17,6 +17,7 @@ interface TreeItem {
     content?: string; // type === 'file' の場合のみ
     children?: TreeItem[]; // type === 'folder' の場合のみ
     expanded?: boolean;
+    parent?: TreeItem; // 実行時の親参照（非永続）
 }
 
 interface MultiTextData {
@@ -75,11 +76,13 @@ class MultiTextWidget {
                             this.commitData();
                         });
                         this.editor.extraModels.push({
+                            id: item.id,
                             filename: item.name,
                             model: this.models[item.id],
                             onActivate: () => {
                                 this.openFile(item.id);
-                            }
+                            },
+                            decorationIds: []
                         });
                     } else {
                         if (this.models[item.id].getValue() !== (item.content || "")) {
@@ -368,7 +371,10 @@ class MultiTextWidget {
             if (originalOnSerialize) originalOnSerialize.apply(this, arguments);
             const targetWidget = node.widgets.find((w:any) => w.name === "text");
             if (targetWidget) {
-                targetWidget.value = JSON.stringify(self.data);
+                targetWidget.value = JSON.stringify(self.data, (key, value) => {
+                    if (key === 'parent') return undefined;
+                    return value;
+                });
             }
         };
 
@@ -377,6 +383,13 @@ class MultiTextWidget {
 
     private loadDataFromWidget(info: any) {
         const targetWidget = (this as any)._node?.widgets?.find((w:any) => w.name === "text");
+        const setupParentRefs = (items: TreeItem[], parent?: TreeItem) => {
+            for (const item of items) {
+                item.parent = parent;
+                if (item.children) setupParentRefs(item.children, item);
+            }
+        };
+
         if (targetWidget && targetWidget.value) {
             try {
                 let parsed = JSON.parse(targetWidget.value);
@@ -396,6 +409,7 @@ class MultiTextWidget {
                     if (!this.data.openedFileIds) {
                         this.data.openedFileIds = this.data.activeFileId ? [this.data.activeFileId] : [];
                     }
+                    setupParentRefs(this.data.tree);
                     this.renderTree();
                     this.renderTabs();
                     if (this.data.activeFileId) {
@@ -417,6 +431,7 @@ class MultiTextWidget {
                     firstFile.content = targetWidget.value; // パース失敗時は元の文字列を入れる
                     this.openFile(firstFile.id);
                 }
+                setupParentRefs(this.data.tree);
             }
         } else {
             this.data = { tree: [], activeFileId: undefined, openedFileIds: [] };
@@ -426,6 +441,7 @@ class MultiTextWidget {
             if (firstFile) {
                 this.openFile(firstFile.id);
             }
+            setupParentRefs(this.data.tree);
         }
     }
 
@@ -461,6 +477,7 @@ class MultiTextWidget {
             const findAndAdd = (items: TreeItem[]) => {
                 for (const item of items) {
                     if (item.id === parentId && item.children) {
+                        newItem.parent = item;
                         item.children.push(newItem);
                         return true;
                     }
@@ -698,7 +715,8 @@ class MultiTextWidget {
             const activeTab = this.elements.tabsContainer?.querySelector(`.${getStyle('webui-monaco-prompt-multitext-tab')}.${getStyle('active')}`) as HTMLElement;
             if (activeTab) {
                 // block: 'nearest' により、すでに表示されている場合はスクロールしない
-                activeTab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+                // inline: 'center' により、中央にくるようにスクロール
+                activeTab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
             }
         }, 100); // DOMレンダリング後の実行を確実にするため少し長めに設定
     }
@@ -1004,10 +1022,13 @@ class MultiTextWidget {
                         // フォルダ内に追加
                         // 移動先が動かすアイテム自体、またはその子孫である場合はスキップ
                         const filteredItems = itemsToMove.filter(m => !isDescendant(m, targetId));
+                        filteredItems.forEach(m => m.parent = items[i]);
                         items[i].children!.push(...filteredItems);
                         items[i].expanded = true;
                     } else {
                         // ファイルの隣（同じ階層）に追加
+                        const parent = items[i].parent;
+                        itemsToMove.forEach(m => m.parent = parent);
                         items.splice(i + 1, 0, ...itemsToMove);
                     }
                     return true;
@@ -1019,6 +1040,7 @@ class MultiTextWidget {
 
         if (!findAndInsert(this.data.tree)) {
             // 見つからない場合はルート末尾へ
+            itemsToMove.forEach(m => m.parent = undefined);
             this.data.tree.push(...itemsToMove);
         }
 
@@ -1031,7 +1053,10 @@ class MultiTextWidget {
         if (node) {
             const targetWidget = node.widgets?.find((w:any) => w.name === "text");
             if (targetWidget) {
-                targetWidget.value = JSON.stringify(this.data);
+                targetWidget.value = JSON.stringify(this.data, (key, value) => {
+                    if (key === 'parent') return undefined; // 永続化時は親参照を除外
+                    return value;
+                });
                 if (targetWidget.callback) {
                     try {
                         targetWidget.callback(targetWidget.value, undefined, node, undefined);
@@ -1058,6 +1083,43 @@ class MultiTextWidget {
             } catch(e) {}
         }
     }
+    
+    public getItemPath(id: string): string {
+        const parts: string[] = [];
+        const findAndTrace = (items: TreeItem[]): TreeItem | undefined => {
+            for (const item of items) {
+                if (item.id === id) return item;
+                if (item.children) {
+                    const result = findAndTrace(item.children);
+                    if (result) return result;
+                }
+            }
+        };
+
+        let current = findAndTrace(this.data.tree);
+        while (current) {
+            parts.unshift(current.name);
+            current = current.parent;
+        }
+        return parts.join("/");
+    }
+
+    public getItemByModel(model: Monaco.editor.ITextModel): TreeItem | undefined {
+        for (const id in this.models) {
+            if (this.models[id] === model) {
+                const findItem = (items: TreeItem[]): TreeItem | undefined => {
+                    for (const item of items) {
+                        if (item.id === id) return item;
+                        if (item.children) {
+                            const result = findItem(item.children);
+                            if (result) return result;
+                        }
+                    }
+                };
+                return findItem(this.data.tree);
+            }
+        }
+    }
 
     private get editorInstance(): any {
         return this.editor
@@ -1076,6 +1138,10 @@ class MultiTextWidget {
             }
         }
         for (const id of Object.keys(this.models)) {
+            const extra = (this.editor as any).extraModels?.find((e: any) => e.model === this.models[id])
+            if (extra && extra.decorationIds) {
+                extra.decorationIds = this.models[id].deltaDecorations(extra.decorationIds, []);
+            }
             this.models[id].dispose()
         }
         this.models = {}

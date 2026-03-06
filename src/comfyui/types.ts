@@ -2,14 +2,16 @@ import * as WebuiMonacoPrompt from "../index" // for typing
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.api'
 
 interface ExtraModel {
+    id?: string
     filename: string
     model: monaco.editor.ITextModel
     onActivate: () => void
+    decorationIds: string[]
 }
 
 type PromptEditor = WebuiMonacoPrompt.PromptEditor & {
     instanceStyle?: HTMLStyleElement
-    findDecorations?: monaco.editor.IEditorDecorationsCollection
+    findDecorationIds?: string[]
     extraModels?: ExtraModel[]
 }
 

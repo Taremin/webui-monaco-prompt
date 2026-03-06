@@ -89,6 +89,11 @@ function findInstance(instance: PromptEditor, searchString: string, isRegex: boo
     // メインモデルの検索
     const mainModel = editor.getModel()
     if (mainModel) {
+        let mainExtraModel: any = undefined
+        if (instance.extraModels) {
+            mainExtraModel = instance.extraModels.find(extra => extra.model === mainModel)
+        }
+
         const matches = mainModel.findMatches(
             searchString,
             false,
@@ -100,14 +105,14 @@ function findInstance(instance: PromptEditor, searchString: string, isRegex: boo
         Array.prototype.push.apply(allMatches, matches.map(match => ({
             match,
             instanceId: instance.getInstanceId(),
+            filename: mainExtraModel?.filename,
+            extraModel: mainExtraModel,
         })))
 
         // デコレーション（メインモデルのみ）
         if (decoration) {
-            if (instance.findDecorations) {
-                instance.findDecorations.clear()
-            }
-            instance.findDecorations = editor.createDecorationsCollection(
+            instance.findDecorationIds = mainModel.deltaDecorations(
+                instance.findDecorationIds || [],
                 matches.map((findMatch) => {
                     return {
                         range: findMatch.range,
@@ -140,6 +145,21 @@ function findInstance(instance: PromptEditor, searchString: string, isRegex: boo
                 filename: extra.filename,
                 extraModel: extra,
             })))
+
+            // 追加モデルのデコレーション設定
+            if (decoration) {
+                extra.decorationIds = extra.model.deltaDecorations(
+                    extra.decorationIds || [],
+                    matches.map((findMatch) => {
+                        return {
+                            range: findMatch.range,
+                            options: {
+                                inlineClassName: getThemeClassName()
+                            },
+                        }
+                    })
+                )
+            }
         }
     }
 
