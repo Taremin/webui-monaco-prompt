@@ -7,7 +7,7 @@
 
 .main {
     flex-grow: 1;
-    overflow-y: auto;
+    overflow: visible;
 }
 
 .header {
@@ -24,8 +24,7 @@
     height: 100%;
 }
 
-.status {
-}
+.status {}
 
 .ms-choice {
     height: 100%;
@@ -35,6 +34,7 @@
 .find-lines-table {
     border-spacing: 0;
 }
+
 .find-line-number {
     text-align: right;
     vertical-align: text-top;

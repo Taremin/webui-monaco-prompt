@@ -193,6 +193,7 @@ class MultiTextWidget {
         editorWrapper.style.display = "flex"
         editorWrapper.style.flexDirection = "column"
         editorWrapper.style.minWidth = "0"
+        editorWrapper.style.overflow = "visible"
 
         const tabsContainer = this.elements.tabsContainer = document.createElement("div")
         tabsContainer.addEventListener('wheel', (e) => {
@@ -204,14 +205,15 @@ class MultiTextWidget {
         tabsContainer.style.background = "#252526"
         tabsContainer.style.display = "flex"
         tabsContainer.style.alignItems = "center"
-        tabsContainer.style.overflowX = "auto"
-        tabsContainer.style.overflowY = "hidden"
+        tabsContainer.style.overflowX = "visible"
+        tabsContainer.style.overflowY = "visible"
         tabsContainer.style.borderBottom = "1px solid #333"
         editorWrapper.appendChild(tabsContainer)
 
         const editorContainer = this.elements.editorContainer = document.createElement("div")
         editorContainer.className = getStyle("webui-monaco-prompt-multitext-editor-container")
         editorContainer.style.flex = "1"
+        editorContainer.style.overflow = "visible"
         editorContainer.style.position = "relative"
         editorContainer.style.width = "100%"
         editorContainer.style.minHeight = "50px" // 最小限の高さを確保しつつ、リサイズを妨げない
@@ -317,7 +319,6 @@ class MultiTextWidget {
                     const targetWidth = Math.max(50, n.size[0] - 20);
                     this.element.style.setProperty("width", `${targetWidth}px`, "important");
                     containerEl.style.setProperty("width", `${targetWidth}px`, "important");
-                    containerEl.style.setProperty("overflow", "hidden", "important");
 
                     // サイドバーの幅がノード幅の80%を超えないように制限
                     const maxSidebarWidth = Math.max(50, targetWidth * 0.8);
