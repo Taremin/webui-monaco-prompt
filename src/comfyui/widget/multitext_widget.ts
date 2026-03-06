@@ -264,7 +264,7 @@ class MultiTextWidget {
         containerEl.appendChild(editorWrapper)
 
         const domWidget = node.addDOMWidget("webui-monaco-prompt-multitext", "webui-monaco-prompt-multitext", containerEl, {
-            hideOnZoom: false,
+            hideOnZoom: true,
             serialize: false,
         })
 
@@ -336,17 +336,16 @@ class MultiTextWidget {
         }
 
         // ノードサイズに合わせて全体を占有させる（空白除去の最重要ポイント）
+        (domWidget as any)._node = node;
         ((domWidget as any).computeSize as any) = function(this: any, width: number) {
-            // タイトルバー(36px) + タブ(35px) + 出力ピン(1つ20px) + 最小エディタ(50px)
-            const node = (this as any)._node;
-            const outputHeight = node?.outputs ? node.outputs.length * 20 : 0;
-            const minHeight = 36 + 35 + outputHeight + 50;
+            const n = (this as any)._node || node;
+            if (!n || !n.size) return [width, 50];
             
-            // 最小幅 = サイドバー幅 + エディタ最小幅(50px)
-            const sidebarWidth = self.data.sidebarWidth || 150;
-            const minWidth = Math.max(width, sidebarWidth + 50);
+            // タイトルバー(36px)と出力ピンエリア(1スロット20px)を考慮して高さを計算
+            const outputHeight = n.outputs ? n.outputs.length * 20 : 0;
+            const targetHeight = Math.max(50, n.size[1] - 36 - outputHeight);
             
-            return [minWidth, minHeight];
+            return [width, targetHeight];
         };
 
         // 既存の text/tree_data ウィジェット（完全無力化でノード高さを汚染させない）

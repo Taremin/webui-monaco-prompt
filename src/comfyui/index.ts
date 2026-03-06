@@ -380,16 +380,20 @@ const CustomNode: {[key: string]: CustomNodeWidget} = {
                     };
                 }
                 const filterWidget = new FilterWidget(node);
-                node.addDOMWidget("webui-monaco-prompt-filter", "filter", filterWidget.container, {
-                    hideOnZoom: false,
+                const domWidget = node.addDOMWidget("webui-monaco-prompt-filter", "filter", filterWidget.container, {
+                    hideOnZoom: true,
                     serialize: false,
                 });
                 
                 // サイズ計算のフック
-                const widget = node.widgets.find((w: any) => w.name === "filter");
-                if (widget) {
-                    widget.computeSize = () => [300, 200]; // 仮のサイズ
-                }
+                (domWidget as any)._node = node;
+                (domWidget as any).computeSize = function(this: any, width: number) {
+                    const n = this._node || node;
+                    if (!n || !n.size) return [width, 200];
+                    const outputHeight = n.outputs ? n.outputs.length * 20 : 0;
+                    const targetHeight = Math.max(50, n.size[1] - 36 - outputHeight);
+                    return [width, targetHeight];
+                };
             }
         } as any,
     },
