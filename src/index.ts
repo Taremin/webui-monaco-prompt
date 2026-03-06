@@ -428,7 +428,7 @@ class PromptEditor extends HTMLElement {
                     },
                     commandOptions: {
                         toggled: {
-                            condition: ContextKeyExpr.deserialize(`${this.createContextKey("fontSize")} == ${size}`)
+                            condition: ContextKeyExpr.deserialize(`${this.createContextKey("fontSize")} == '${size}'`)
                         }
                     }
                 }
@@ -472,7 +472,7 @@ class PromptEditor extends HTMLElement {
                     },
                     commandOptions: {
                         toggled: {
-                            condition: ContextKeyExpr.deserialize(`${this.createContextKey("language")} == ${lang.id}`)
+                            condition: ContextKeyExpr.deserialize(`${this.createContextKey("language")} == '${lang.id}'`)
                         }
                     }
                 }
@@ -493,7 +493,7 @@ class PromptEditor extends HTMLElement {
                     },
                     commandOptions: {
                         toggled: {
-                            condition: ContextKeyExpr.deserialize(`${this.createContextKey("keybinding")} == ${value}`)
+                            condition: ContextKeyExpr.deserialize(`${this.createContextKey("keybinding")} == '${value}'`)
                         }
                     }
                 }
@@ -514,7 +514,7 @@ class PromptEditor extends HTMLElement {
                     },
                     commandOptions: {
                         toggled: {
-                            condition: ContextKeyExpr.deserialize(`${this.createContextKey("theme")} == ${value}`)
+                            condition: ContextKeyExpr.deserialize(`${this.createContextKey("theme")} == '${value}'`)
                         }
                     }
                 }
@@ -680,6 +680,23 @@ class PromptEditor extends HTMLElement {
         const contextKeyService = this.monaco._contextKeyService 
         const contextValueContainer = contextKeyService.getContextValuesContainer(contextKeyService._myContextId)
         contextValueContainer.setValue(key, value)
+    }
+
+    updateContext() {
+        const model = this.monaco.getModel()
+        if (model) {
+            this.setContext(this.createContextKey("language"), model.getLanguageId())
+        }
+        this.setContext(this.createContextKey("theme"), this.theme)
+        this.setContext(this.createContextKey("fontSize"), this.monaco.getOption(monaco.editor.EditorOption.fontSize))
+        this.setContext(this.createContextKey("fontFamily"), this.monaco.getOption(monaco.editor.EditorOption.fontFamily))
+        this.setContext(this.createContextKey("showHeader"), this.showHeader)
+        this.setContext(this.createContextKey("lineNumbers"), this.monaco.getOption(monaco.editor.EditorOption.lineNumbers).renderType !== monaco.editor.RenderLineNumbersType.Off)
+        this.setContext(this.createContextKey("minimap"), this.monaco.getOption(monaco.editor.EditorOption.minimap).enabled)
+        this.setContext(this.createContextKey("replaceUnderscore"), getReplaceUnderscore())
+        this.setContext(this.createContextKey("keybinding"), this.mode)
+
+        this.updateAutoCompleteHeaderToggle()
     }
 
     getContext(key:string) {

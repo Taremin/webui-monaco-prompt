@@ -70,7 +70,10 @@ class MultiTextWidget {
                 if (item.type === 'file') {
                     existingIds.add(item.id);
                     if (!this.models[item.id]) {
-                        this.models[item.id] = Monaco.editor.createModel(item.content || "", "comfy-prompt");
+                        // 設定から言語を取得し、取得できない場合は "comfy-prompt" にフォールバック
+                        const appRef = (window as any).app || ((window as any).comfyAPI && (window as any).comfyAPI.app) || (window as any).ComfyApp;
+                        const configuredLanguage = appRef?.ui?.settings?.getSettingValue?.("WebuiMonacoPrompt.Language") || "comfy-prompt";
+                        this.models[item.id] = Monaco.editor.createModel(item.content || "", configuredLanguage);
                         this.models[item.id].onDidChangeContent(() => {
                             item.content = this.models[item.id].getValue();
                             this.commitData();
@@ -638,6 +641,7 @@ class MultiTextWidget {
             this.syncModels();
             if (this.models[id]) {
                 this.editor.monaco.setModel(this.models[id]);
+                this.editor.updateContext();
             }
         }
     }

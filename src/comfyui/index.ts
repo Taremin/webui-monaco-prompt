@@ -599,6 +599,11 @@ const register = (app: any) => {
                     }
                 },
             });
+
+            // setup完了に伴い、すでに追加されたエディタへ設定を遅延適用する
+            WebuiMonacoPrompt.runAllInstances((instance) => {
+                updateInstanceSettings(instance);
+            });
         },
         nodeCreated(node:any, app: any) {
             // 既存ノードの widget 置き換え(textarea)
