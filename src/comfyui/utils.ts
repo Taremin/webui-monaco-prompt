@@ -1,5 +1,6 @@
 import * as WebuiMonacoPrompt from "../index"
 import { PromptEditor, NodeFindMatch } from "./types"
+import { ui } from "./api"
 // @ts-ignore
 import * as codicon from "monaco-editor/esm/vs/base/common/codiconsUtil"
 
@@ -214,6 +215,16 @@ const guid = () => {
     });
 }
 
+const $el = (...args: any[]) => ui.$el(...args)
+
+const getStyle = (styleObj: any, name: string) => {
+    const s = styleObj[name];
+    if (s === undefined) {
+        throw new Error(`[WebuiMonacoPrompt] Style not found: ${name}`);
+    }
+    return s;
+}
+
 export {
     loadCodicon,
     loadStyle,
@@ -224,4 +235,6 @@ export {
     setActiveNode,
     applyCommonEditorSetup,
     guid,
+    $el,
+    getStyle,
 }

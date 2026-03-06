@@ -6,7 +6,8 @@ import * as Monaco from 'monaco-editor/esm/vs/editor/editor.api' // for typing
 
 import {default as style} from "./index.css"
 
-const $el = (...args: any[]) => ui.$el(...args)
+const $el = utils.$el
+const getStyle = (name: string) => utils.getStyle(style, name)
 const TooltipSurroundingLines = 2
 const TooltipDistance = 20
 
@@ -156,7 +157,7 @@ class FindWidget {
     initializeContainer() {
         // custom widget
         const containerEl = this.elements.container = document.createElement("div")
-        containerEl.classList.add(style["webui-monaco-prompt-container"])
+        containerEl.classList.add(getStyle("webui-monaco-prompt-container"))
 
         this.createWidgetHeader()
         this.createWidgetBody()
@@ -169,17 +170,17 @@ class FindWidget {
     }
     createWidgetBody() {
         const tableContainerEl = this.elements.tableContainer = document.createElement("div")
-        tableContainerEl.classList.add(style["webui-monaco-prompt-table-container"])
+        tableContainerEl.classList.add(getStyle("webui-monaco-prompt-table-container"))
 
         const tableEl = this.elements.table = document.createElement("table")
-        tableEl.classList.add(style["webui-monaco-prompt-table"])
+        tableEl.classList.add(getStyle("webui-monaco-prompt-table"))
 
         const theadEl = this.elements.thead =  document.createElement("thead")
         tableEl.appendChild(theadEl)
         theadEl.innerHTML = `
-            <th class="${style["webui-monaco-prompt-td"]}">ID</th>
-            <th class="${style["webui-monaco-prompt-td-expand"]}">Title</th>
-            <th class="${style["webui-monaco-prompt-td"]}">Pos</th>
+            <th class="${getStyle("webui-monaco-prompt-td")}">ID</th>
+            <th class="${getStyle("webui-monaco-prompt-td-expand")}">Title</th>
+            <th class="${getStyle("webui-monaco-prompt-td")}">Pos</th>
         `
         
         const tbodyEl = this.elements.tbody = document.createElement("tbody")
@@ -193,30 +194,30 @@ class FindWidget {
 
     createWidgetHeader() {
         const headEl = this.elements.header = document.createElement("div")
-        headEl.classList.add(style["webui-monaco-prompt-header"])
+        headEl.classList.add(getStyle("webui-monaco-prompt-header"))
 
         const inputContainerEl = this.elements.inputContainer = document.createElement("div")
-        inputContainerEl.classList.add(style["webui-monaco-prompt-input"])
+        inputContainerEl.classList.add(getStyle("webui-monaco-prompt-input"))
 
         const inputEl = this.elements.input = document.createElement("input")
         inputEl.type = "text"
         inputEl.placeholder = "Find"
-        inputEl.classList.add(style["webui-monaco-prompt-input-text"])
+        inputEl.classList.add(getStyle("webui-monaco-prompt-input-text"))
         inputEl.addEventListener("keydown", (ev) => {
             return this.findInputHandler(ev)
         })
         inputContainerEl.appendChild(inputEl)
         
         const controlsEl = document.createElement("div")
-        controlsEl.classList.add("controls", style["webui-monaco-prompt-control"])
+        controlsEl.classList.add("controls", getStyle("webui-monaco-prompt-control"))
         controlsEl.innerHTML = `
-            <div class="monaco-custom-toggle codicon codicon-case-sensitive ${style["webui-monaco-prompt-toggle"]}" style="color: inherit;"></div>
-            <div class="monaco-custom-toggle codicon codicon-whole-word ${style["webui-monaco-prompt-toggle"]}" style="color: inherit;"></div>
-            <div class="monaco-custom-toggle codicon codicon-regex ${style["webui-monaco-prompt-toggle"]}" style="color: inherit;"></div>
+            <div class="monaco-custom-toggle codicon codicon-case-sensitive ${getStyle("webui-monaco-prompt-toggle")}" style="color: inherit;"></div>
+            <div class="monaco-custom-toggle codicon codicon-whole-word ${getStyle("webui-monaco-prompt-toggle")}" style="color: inherit;"></div>
+            <div class="monaco-custom-toggle codicon codicon-regex ${getStyle("webui-monaco-prompt-toggle")}" style="color: inherit;"></div>
         `
-        controlsEl.querySelectorAll<HTMLElement>("." + style["webui-monaco-prompt-toggle"]).forEach((element: HTMLElement) => {
+        controlsEl.querySelectorAll<HTMLElement>("." + getStyle("webui-monaco-prompt-toggle")).forEach((element: HTMLElement) => {
             element.addEventListener("click", (ev) => {
-                const cssClass = style["webui-monaco-prompt-toggle-checked"]
+                const cssClass = getStyle("webui-monaco-prompt-toggle-checked")
                 element.classList.toggle(cssClass)
                 element.dataset.checked = element.classList.contains(cssClass) ? "on" : "off"
             })
@@ -274,20 +275,20 @@ class FindWidget {
 
             const displayTitle = filename ? `${node.title} (${filename})` : node.title
 
-            for (const {cssClass, value, elementStyle} of [
+            for (const { value, cssClass, elementStyle } of [
                 {
-                    cssClass: style["webui-monaco-prompt-td"],
                     value: node.id,
-                    elementStyle: {textAlign: "right"}, 
+                    cssClass: getStyle("webui-monaco-prompt-td"),
+                    elementStyle: { textAlign: "right" },
                 },
                 {
-                    cssClass: style["webui-monaco-prompt-td-expand"],
-                    value: displayTitle
+                    value: displayTitle,
+                    cssClass: getStyle("webui-monaco-prompt-td-expand"),
                 },
                 {
-                    cssClass: style["webui-monaco-prompt-td"],
                     value: `Ln ${nodeFindMatch.match.range.startLineNumber}, Col ${nodeFindMatch.match.range.startColumn}`,
-                    elementStyle: {textAlign: "right"}, 
+                    cssClass: getStyle("webui-monaco-prompt-td"),
+                    elementStyle: { textAlign: "right" },
                 },
             ]) {
                 const tdEl = document.createElement("td")

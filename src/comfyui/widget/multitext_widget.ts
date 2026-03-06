@@ -4,6 +4,9 @@ import { link } from "../link"
 import * as Monaco from 'monaco-editor/esm/vs/editor/editor.api'
 import * as WebuiMonacoPrompt from "../../index"
 import { WebuiMonacoPromptAdapter, PromptEditor, ExtraModel } from "../types"
+import { default as style } from "./index.css"
+
+const getStyle = (name: string) => utils.getStyle(style, name)
 
 // 今回のノードの内部データ構造（WorkflowにJSON化して保存）
 // ツリー構造のアイテム定義
@@ -144,7 +147,7 @@ class MultiTextWidget {
 
         // コンテナの構築
         const containerEl = this.elements.container = document.createElement("div")
-        containerEl.className = "webui-monaco-prompt-multitext-container"
+        containerEl.className = getStyle("webui-monaco-prompt-multitext-container")
         containerEl.style.display = "flex"
         containerEl.style.flexDirection = "row"
         containerEl.style.width = "100%"
@@ -157,29 +160,23 @@ class MultiTextWidget {
 
         // サイドバー
         const sidebarEl = this.elements.sidebar = document.createElement("div")
-        sidebarEl.className = "webui-monaco-prompt-multitext-sidebar"
+        sidebarEl.className = getStyle("webui-monaco-prompt-multitext-sidebar")
         
         const toolbar = document.createElement("div")
-        toolbar.className = "webui-monaco-prompt-multitext-sidebar-toolbar"
+        toolbar.className = getStyle("webui-monaco-prompt-multitext-sidebar-toolbar")
 
         const addFileBtn = this.elements.addFileBtn = document.createElement("button")
-        addFileBtn.className = "webui-monaco-prompt-multitext-toolbar-button"
-        addFileBtn.innerHTML = MultiTextWidget.ICONS.addFile
-        addFileBtn.title = "New File"
-        addFileBtn.onclick = () => this.addItem('file')
-        toolbar.appendChild(addFileBtn)
-
-        const addFolderBtn = this.elements.addFolderBtn = document.createElement("button")
-        addFolderBtn.className = "webui-monaco-prompt-multitext-toolbar-button"
-        addFolderBtn.innerHTML = MultiTextWidget.ICONS.addFolder
-        addFolderBtn.title = "New Folder"
-        addFolderBtn.onclick = () => this.addItem('folder')
-        toolbar.appendChild(addFolderBtn)
-
+        toolbar.className = getStyle("webui-monaco-prompt-multitext-sidebar-toolbar")
         sidebarEl.appendChild(toolbar)
 
+        this.elements.addFileBtn = this.createToolbarButton(MultiTextWidget.ICONS.addFile, "New File", () => this.addItem('file'));
+        this.elements.addFolderBtn = this.createToolbarButton(MultiTextWidget.ICONS.addFolder, "New Folder", () => this.addItem('folder'));
+        
+        toolbar.appendChild(this.elements.addFileBtn);
+        toolbar.appendChild(this.elements.addFolderBtn);
+
         const treeContainer = this.elements.treeContainer = document.createElement("div")
-        treeContainer.className = "webui-monaco-prompt-multitext-tree-container"
+        treeContainer.className = getStyle("webui-monaco-prompt-multitext-tree-container")
         treeContainer.style.flex = "1"
         treeContainer.style.overflowY = "auto"
         sidebarEl.appendChild(treeContainer)
@@ -196,7 +193,7 @@ class MultiTextWidget {
             tabsContainer.scrollLeft += e.deltaY;
             e.preventDefault();
         });
-        tabsContainer.className = "webui-monaco-prompt-multitext-tabs-container"
+        tabsContainer.className = getStyle("webui-monaco-prompt-multitext-tabs-container")
         tabsContainer.style.height = "35px"
         tabsContainer.style.background = "#252526"
         tabsContainer.style.display = "flex"
@@ -207,7 +204,7 @@ class MultiTextWidget {
         editorWrapper.appendChild(tabsContainer)
 
         const editorContainer = this.elements.editorContainer = document.createElement("div")
-        editorContainer.className = "webui-monaco-prompt-multitext-editor-container"
+        editorContainer.className = getStyle("webui-monaco-prompt-multitext-editor-container")
         editorContainer.style.flex = "1"
         editorContainer.style.position = "relative"
         editorContainer.style.width = "100%"
@@ -217,7 +214,7 @@ class MultiTextWidget {
 
         // リサイズハンドル
         const resizer = document.createElement("div")
-        resizer.className = "webui-monaco-prompt-multitext-resizer"
+        resizer.className = getStyle("webui-monaco-prompt-multitext-resizer")
         
         let isResizing = false
 
@@ -242,7 +239,7 @@ class MultiTextWidget {
 
         const handleMouseUp = () => {
             isResizing = false
-            resizer.classList.remove("resizing")
+            resizer.classList.remove(getStyle("resizing"))
             document.removeEventListener("mousemove", handleMouseMove)
             document.removeEventListener("mouseup", handleMouseUp)
         }
@@ -430,6 +427,18 @@ class MultiTextWidget {
                 this.openFile(firstFile.id);
             }
         }
+    }
+
+    private createToolbarButton(icon: string, title: string, onClick: () => void): HTMLButtonElement {
+        const button = document.createElement("button");
+        button.className = getStyle("webui-monaco-prompt-multitext-toolbar-button");
+        button.innerHTML = icon;
+        button.title = title;
+        button.onclick = (e) => {
+            e.stopPropagation(); // Prevent node interaction
+            onClick();
+        };
+        return button;
     }
 
     private addItem(type: 'file' | 'folder', parentId?: string) {
@@ -636,9 +645,9 @@ class MultiTextWidget {
             if (!file) continue;
 
             const tab = document.createElement("div");
-            tab.className = "webui-monaco-prompt-multitext-tab";
+            tab.className = getStyle("webui-monaco-prompt-multitext-tab");
             if (this.data.activeFileId === fileId) {
-                tab.classList.add("active");
+                tab.classList.add(getStyle("active"));
                 tab.style.background = "#1e1e1e";
                 tab.style.color = "#ccc";
                 tab.style.borderTop = "1px solid #007fd4";
@@ -661,7 +670,7 @@ class MultiTextWidget {
             tab.appendChild(nameSpan);
 
             const closeBtn = document.createElement("span");
-            closeBtn.className = "webui-monaco-prompt-multitext-tab-close";
+            closeBtn.className = getStyle("webui-monaco-prompt-multitext-tab-close");
             closeBtn.innerHTML = "×";
             closeBtn.style.fontSize = "16px";
             closeBtn.style.lineHeight = "1";
@@ -686,7 +695,7 @@ class MultiTextWidget {
 
         // スクロール処理: アクティブなタブが画面外にある場合に備えて表示領域に移動
         setTimeout(() => {
-            const activeTab = this.elements.tabsContainer?.querySelector('.webui-monaco-prompt-multitext-tab.active') as HTMLElement;
+            const activeTab = this.elements.tabsContainer?.querySelector(`.${getStyle('webui-monaco-prompt-multitext-tab')}.${getStyle('active')}`) as HTMLElement;
             if (activeTab) {
                 // block: 'nearest' により、すでに表示されている場合はスクロールしない
                 activeTab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
@@ -723,7 +732,7 @@ class MultiTextWidget {
         if (!this.elements.treeContainer) return
         this.elements.treeContainer.innerHTML = ""
         const rootDiv = document.createElement("div")
-        rootDiv.className = "webui-monaco-prompt-multitext-tree"
+        rootDiv.className = getStyle("webui-monaco-prompt-multitext-tree")
         this.renderTreeItems(this.data.tree, rootDiv, 0)
         this.elements.treeContainer.appendChild(rootDiv)
     }
@@ -731,24 +740,24 @@ class MultiTextWidget {
     private renderTreeItems(items: TreeItem[], parentEl: HTMLElement, depth: number) {
         for (const item of items) {
             const itemContainer = document.createElement("div")
-            itemContainer.className = "webui-monaco-prompt-multitext-tree-item-wrapper"
+            itemContainer.className = getStyle("webui-monaco-prompt-multitext-tree-item-wrapper")
             
             const itemEl = document.createElement("div")
-            itemEl.className = "webui-monaco-prompt-multitext-tree-item"
-            if (this.data.activeFileId === item.id) itemEl.classList.add("active")
-            if (this._selectedIds.has(item.id)) itemEl.classList.add("selected")
+            itemEl.className = getStyle("webui-monaco-prompt-multitext-tree-item")
+            if (this.data.activeFileId === item.id) itemEl.classList.add(getStyle("active"))
+            if (this._selectedIds.has(item.id)) itemEl.classList.add(getStyle("selected"))
             
             itemEl.draggable = true
             itemEl.addEventListener('dragover', (e) => {
                 e.preventDefault()
-                itemEl.classList.add('drag-over'); // Keep drag-over for visual feedback during drag
+                itemEl.classList.add(getStyle('drag-over')); // Keep drag-over for visual feedback during drag
             })
             itemEl.addEventListener('dragleave', () => {
-                itemEl.classList.remove("drag-over")
+                itemEl.classList.remove(getStyle("drag-over"))
             })
             itemEl.addEventListener('drop', (e) => {
                 e.preventDefault()
-                itemEl.classList.remove("drag-over")
+                itemEl.classList.remove(getStyle("drag-over"))
                 const jsonData = e.dataTransfer?.getData("application/json")
                 if (jsonData) {
                     try {
@@ -768,7 +777,7 @@ class MultiTextWidget {
             // インデント
             for (let i = 0; i < depth; i++) {
                 const indent = document.createElement("span")
-                indent.className = "webui-monaco-prompt-multitext-tree-indent"
+                indent.className = getStyle("webui-monaco-prompt-multitext-tree-indent")
                 indent.style.width = "4px"
                 indent.style.flexShrink = "0"
                 itemEl.appendChild(indent)
@@ -776,7 +785,7 @@ class MultiTextWidget {
 
             // 矢印（整列のために常に作成、16px固定）
             const arrowContainer = document.createElement("span")
-            arrowContainer.className = "webui-monaco-prompt-multitext-tree-arrow"
+            arrowContainer.className = getStyle("webui-monaco-prompt-multitext-tree-arrow")
             arrowContainer.style.width = "16px"
             arrowContainer.style.display = "flex"
             arrowContainer.style.flexShrink = "0"
@@ -789,7 +798,7 @@ class MultiTextWidget {
 
             // アイコン
             const iconEl = document.createElement("span")
-            iconEl.className = "webui-monaco-prompt-multitext-tree-icon"
+            iconEl.className = getStyle("webui-monaco-prompt-multitext-tree-icon")
             iconEl.style.width = "22px"
             iconEl.style.display = "flex"
             iconEl.style.flexShrink = "0"
@@ -837,7 +846,7 @@ class MultiTextWidget {
                 }, 0);
             } else {
                 const nameEl = document.createElement("span")
-                nameEl.className = "webui-monaco-prompt-multitext-tree-name"
+                nameEl.className = getStyle("webui-monaco-prompt-multitext-tree-name")
                 nameEl.textContent = item.name
                 nameEl.ondblclick = (e) => {
                     e.stopPropagation();
@@ -848,11 +857,11 @@ class MultiTextWidget {
 
             // アクションボタン（右寄せされるコンテナ）
             const actionsEl = document.createElement("span")
-            actionsEl.className = "webui-monaco-prompt-multitext-tree-actions"
+            actionsEl.className = getStyle("webui-monaco-prompt-multitext-tree-actions")
             
             if (item.type === 'folder') {
                 const addFile = document.createElement("span")
-                addFile.className = "webui-monaco-prompt-multitext-tree-action"
+                addFile.className = getStyle("webui-monaco-prompt-multitext-tree-action")
                 addFile.innerHTML = MultiTextWidget.ICONS.addFile
                 addFile.title = "New File"
                 addFile.onclick = (e) => { e.stopPropagation(); this.addItem('file', item.id); }
@@ -940,7 +949,7 @@ class MultiTextWidget {
 
             if (item.type === 'folder' && item.expanded && item.children) {
                 const childContainer = document.createElement("div")
-                childContainer.className = "webui-monaco-prompt-multitext-tree-children"
+                childContainer.className = getStyle("webui-monaco-prompt-multitext-tree-children")
                 this.renderTreeItems(item.children, childContainer, depth + 1)
                 itemContainer.appendChild(childContainer)
             }

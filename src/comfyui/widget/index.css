@@ -214,6 +214,21 @@
     /* 操作時は青く光る */
 }
 
+/* 構造維持のために必要な空の定義 (getStyle で例外を出さないため) */
+.webui-monaco-prompt-multitext-tree-container {}
+
+.webui-monaco-prompt-multitext-main-area {}
+
+.webui-monaco-prompt-multitext-tabs-container {}
+
+.webui-monaco-prompt-multitext-tab {}
+
+.webui-monaco-prompt-multitext-tab-close {}
+
+.webui-monaco-prompt-multitext-editor-container {}
+
+.webui-monaco-prompt-multitext-tree-indent {}
+
 /* JsonFilter Widget Styles */
 .webui-monaco-prompt-filter-container {
     background-color: #1e1e1e;
@@ -344,7 +359,27 @@
     color: #f48771;
 }
 
-/* Disabled Rule Style */
+/* 状態クラス: 各ウィジェットで getStyle 経由で使用可能にするため、単独でも定義 */
+.active {
+    /* Base active state */
+}
+
+.disabled {
+    /* Base disabled state */
+}
+
+.dragging {
+    /* Base dragging state */
+}
+
+.selected {
+    /* Base selected state */
+}
+
+.drag-over {
+    /* Base drag-over state */
+}
+
 .webui-monaco-prompt-filter-rule-row.disabled {
     opacity: 0.4;
 }
@@ -374,7 +409,7 @@
     color: #e51400;
 }
 
-.webui-monaco-prompt-filter-status-preview {
+.webui-monaco-prompt-filter-status {
     margin-left: 10px;
     color: #888;
     font-size: 10px;
@@ -386,4 +421,95 @@
     border-top: 1px solid #333;
     font-size: 10px;
     color: #888;
+}
+
+
+/* Find/Replace Widget Styles */
+.webui-monaco-prompt-container {
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+.webui-monaco-prompt-header {
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+.webui-monaco-prompt-input {
+    display: flex !important;
+    width: 100% !important;
+    margin: 2px 0 !important;
+}
+
+.webui-monaco-prompt-control {
+    display: flex !important;
+    flex-flow: nowrap !important;
+}
+
+.webui-monaco-prompt-toggle {
+    cursor: pointer !important;
+    padding: 2px !important;
+    margin: 0 2px !important;
+    border: 1px solid transparent !important;
+    border-radius: 3px !important;
+}
+
+.webui-monaco-prompt-toggle-checked {
+    border: 1px solid #007acc !important;
+    background-color: rgba(0, 122, 204, 0.2) !important;
+}
+
+.webui-monaco-prompt-input-text {
+    flex: 1 !important;
+    color: #cccccc !important;
+    background-color: #3c3c3c !important;
+    border: 1px solid #333 !important;
+    border-radius: 2px !important;
+    padding: 2px 4px !important;
+    font-size: 11px !important;
+}
+
+.webui-monaco-prompt-table-container {
+    color: #cccccc !important;
+    display: flex !important;
+    height: 100% !important;
+    min-height: 100px !important;
+    overflow: auto !important;
+    margin-top: 11px !important;
+}
+
+.webui-monaco-prompt-table {
+    font-size: 11px !important;
+    width: 100% !important;
+    border-collapse: collapse !important;
+}
+
+.webui-monaco-prompt-table thead>tr>th {
+    border-bottom: 1px solid #444 !important;
+    text-align: left !important;
+    padding: 4px !important;
+}
+
+.webui-monaco-prompt-table tbody>tr {
+    cursor: pointer !important;
+}
+
+.webui-monaco-prompt-table tbody>tr:hover {
+    background-color: #2a2d2e !important;
+}
+
+.webui-monaco-prompt-table tbody>tr:nth-child(even) {
+    background-color: rgba(255, 255, 255, 0.03) !important;
+}
+
+.webui-monaco-prompt-td {
+    white-space: nowrap !important;
+    padding: 2px 4px !important;
+    border-bottom: 1px solid #333 !important;
+}
+
+.webui-monaco-prompt-td-expand {
+    width: 100% !important;
+    padding: 2px 4px !important;
+    border-bottom: 1px solid #333 !important;
 }

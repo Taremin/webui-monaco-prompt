@@ -3,6 +3,8 @@ import * as utils from "../utils"
 import {default as style} from "./index.css"
 import { FindWidget, FindWidgetElements } from "./find_widget"
 
+const getStyle = (name: string) => utils.getStyle(style, name)
+
 interface ReplaceWidgetElements extends FindWidgetElements {
     replace: HTMLInputElement
 }
@@ -17,12 +19,12 @@ class ReplaceWidget extends FindWidget {
         const headEl = this.elements.header
 
         const inputContainerEl = document.createElement("div")
-        inputContainerEl.classList.add(style["webui-monaco-prompt-input"])
+        inputContainerEl.classList.add(getStyle("webui-monaco-prompt-input"))
 
         const replaceEl = this.elements.replace = document.createElement("input")
         replaceEl.type = "text"
         replaceEl.placeholder = "Replace"
-        replaceEl.classList.add(style["webui-monaco-prompt-input-text"])
+        replaceEl.classList.add(getStyle("webui-monaco-prompt-input-text"))
         replaceEl.addEventListener("keydown", (ev) => {
             return this.findInputHandler(ev)
         })

@@ -1,8 +1,8 @@
-
-import { ui } from "../api"
+import * as utils from "../utils"
 import {default as style} from "./index.css"
 
-const $el = (...args: any[]) => ui.$el(...args)
+const $el = utils.$el
+const getStyle = (name: string) => utils.getStyle(style, name)
 
 interface FilterRule {
     id: string;
@@ -29,9 +29,7 @@ export class FilterWidget {
         if (!node.properties) node.properties = {};
         if (!node.properties.rules) node.properties.rules = "[]";
 
-        // CSSモジュールのハッシュ付きクラスと、E2E用の安定したクラスの両方を付与
-        this.container.classList.add(style["webui-monaco-prompt-filter-container"] || "");
-        this.container.classList.add("webui-monaco-prompt-filter-container"); 
+        this.container.classList.add(getStyle("webui-monaco-prompt-filter-container"));
         
         // onConfigure フック (シリアライズからの復元用)
         const oldOnConfigure = node.onConfigure;
@@ -175,11 +173,11 @@ export class FilterWidget {
         this.container.innerHTML = "";
         
         const header = $el("div", { 
-            className: `${style["webui-monaco-prompt-filter-header"] || ""} webui-monaco-prompt-filter-header` 
+            className: getStyle("webui-monaco-prompt-filter-header")
         }, [
             $el("span", { textContent: "Filters" }),
             $el("button", {
-                className: `${style["webui-monaco-prompt-filter-add-btn"] || ""} webui-monaco-prompt-filter-add-btn`,
+                className: getStyle("webui-monaco-prompt-filter-add-btn"),
                 textContent: "+",
                 onclick: () => this.addRule()
             })
@@ -187,7 +185,7 @@ export class FilterWidget {
         this.container.appendChild(header);
 
         const rulesList = $el("div", {
-            className: `${style["webui-monaco-prompt-filter-rules-list"] || ""} webui-monaco-prompt-filter-rules-list`
+            className: getStyle("webui-monaco-prompt-filter-rules-list")
         });
         
         this.rules.forEach((rule, index) => {
@@ -198,10 +196,10 @@ export class FilterWidget {
         this.container.appendChild(rulesList);
         
         const footer = $el("div", {
-            className: `${style["webui-monaco-prompt-filter-footer"] || ""} webui-monaco-prompt-filter-footer`
+            className: getStyle("webui-monaco-prompt-filter-footer")
         }, [
             $el("span", { 
-                className: `${style["webui-monaco-prompt-filter-status"] || ""} webui-monaco-prompt-filter-status`,
+                className: getStyle("webui-monaco-prompt-filter-status"),
                 textContent: `Rules: ${this.rules.length}` 
             })
         ]);
@@ -210,14 +208,14 @@ export class FilterWidget {
 
     private createRuleRow(rule: FilterRule, index: number): HTMLElement {
         const row = $el("div", {
-            className: `${style["webui-monaco-prompt-filter-rule-row"] || ""} webui-monaco-prompt-filter-rule-row ${rule.disabled ? (style["disabled"] || "disabled") : ""}`,
+            className: `${getStyle("webui-monaco-prompt-filter-rule-row")} ${rule.disabled ? getStyle("disabled") : ""}`,
             draggable: true,
             ondragstart: (e: DragEvent) => {
                 e.dataTransfer?.setData("text/plain", index.toString());
-                row.classList.add(style["dragging"] || "dragging");
+                row.classList.add(getStyle("dragging"));
             },
             ondragend: () => {
-                row.classList.remove(style["dragging"] || "dragging");
+                row.classList.remove(getStyle("dragging"));
             },
             ondragover: (e: DragEvent) => e.preventDefault(),
             ondrop: (e: DragEvent) => {
@@ -230,13 +228,13 @@ export class FilterWidget {
 
         // ドラッグハンドル
         row.appendChild($el("span", { 
-            className: `${style["webui-monaco-prompt-filter-handle"] || ""} webui-monaco-prompt-filter-handle`,
+            className: getStyle("webui-monaco-prompt-filter-handle"),
             textContent: "::" 
         }));
 
         // 無効化トグル
         const disableBtn = $el("button", {
-            className: `${style["webui-monaco-prompt-filter-disable-btn"] || ""} webui-monaco-prompt-filter-disable-btn ${rule.disabled ? (style["active"] || "active") : ""}`,
+            className: `${getStyle("webui-monaco-prompt-filter-disable-btn")} ${rule.disabled ? getStyle("active") : ""}`,
             textContent: "⏻", // Power icon or similar
             title: rule.disabled ? "Enable rule" : "Disable rule",
             onclick: () => {
@@ -250,7 +248,7 @@ export class FilterWidget {
         // 演算子
         if (index > 0) {
             const opSelect = $el("select", {
-                className: `${style["webui-monaco-prompt-filter-select"] || ""} webui-monaco-prompt-filter-select`,
+                className: getStyle("webui-monaco-prompt-filter-select"),
                 onchange: (e: any) => {
                     rule.operator = e.target.value;
                     this.saveRules();
@@ -262,13 +260,13 @@ export class FilterWidget {
             row.appendChild(opSelect);
         } else {
             row.appendChild($el("span", { 
-                className: `${style["webui-monaco-prompt-filter-spacer"] || ""} webui-monaco-prompt-filter-spacer`
+                className: getStyle("webui-monaco-prompt-filter-spacer")
             }));
         }
 
         // Target
         const targetSelect = $el("select", {
-            className: `${style["webui-monaco-prompt-filter-select"] || ""} webui-monaco-prompt-filter-select`,
+            className: getStyle("webui-monaco-prompt-filter-select"),
             onchange: (e: any) => {
                 rule.target = e.target.value;
                 this.saveRules();
@@ -282,7 +280,7 @@ export class FilterWidget {
 
         // Mode
         const modeSelect = $el("select", {
-            className: `${style["webui-monaco-prompt-filter-select"] || ""} webui-monaco-prompt-filter-select`,
+            className: getStyle("webui-monaco-prompt-filter-select"),
             onchange: (e: any) => {
                 rule.mode = e.target.value;
                 this.saveRules();
@@ -295,7 +293,7 @@ export class FilterWidget {
 
         // NOT
         const notBtn = $el("button", {
-            className: `${style["webui-monaco-prompt-filter-not-btn"] || ""} webui-monaco-prompt-filter-not-btn ${rule.not ? (style["active"] || "active") : ""}`,
+            className: `${getStyle("webui-monaco-prompt-filter-not-btn")} ${rule.not ? getStyle("active") : ""}`,
             textContent: "NOT",
             onclick: () => {
                 rule.not = !rule.not;
@@ -307,7 +305,7 @@ export class FilterWidget {
 
         // Value Input
         const valueInput = $el("input", {
-            className: `${style["webui-monaco-prompt-filter-input"] || ""} webui-monaco-prompt-filter-input`,
+            className: getStyle("webui-monaco-prompt-filter-input"),
             type: "text",
             value: rule.value || "",
             placeholder: "value...",
@@ -320,7 +318,7 @@ export class FilterWidget {
 
         // Delete
         row.appendChild($el("button", {
-            className: `${style["webui-monaco-prompt-filter-del-btn"] || ""} webui-monaco-prompt-filter-del-btn`,
+            className: getStyle("webui-monaco-prompt-filter-del-btn"),
             textContent: "×",
             onclick: () => this.deleteRule(index)
         }));
@@ -330,7 +328,7 @@ export class FilterWidget {
 
     private addRule() {
         const newRule: FilterRule = {
-            id: Math.random().toString(36).substr(2, 9),
+            id: utils.guid(),
             target: 'name',
             mode: 'include',
             not: false,
