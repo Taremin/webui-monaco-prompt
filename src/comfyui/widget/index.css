@@ -234,7 +234,7 @@
     padding: 6px 10px !important;
     background-color: #252526 !important;
     border-bottom: 1px solid #333 !important;
-    display: flex !important;
+    display: flex;
     flex-direction: column !important;
     gap: 6px !important;
 }
@@ -245,10 +245,45 @@
     color: #cccccc !important;
     border: 1px solid #3c3c3c !important;
     border-radius: 2px !important;
-    padding: 4px 6px !important;
+    padding: 4px 24px 4px 6px !important;
+    /* 右側にクリアボタンのスペースを確保 */
     font-size: 12px !important;
     outline: none !important;
     box-sizing: border-box !important;
+}
+
+.webui-monaco-prompt-multitext-search-input-wrapper {
+    position: relative !important;
+    width: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+}
+
+.webui-monaco-prompt-multitext-search-clear-btn {
+    position: absolute !important;
+    right: 4px !important;
+    width: 20px !important;
+    height: 20px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: transparent !important;
+    border: none !important;
+    color: #888 !important;
+    cursor: pointer !important;
+    padding: 0 !important;
+    opacity: 0.6 !important;
+    transition: opacity 0.1s, color 0.1s !important;
+}
+
+.webui-monaco-prompt-multitext-search-clear-btn:hover {
+    opacity: 1 !important;
+    color: #eee !important;
+}
+
+.webui-monaco-prompt-multitext-search-clear-btn svg {
+    width: 14px !important;
+    height: 14px !important;
 }
 
 .webui-monaco-prompt-multitext-search-input:focus {
@@ -260,7 +295,7 @@
     max-height: 300px !important;
     overflow-y: auto !important;
     border-bottom: 1px solid #333 !important;
-    display: flex !important;
+    display: flex;
     flex-direction: column !important;
     flex-shrink: 0 !important;
 }

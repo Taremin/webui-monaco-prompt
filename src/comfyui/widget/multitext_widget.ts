@@ -41,6 +41,7 @@ class MultiTextWidget {
         edit: '<svg width="14" height="14" viewBox="0 0 16 16"><path fill="currentColor" d="M13.23 1h-1.46L3.52 9.25l-.16.22L1 13.59V15h1.41l4.12-2.36.22-.16L15 4.23V2.77L13.23 1zM2 14v-.66l2.13-1.22 1.88 1.88-1.22 2.13H2v-.13zm4.27-1.73l-1.54-1.54 7.27-7.27 1.54 1.54-7.27 7.27z"/></svg>',
         delete: '<svg width="14" height="14" viewBox="0 0 16 16"><path fill="currentColor" d="M11 1.5V1h-6v.5H2v1h1v11l1 1h8l1-1V2.5h1v-1h-3zm1 12H4v-11h8v11zM5 4h1v8H5V4zm3 0h1v8H8V4z"/></svg>',
         search: '<svg width="16" height="16" viewBox="0 0 16 16"><path fill="currentColor" d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zm-5.442 1.102a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11z"/></svg>',
+        close: '<svg width="16" height="16" viewBox="0 0 16 16"><path fill="currentColor" d="M12.7 4.3l-.7-.7-4 4-4-4-.7.7 4 4-4 4 .7.7 4-4 4 4 .7-.7-4-4 4-4z"/></svg>',
     }
 
     elements: {
@@ -193,6 +194,9 @@ class MultiTextWidget {
         searchContainer.className = getStyle("webui-monaco-prompt-multitext-sidebar-search")
         searchContainer.style.display = "none" // 初期状態は非表示
         
+        const searchInputWrapper = document.createElement("div")
+        searchInputWrapper.className = getStyle("webui-monaco-prompt-multitext-search-input-wrapper")
+
         const searchInput = this.elements.searchInput = document.createElement("input")
         searchInput.type = "text"
         searchInput.placeholder = "Search content..."
@@ -203,11 +207,26 @@ class MultiTextWidget {
             if (e.key === "Escape") this.toggleSearch()
         })
         
+        const clearBtn = document.createElement("button")
+        clearBtn.innerHTML = MultiTextWidget.ICONS.close
+        clearBtn.className = getStyle("webui-monaco-prompt-multitext-search-clear-btn")
+        clearBtn.title = "Clear Search"
+        clearBtn.addEventListener("click", () => {
+            if (this.elements.searchInput) {
+                this.elements.searchInput.value = "";
+                this.executeSearch();
+                this.elements.searchInput.focus();
+            }
+        });
+
+        searchInputWrapper.appendChild(searchInput)
+        searchInputWrapper.appendChild(clearBtn)
+        
         const searchResults = this.elements.searchResults = document.createElement("div")
         searchResults.className = getStyle("webui-monaco-prompt-multitext-search-results")
         searchResults.style.display = "none"
         
-        searchContainer.appendChild(searchInput)
+        searchContainer.appendChild(searchInputWrapper)
         sidebarEl.appendChild(searchContainer)
         sidebarEl.appendChild(searchResults)
 
@@ -495,8 +514,10 @@ class MultiTextWidget {
     private toggleSearch() {
         if (!this.elements.searchContainer || !this.elements.searchResults) return;
         const isHidden = this.elements.searchContainer.style.display === "none";
+        // CSS Modules の !important 回避のため、style.display で直接制御
         this.elements.searchContainer.style.display = isHidden ? "flex" : "none";
         this.elements.searchResults.style.display = isHidden ? "flex" : "none";
+        
         if (isHidden) {
             this.elements.searchInput?.focus();
         } else {

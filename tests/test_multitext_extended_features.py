@@ -175,3 +175,60 @@ def test_multitext_shift_selection(page: Page, comfyui_server, wait_for_comfyui)
     print(f"DEBUG: Shift selection count via JS is {selected_count}")
     
     assert selected_count == 5
+
+def test_multitext_search_toggle_and_clear(page: Page, comfyui_server, wait_for_comfyui):
+    """検索バーのトグル表示とクリアボタンの動作を確認する"""
+    setup_console_log(page)
+    page.goto(comfyui_server)
+    wait_for_comfyui(page)
+    add_node_api_force(page)
+    
+    # テスト用ファイル作成
+    items = [("file", "search_test.txt")]
+    create_items_api(page, items)
+    
+    # 検索コンテナのロケーター（CSS Modulesを考慮し、部分一致を利用）
+    search_container = page.locator("div[class*='sidebar-search']").first
+    search_results = page.locator("div[class*='search-results']").first
+    
+    # 初期状態は非表示であることを確認
+    expect(search_container).to_be_hidden()
+    expect(search_results).to_be_hidden()
+    
+    # 検索ボタンをクリックして表示させる
+    search_btn_js = """() => {
+        const btns = Array.from(document.querySelectorAll("button"));
+        const searchBtn = btns.find(b => b.title === 'Search' || b.innerHTML.includes('M11.742'));
+        if (searchBtn) searchBtn.click();
+        return !!searchBtn;
+    }"""
+    assert page.evaluate(search_btn_js) is True
+    
+    # 表示されるのを待つ
+    expect(search_container).to_be_visible(timeout=30000)
+    expect(search_results).to_be_visible(timeout=30000)
+    
+    # 検索入力欄に文字を入力
+    search_input = page.locator("input[class*='search-input']").first
+    search_input.fill("test")
+    
+    # 入力されたことを確認
+    expect(search_input).to_have_value("test")
+    
+    # クリアボタンをクリック
+    clear_btn_js = """() => {
+        const btn = document.querySelector("button[class*='search-clear-btn']");
+        if (btn) btn.click();
+        return !!btn;
+    }"""
+    assert page.evaluate(clear_btn_js) is True
+    
+    # 入力が空になったことを確認
+    expect(search_input).to_have_value("")
+    
+    # 再度検索ボタンをクリックして非表示にする
+    assert page.evaluate(search_btn_js) is True
+    
+    # 非表示になることを確認
+    expect(search_container).to_be_hidden(timeout=30000)
+    expect(search_results).to_be_hidden(timeout=30000)
