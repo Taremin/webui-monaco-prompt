@@ -26,9 +26,12 @@ def test_multitext_resize_tracking(page: Page, comfyui_server, wait_for_comfyui)
     }""")
     assert node_type, "MultiText node type should be registered"
 
+    import uuid
+    unique_id = uuid.uuid4().hex[:6]
     page.evaluate(f"""() => {{
         const app = window.app || window.ComfyApp;
         const node = window.LiteGraph.createNode("{node_type}");
+        node.title = "MT-RESIZE-TRACKING-{unique_id}";
         node.pos = [100, 100];
         node.size = [800, 600];
         app.graph.add(node);
@@ -43,7 +46,7 @@ def test_multitext_resize_tracking(page: Page, comfyui_server, wait_for_comfyui)
         page.evaluate(f"window.app.canvas.ds.scale = {scale}; window.app.canvas.setDirty(true, true);")
         page.wait_for_timeout(500)
 
-        resizer = page.locator(".webui-monaco-prompt-multitext-resizer")
+        resizer = page.locator("[class*='multitext-resizer']")
         initial_box = resizer.bounding_box()
         assert initial_box, "Resizer bounding box not found"
 
@@ -86,9 +89,9 @@ def test_multitext_resize_tracking(page: Page, comfyui_server, wait_for_comfyui)
     perform_resize_and_check(150, scale=1.0)
     page.screenshot(path=os.path.join(screenshot_dir, "01_scale_1.png"))
 
-    # スケール 0.5 で検証 (ズームアウト)
-    perform_resize_and_check(100, scale=0.5)
-    page.screenshot(path=os.path.join(screenshot_dir, "02_scale_0_5.png"))
+    # スケール 0.6 で検証 (ズームアウト、hideOnZoomを考慮)
+    perform_resize_and_check(100, scale=0.6)
+    page.screenshot(path=os.path.join(screenshot_dir, "02_scale_0_6.png"))
 
     # スケール 1.5 で検証 (ズームイン)
     perform_resize_and_check(-100, scale=1.5)

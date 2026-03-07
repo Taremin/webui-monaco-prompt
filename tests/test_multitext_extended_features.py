@@ -80,27 +80,22 @@ def test_multitext_tab_auto_scroll(page: Page, comfyui_server, wait_for_comfyui)
     items = [("file", f"file_{i:02d}.txt") for i in range(1, 26)]
     create_items_api(page, items)
 
-    tabs_container = page.locator(".webui-monaco-prompt-multitext-tabs-container").first
+    tabs_container = page.locator("[class*='multitext-tabs-container']").first
     
-    # default.txtが画面に出るまで少し待機（API経由作成の反映待ち）
-    expect(page.locator(".webui-monaco-prompt-multitext-tree-name", has_text="default.txt").first).to_be_visible(timeout=10000)
+    # default.txtが画面に出るまで少し待機
+    page.wait_for_selector("[class*='multitext-tree-name']", timeout=10000)
     
     # 最初のファイルを選択
-    page.locator(".webui-monaco-prompt-multitext-tree-name", has_text="default.txt").first.click(force=True)
-    time.sleep(1.0)
+    page.locator("[class*='multitext-tree-name']", has_text="default.txt").first.click(force=True)
+    page.wait_for_timeout(1000)
     scroll_left_start = tabs_container.evaluate("el => el.scrollLeft")
     
     # 最後のファイルを選択
-    # ツリー内の file_25.txt をクリック
-    page.locator(".webui-monaco-prompt-multitext-tree-name", has_text="file_25.txt").first.click(force=True)
-    time.sleep(3.0) # スムーズスクロール待ち時間を長めに
+    page.locator("[class*='multitext-tree-name']", has_text="file_25.txt").first.click(force=True)
+    page.wait_for_timeout(3000)
     scroll_left_end = tabs_container.evaluate("el => el.scrollLeft")
     
     print(f"DEBUG: scrollLeft start={scroll_left_start}, end={scroll_left_end}")
-    
-    if scroll_left_end <= scroll_left_start:
-        page.screenshot(path="debug_scroll_fail.png")
-    
     assert scroll_left_end > scroll_left_start
 
 def test_multitext_multiple_selection_dnd(page: Page, comfyui_server, wait_for_comfyui):
@@ -115,34 +110,68 @@ def test_multitext_multiple_selection_dnd(page: Page, comfyui_server, wait_for_c
     create_items_api(page, items)
 
     # 確実にツリーが描画されるのを待つ
-    expect(page.locator(".webui-monaco-prompt-multitext-tree-name", has_text="move_me_3.txt").first).to_be_visible(timeout=10000)
+    page.wait_for_selector("[class*='multitext-tree-name']", timeout=10000)
 
-    # Ctrl選択 (Playwright標準操作)
-    page.locator(".webui-monaco-prompt-multitext-tree-name", has_text="move_me_1.txt").first.click(force=True)
-    page.locator(".webui-monaco-prompt-multitext-tree-name", has_text="move_me_2.txt").first.click(modifiers=["Control"], force=True)
-    page.locator(".webui-monaco-prompt-multitext-tree-name", has_text="move_me_3.txt").first.click(modifiers=["Control"], force=True)
+    # Ctrl選択
+    page.locator("[class*='multitext-tree-name']", has_text="move_me_1.txt").first.click(force=True)
+    page.locator("[class*='multitext-tree-name']", has_text="move_me_2.txt").first.click(modifiers=["Control"], force=True)
+    page.locator("[class*='multitext-tree-name']", has_text="move_me_3.txt").first.click(modifiers=["Control"], force=True)
     
-    time.sleep(1.0)
+    page.wait_for_timeout(1000)
     
-    selected_items = page.locator(".webui-monaco-prompt-multitext-tree-item.selected")
-    count = selected_items.count()
-    print(f"DEBUG: selected count is {count}")
-    if count != 3:
-        page.screenshot(path="debug_selection_fail.png")
-    
-    expect(selected_items).to_have_count(3)
-
+    # 選択されたツリーアイテムの数を検証 (属性セレクタを使用)
+    selected_count = page.evaluate("""() => {
+        const items = Array.from(document.querySelectorAll("[class*='multitext-tree-item']"));
+        return items.filter(el => el.className.includes('selected')).length;
+    }""")
+    print(f"DEBUG: selected count via JS is {selected_count}")
+    assert selected_count == 3
     # ドラッグ＆ドロップ
-    source = page.locator(".webui-monaco-prompt-multitext-tree-name", has_text="move_me_1.txt").first
-    target = page.locator(".webui-monaco-prompt-multitext-tree-name", has_text="target_folder").first
+    source = page.locator("[class*='multitext-tree-name']", has_text="move_me_1.txt").first
+    target = page.locator("[class*='multitext-tree-name']", has_text="target_folder").first
     
     source.drag_to(target, force=True)
-    time.sleep(2.0)
+    page.wait_for_timeout(1000)
+    
+    # 選択されたツリーアイテムの数を検証 (属性セレクタを使用)
+    selected_count = page.evaluate("""() => {
+        const items = Array.from(document.querySelectorAll("[class*='multitext-tree-item']"));
+        return items.filter(el => el.className.includes('selected')).length;
+    }""")
+    print(f"DEBUG: selected count via JS is {selected_count}")
+    assert selected_count == 3
 
     # 移動確認
-    folder_wrapper = page.locator(".webui-monaco-prompt-multitext-tree-item-wrapper", has_text="target_folder").first
-    children = folder_wrapper.locator(".webui-monaco-prompt-multitext-tree-children")
+    folder_wrapper = page.locator("[class*='multitext-tree-item-wrapper']", has_text="target_folder").first
+    children = folder_wrapper.locator("[class*='multitext-tree-children']")
     
     expect(children.get_by_text("move_me_1.txt")).to_be_visible()
     expect(children.get_by_text("move_me_2.txt")).to_be_visible()
     expect(children.get_by_text("move_me_3.txt")).to_be_visible()
+
+def test_multitext_shift_selection(page: Page, comfyui_server, wait_for_comfyui):
+    """Shift選択（範囲選択）を確認する"""
+    setup_console_log(page)
+    page.goto(comfyui_server)
+    wait_for_comfyui(page)
+    add_node_api_force(page)
+    
+    items = [("file", f"range_{i}.txt") for i in range(1, 6)]
+    create_items_api(page, items)
+    
+    page.wait_for_selector("[class*='multitext-tree-name']", timeout=10000)
+    
+    # 最初と最後をShiftクリック
+    page.locator("[class*='multitext-tree-name']", has_text="range_1.txt").first.click(force=True)
+    page.locator("[class*='multitext-tree-name']", has_text="range_5.txt").first.click(modifiers=["Shift"], force=True)
+    
+    page.wait_for_timeout(1000)
+    
+    # 選択されたツリーアイテムの数を検証
+    selected_count = page.evaluate("""() => {
+        const items = Array.from(document.querySelectorAll("[class*='multitext-tree-item']"));
+        return items.filter(el => el.className.includes('selected')).length;
+    }""")
+    print(f"DEBUG: Shift selection count via JS is {selected_count}")
+    
+    assert selected_count == 5

@@ -42,7 +42,7 @@ def test_json_filter_full_workflow(page: Page, comfyui_server, wait_for_comfyui)
     }""")
 
     # フィルターのコンテナが出現するまで待つ
-    page.wait_for_selector(".webui-monaco-prompt-filter-container", state="visible", timeout=30000)
+    page.wait_for_selector("[class*='filter-container']", state="visible", timeout=30000)
     
     # 2. MultiTextにテストデータを投入
     page.evaluate("""() => {
@@ -55,12 +55,12 @@ def test_json_filter_full_workflow(page: Page, comfyui_server, wait_for_comfyui)
     }""")
 
     # 3. フィルタールールの設定 (appleを含まないものに絞る)
-    page.click(".webui-monaco-prompt-filter-add-btn")
-    page.wait_for_selector(".webui-monaco-prompt-filter-rule-row", timeout=10000)
-    page.fill(".webui-monaco-prompt-filter-input", "apple")
+    page.click("[class*='filter-add-btn']")
+    page.wait_for_selector("[class*='filter-rule-row']", timeout=10000)
+    page.fill("[class*='filter-input']", "apple")
     
     # NOT条件を有効化
-    not_btn = page.locator(".webui-monaco-prompt-filter-not-btn").first
+    not_btn = page.locator("[class*='filter-not-btn']").first
     not_btn.click()
     expect(not_btn).to_have_class(re.compile(r"active"))
     
@@ -169,11 +169,11 @@ def test_json_filter_persistence(page: Page, comfyui_server, wait_for_comfyui):
     
     # 3. 検証
     try:
-        page.wait_for_selector(".webui-monaco-prompt-filter-container", state="attached", timeout=10000)
-        input_el = page.locator(".webui-monaco-prompt-filter-input").first
+        page.wait_for_selector("[class*='filter-container']", state="attached", timeout=10000)
+        input_el = page.locator("[class*='filter-input']").first
         expect(input_el).to_have_value("persistence_test")
         
-        not_btn = page.locator(".webui-monaco-prompt-filter-not-btn").first
+        not_btn = page.locator("[class*='filter-not-btn']").first
         expect(not_btn).to_have_class(re.compile(r"active"))
         page.screenshot(path=os.path.join(screenshot_dir, "03_persistence_success.png"))
     except Exception as e:

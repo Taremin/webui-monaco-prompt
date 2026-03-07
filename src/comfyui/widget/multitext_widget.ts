@@ -40,6 +40,7 @@ class MultiTextWidget {
         addFolder: '<svg width="16" height="16" viewBox="0 0 16 16"><path fill="currentColor" d="M14.5 3H7.71l-2-2H1.5c-.83 0-1.5.67-1.5 1.5v9c0 .83.67 1.5 1.5 1.5h13c.83 0 1.5-.67 1.5-1.5v-7c0-.83-.67-1.5-1.5-1.5zm-5.5 5h-1v1h-1v-1h-1v-1h1v-1h1v1h1v1z"/></svg>',
         edit: '<svg width="14" height="14" viewBox="0 0 16 16"><path fill="currentColor" d="M13.23 1h-1.46L3.52 9.25l-.16.22L1 13.59V15h1.41l4.12-2.36.22-.16L15 4.23V2.77L13.23 1zM2 14v-.66l2.13-1.22 1.88 1.88-1.22 2.13H2v-.13zm4.27-1.73l-1.54-1.54 7.27-7.27 1.54 1.54-7.27 7.27z"/></svg>',
         delete: '<svg width="14" height="14" viewBox="0 0 16 16"><path fill="currentColor" d="M11 1.5V1h-6v.5H2v1h1v11l1 1h8l1-1V2.5h1v-1h-3zm1 12H4v-11h8v11zM5 4h1v8H5V4zm3 0h1v8H8V4z"/></svg>',
+        search: '<svg width="16" height="16" viewBox="0 0 16 16"><path fill="currentColor" d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zm-5.442 1.102a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11z"/></svg>',
     }
 
     elements: {
@@ -51,6 +52,10 @@ class MultiTextWidget {
         tabsContainer?: HTMLDivElement;
         editorContainer?: HTMLDivElement;
         resizer?: HTMLDivElement;
+        searchBtn?: HTMLButtonElement;
+        searchContainer?: HTMLDivElement;
+        searchInput?: HTMLInputElement;
+        searchResults?: HTMLDivElement;
     } = {};
 
     public data: MultiTextData = { tree: [], activeFileId: undefined, openedFileIds: [], sidebarWidth: 150 };
@@ -177,9 +182,34 @@ class MultiTextWidget {
 
         this.elements.addFileBtn = this.createToolbarButton(MultiTextWidget.ICONS.addFile, "New File", () => this.addItem('file'));
         this.elements.addFolderBtn = this.createToolbarButton(MultiTextWidget.ICONS.addFolder, "New Folder", () => this.addItem('folder'));
+        this.elements.searchBtn = this.createToolbarButton(MultiTextWidget.ICONS.search, "Search", () => this.toggleSearch());
         
         toolbar.appendChild(this.elements.addFileBtn);
         toolbar.appendChild(this.elements.addFolderBtn);
+        toolbar.appendChild(this.elements.searchBtn);
+
+        // 検索コンテナ
+        const searchContainer = this.elements.searchContainer = document.createElement("div")
+        searchContainer.className = getStyle("webui-monaco-prompt-multitext-sidebar-search")
+        searchContainer.style.display = "none" // 初期状態は非表示
+        
+        const searchInput = this.elements.searchInput = document.createElement("input")
+        searchInput.type = "text"
+        searchInput.placeholder = "Search content..."
+        searchInput.className = getStyle("webui-monaco-prompt-multitext-search-input")
+        searchInput.addEventListener("input", () => this.executeSearch())
+        searchInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") this.executeSearch()
+            if (e.key === "Escape") this.toggleSearch()
+        })
+        
+        const searchResults = this.elements.searchResults = document.createElement("div")
+        searchResults.className = getStyle("webui-monaco-prompt-multitext-search-results")
+        searchResults.style.display = "none"
+        
+        searchContainer.appendChild(searchInput)
+        sidebarEl.appendChild(searchContainer)
+        sidebarEl.appendChild(searchResults)
 
         const treeContainer = this.elements.treeContainer = document.createElement("div")
         treeContainer.className = getStyle("webui-monaco-prompt-multitext-tree-container")
@@ -189,6 +219,7 @@ class MultiTextWidget {
 
         // エディタ領域
         const editorWrapper = document.createElement("div")
+        editorWrapper.className = getStyle("webui-monaco-prompt-multitext-main-area")
         editorWrapper.style.flex = "1"
         editorWrapper.style.display = "flex"
         editorWrapper.style.flexDirection = "column"
@@ -205,8 +236,8 @@ class MultiTextWidget {
         tabsContainer.style.background = "#252526"
         tabsContainer.style.display = "flex"
         tabsContainer.style.alignItems = "center"
-        tabsContainer.style.overflowX = "visible"
-        tabsContainer.style.overflowY = "visible"
+        tabsContainer.style.overflowX = "hidden"
+        tabsContainer.style.overflowY = "hidden"
         tabsContainer.style.borderBottom = "1px solid #333"
         editorWrapper.appendChild(tabsContainer)
 
@@ -232,7 +263,7 @@ class MultiTextWidget {
             const scale = (window as any).app?.canvas?.ds?.scale || 1.0
             const newWidth = (e.clientX - containerRect.left) / scale
             if ((window as any).RESIZE_DEBUG) {
-                (window as any).RESIZE_DEBUG.push(`move: clientX=${e.clientX}, rectLeft=${containerRect.left}, scale=${scale}, new=${newWidth}`);
+                (window as any).RESIZE_DEBUG.push(`move: clientX=${e.clientX.toFixed(1)}, containerLeft=${containerRect.left.toFixed(1)}, scale=${scale.toFixed(2)}, newWidth=${newWidth.toFixed(1)}`);
             }
             if (newWidth > 50 && newWidth < 600) {
                 sidebarEl.style.setProperty("width", `${newWidth}px`, "important");
@@ -257,7 +288,7 @@ class MultiTextWidget {
                 (window as any).RESIZE_DEBUG.push("mousedown on resizer");
             }
             isResizing = true
-            resizer.classList.add("resizing")
+            resizer.classList.add(getStyle("resizing"))
             document.addEventListener("mousemove", handleMouseMove)
             document.addEventListener("mouseup", handleMouseUp)
             e.preventDefault()
@@ -450,15 +481,69 @@ class MultiTextWidget {
     }
 
     private createToolbarButton(icon: string, title: string, onClick: () => void): HTMLButtonElement {
-        const button = document.createElement("button");
-        button.className = getStyle("webui-monaco-prompt-multitext-toolbar-button");
-        button.innerHTML = icon;
-        button.title = title;
-        button.onclick = (e) => {
-            e.stopPropagation(); // Prevent node interaction
+        const btn = document.createElement("button");
+        btn.innerHTML = icon;
+        btn.title = title;
+        btn.className = getStyle("webui-monaco-prompt-multitext-toolbar-button");
+        btn.addEventListener("click", (e) => {
+            e.stopPropagation();
             onClick();
+        });
+        return btn;
+    }
+
+    private toggleSearch() {
+        if (!this.elements.searchContainer || !this.elements.searchResults) return;
+        const isHidden = this.elements.searchContainer.style.display === "none";
+        this.elements.searchContainer.style.display = isHidden ? "flex" : "none";
+        this.elements.searchResults.style.display = isHidden ? "flex" : "none";
+        if (isHidden) {
+            this.elements.searchInput?.focus();
+        } else {
+            if (this.elements.searchInput) this.elements.searchInput.value = "";
+            this.renderSearchResults([]);
+        }
+    }
+
+    private executeSearch() {
+        const word = this.elements.searchInput?.value.trim();
+        if (!word) {
+            this.renderSearchResults([]);
+            return;
+        }
+
+        const results: { id: string; name: string; match: string }[] = [];
+        
+        const searchInTree = (items: TreeItem[]) => {
+            for (const item of items) {
+                if (item.type === 'file') {
+                    const model = this.models[item.id];
+                    const content = model ? model.getValue() : (item.content || "");
+                    if (content.toLowerCase().includes(word.toLowerCase())) {
+                        results.push({ id: item.id, name: item.name, match: "Match found" });
+                    }
+                }
+                if (item.children) searchInTree(item.children);
+            }
         };
-        return button;
+        
+        searchInTree(this.data.tree);
+        this.renderSearchResults(results);
+    }
+
+    private renderSearchResults(results: { id: string; name: string; match: string }[]) {
+        if (!this.elements.searchResults) return;
+        this.elements.searchResults.innerHTML = "";
+        
+        results.forEach(result => {
+            const item = document.createElement("div");
+            item.className = getStyle("webui-monaco-prompt-multitext-search-result-item");
+            item.innerText = `${result.name}: ${result.match}`;
+            item.addEventListener("click", () => {
+                this.openFile(result.id);
+            });
+            this.elements.searchResults!.appendChild(item);
+        });
     }
 
     private addItem(type: 'file' | 'folder', parentId?: string) {
@@ -467,7 +552,7 @@ class MultiTextWidget {
         this.addItemWithName(type, name, parentId);
     }
 
-    public addItemWithName(type: 'file' | 'folder', name: string, parentId?: string, content?: string) {
+    public addItemWithName(type: 'file' | 'folder', name: string, parentId?: string, content?: string): string {
         const newItem: TreeItem = {
             id: utils.guid(),
             name: name,
@@ -497,6 +582,7 @@ class MultiTextWidget {
         this.renderTree();
         // 保存をトリガー
         this.commitData();
+        return newItem.id;
     }
 
     private renameItem(id: string, currentName: string) {
@@ -1132,24 +1218,35 @@ class MultiTextWidget {
 
     onRemoved() {
         if (this.editor) {
-            const id = this.editor.getInstanceId()
-            if (link[id]) {
-                const editor = this.editor
-                editor.dispose()
-                if (editor.parentElement) {
-                    editor.parentElement.removeChild(editor)
+            try {
+                const id = typeof this.editor.getInstanceId === 'function' ? this.editor.getInstanceId() : null;
+                if (id !== null && link[id]) {
+                    const editor = this.editor;
+                    editor.dispose();
+                    if (editor.parentElement) {
+                        editor.parentElement.removeChild(editor);
+                    }
+                    delete link[id];
                 }
-                delete link[id]
+            } catch (e) {
+                console.error("[MultiTextWidget] Error in editor disposal:", e);
             }
         }
         for (const id of Object.keys(this.models)) {
-            const extra = (this.editor as any).extraModels?.find((e: any) => e.model === this.models[id])
-            if (extra && extra.decorationIds) {
-                extra.decorationIds = this.models[id].deltaDecorations(extra.decorationIds, []);
+            try {
+                const model = this.models[id];
+                if (model) {
+                    const extra = (this.editor as any)?.extraModels?.find?.((e: any) => e.model === model);
+                    if (extra && extra.decorationIds && typeof model.deltaDecorations === 'function') {
+                        extra.decorationIds = model.deltaDecorations(extra.decorationIds, []);
+                    }
+                    model.dispose();
+                }
+            } catch (e) {
+                console.error(`[MultiTextWidget] Error disposing model ${id}:`, e);
             }
-            this.models[id].dispose()
         }
-        this.models = {}
+        this.models = {};
     }
 }
 

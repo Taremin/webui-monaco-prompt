@@ -20,6 +20,8 @@ def add_node_api_force(page: Page):
                     const app = getApp();
                     app.graph.clear();
                     const node = lg.createNode(type);
+                    const uniqueId = Math.random().toString(36).substring(2, 8);
+                    node.title = "MT-INLINE-EDIT-" + uniqueId;
                     node.pos = [300, 300]; 
                     node.size = [400, 400];
                     app.graph.add(node);
@@ -46,19 +48,19 @@ def test_multitext_inline_edit(page: Page, comfyui_server, wait_for_comfyui):
     add_node_api_force(page)
     
     # サイドバーのアイテムが表示されるまで待機（default.txt）
-    item_selector = ".webui-monaco-prompt-multitext-tree-name"
+    item_selector = "[class*='tree-name']"
     expect(page.locator(item_selector).first).to_be_visible(timeout=10000)
     expect(page.locator(item_selector).first).to_have_text("default.txt")
 
     # 3. 編集ボタンをクリックしてインライン編集に切り替わるか確認
     # アクションを表示させるためにホバー
-    page.locator(".webui-monaco-prompt-multitext-tree-item").first.hover()
+    page.locator("[class*='tree-item']").first.hover()
     # Renameボタン（editアイコン）をクリック
-    edit_btn = page.locator(".webui-monaco-prompt-multitext-tree-action[title='Rename']")
+    edit_btn = page.locator("[class*='multitext-tree-action'][title='Rename']")
     edit_btn.click()
 
     # inputが表示されていることを確認
-    input_selector = ".webui-monaco-prompt-multitext-tree-name-input"
+    input_selector = "[class*='tree-name-input']"
     expect(page.locator(input_selector)).to_be_visible()
     expect(page.locator(input_selector)).to_have_value("default.txt")
 

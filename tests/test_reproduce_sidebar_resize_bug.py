@@ -36,11 +36,11 @@ def test_reproduce_sidebar_resize_bug(page: Page, comfyui_server, wait_for_comfy
     
     page.wait_for_selector(".monaco-editor", state="attached")
 
-    sidebar = page.locator(".webui-monaco-prompt-multitext-sidebar")
+    sidebar = page.locator("[class*='multitext-sidebar']").nth(0)
     initial_width = sidebar.bounding_box()["width"]
     print(f"DEBUG - Initial Sidebar Width: {initial_width}")
 
-    resizer = page.locator(".webui-monaco-prompt-multitext-resizer")
+    resizer = page.locator("[class*='multitext-resizer']")
     resizer_box = resizer.bounding_box()
     
     start_x = resizer_box["x"] + resizer_box["width"] / 2

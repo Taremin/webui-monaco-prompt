@@ -27,7 +27,7 @@ def test_multitext_min_size_layout(page: Page, comfyui_server, wait_for_comfyui)
         return { id: node.id };
     }""")
 
-    page.wait_for_selector(".webui-monaco-prompt-multitext-container", state="visible")
+    page.wait_for_selector("[class*='multitext-container']", state="visible")
     
     # 1. ノードを小さくリサイズ
     # computeSize で計算される最小高さは約 160px (36+35+40+50) なので、
@@ -43,7 +43,7 @@ def test_multitext_min_size_layout(page: Page, comfyui_server, wait_for_comfyui)
     page.screenshot(path=os.path.join(screenshot_dir, "01_min_size.png"))
 
     # タブの出現を待機
-    page.wait_for_selector(".webui-monaco-prompt-multitext-tabs-container", state="visible")
+    page.wait_for_selector("[class*='tabs-container']", state="visible")
 
     # レイアウト情報の取得
     layout_info = page.evaluate(f"""(id) => {{
@@ -57,8 +57,8 @@ def test_multitext_min_size_layout(page: Page, comfyui_server, wait_for_comfyui)
         const container = widget.element;
         if (!container) return {{ error: "Container element not found" }};
 
-        const tabs = container.querySelector(".webui-monaco-prompt-multitext-tabs-container");
-        const editorContainer = container.querySelector(".webui-monaco-prompt-multitext-editor-container");
+        const tabs = container.querySelector("[class*='tabs-container']");
+        const editorContainer = container.querySelector("[class*='editor-container']");
         
         if (!tabs || !editorContainer) return {{ 
             error: "Tabs or Editor container not found in DOM",

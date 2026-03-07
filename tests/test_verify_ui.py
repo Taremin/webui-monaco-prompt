@@ -27,9 +27,12 @@ def test_verify_ui_appearance(page: Page, comfyui_server, wait_for_comfyui):
     }""")
     assert node_type, "MultiText node type should be registered"
 
+    import uuid
+    unique_id = uuid.uuid4().hex[:6]
     page.evaluate(f"""() => {{
         const app = window.app || window.ComfyApp;
         const node = window.LiteGraph.createNode("{node_type}");
+        node.title = "MT-VERIFY-UI-{unique_id}";
         node.pos = [100, 100];
         node.setSize([800, 600]);
         app.graph.add(node);
@@ -61,19 +64,28 @@ def test_verify_ui_appearance(page: Page, comfyui_server, wait_for_comfyui):
     # ツリーの状態を撮影 (ホバー前)
     page.screenshot(path=os.path.join(screenshot_dir, "02_tree_structure.png"))
 
+    # 基本コンポーネントの可視性検証
+    expect(page.locator("[class*='multitext-container']")).to_be_visible()
+    expect(page.locator("[class*='multitext-sidebar']").nth(0)).to_be_visible()
+    expect(page.locator("[class*='main-area']")).to_be_visible()
+    
+    resizer = page.locator("[class*='multitext-resizer']")
+    box = resizer.bounding_box()
+    assert box, "Resizer should be visible"
+    
+    expect(page.locator("[class*='sidebar-toolbar']")).to_be_visible()
+    expect(page.locator("[class*='multitext-tree']:not([class*='action'])").first).to_be_visible()
+    expect(page.locator("[class*='multitext-tabs-container']")).to_be_visible()
+    expect(page.locator("[class*='multitext-editor-container']")).to_be_visible()
+    expect(page.locator("[class*='tree-name']", has_text="default.txt")).to_be_visible()
+
     # 2. アクションボタンの右寄せ検証 (ホバー)
-    item_selector = ".webui-monaco-prompt-multitext-tree-item:has-text('new_file.txt')"
+    item_selector = "[class*='tree-item']:has-text('new_file.txt')"
     page.hover(item_selector)
     page.wait_for_timeout(500)
     page.screenshot(path=os.path.join(screenshot_dir, "03_hover_actions_right.png"))
 
     # 3. リサイズハンドルの検証 (ドラッグ)
-    resizer_selector = ".webui-monaco-prompt-multitext-resizer"
-    resizer = page.locator(resizer_selector)
-    box = resizer.bounding_box()
-    assert box, "Resizer should be visible"
-
-    # サイドバーを広げる
     page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
     page.mouse.down()
     page.mouse.move(box["x"] + 100, box["y"] + box["height"] / 2)
@@ -86,5 +98,4 @@ def test_verify_ui_appearance(page: Page, comfyui_server, wait_for_comfyui):
     print(f"Screenshots saved to {screenshot_dir}")
 
 if __name__ == "__main__":
-    # 直接実行用ではなく pytest で実行することを想定
     pass

@@ -44,34 +44,40 @@ def test_multitext_layout_and_features(page: Page, comfyui_server, wait_for_comf
     # 1. レイアウト検証（スクリーン座標・はみ出しチェック）
     # ---------------------------------------------------------
     layout_info = page.evaluate("""() => {
-        const container = document.querySelector(".webui-monaco-prompt-multitext-container");
+        const findByPart = (root, part) => {
+            if (root.className && typeof root.className === 'string' && root.className.includes(part)) return root;
+            const children = Array.from(root.children || []);
+            for (const child of children) {
+                const found = findByPart(child, part);
+                if (found) return found;
+            }
+            if (root.shadowRoot) {
+                const found = findByPart(root.shadowRoot, part);
+                if (found) return found;
+            }
+            return null;
+        };
+
+        const container = findByPart(document.body, "multitext-container");
+        if (!container) return { error: "Container not found" };
+
         const node = window.app.graph._nodes[0];
         const canvas = window.app.canvas;
+        if (!canvas || !canvas.canvas) return { error: "Canvas not found" };
 
-        // LiteGraph内部のノード座標(pos)とサイズ(size)
-        // pos[1] は通常、タイトルバー直下（ノードボディの開始行）を指します。
         const pos = node.pos;
         const size = node.size;
-        
-        // LiteGraphのキャンバスパン・ズーム情報
         const scale = canvas.ds.scale;
-        const offset = canvas.ds.offset;
         
-        // キャンバスDOM自体のスクリーン上の絶対位置
         const canvasRect = canvas.canvas.getBoundingClientRect();
-                // Nodeボディのウィジェットエリア開始位置の想定スクリーン絶対座標の算出
-            // pos はノードの開始座標。ウィジェットはタイトル(約30px) + マージン(約6px)下に配置され、左マージンは10px。
-            // LiteGraphの公式APIを利用してキャンバス内座標からスクリーン座標上のオフセットへ変換
-            const widgetCanvasPos = [pos[0] + 10, pos[1] + 36]; 
-            const uiPos = canvas.convertCanvasToOffset(widgetCanvasPos);
-    
-            // 変換結果にキャンバスDOMの絶対位置を加算
-            const expectedX = canvasRect.left + uiPos[0];
-            const expectedY = canvasRect.top + uiPos[1];
-            const expectedW = (size[0] - 20) * scale;
-            const expectedH = (size[1] - 36) * scale;
+        const widgetCanvasPos = [pos[0] + 10, pos[1] + 36]; 
+        const uiPos = canvas.convertCanvasToOffset(widgetCanvasPos);
 
-        // 実際のUIコンテナのスクリーン絶対座標
+        const expectedX = canvasRect.left + uiPos[0];
+        const expectedY = canvasRect.top + uiPos[1];
+        const expectedW = (size[0] - 20) * scale;
+        const expectedH = (size[1] - 36) * scale;
+
         const containerRect = container.getBoundingClientRect();
         
         return {
@@ -94,6 +100,7 @@ def test_multitext_layout_and_features(page: Page, comfyui_server, wait_for_comf
         };
     }""")
     print(f"DEBUG - Layout Dump: {json.dumps(layout_info, indent=2)}")
+    assert "error" not in layout_info, f"Layout verification failed: {layout_info.get('error')}"
     
     expected = layout_info['expected']
     actual = layout_info['actual']
@@ -114,12 +121,12 @@ def test_multitext_layout_and_features(page: Page, comfyui_server, wait_for_comf
     # ---------------------------------------------------------
     # 2. リサイズ検証
     # ---------------------------------------------------------
-    sidebar = page.locator(".webui-monaco-prompt-multitext-sidebar")
+    sidebar = page.locator("[class*='multitext-sidebar']:not([class*='toolbar']):not([class*='search'])")
     initial_width = sidebar.bounding_box()["width"]
 
     page.evaluate("window.RESIZE_DEBUG = []")
     
-    resizer = page.locator(".webui-monaco-prompt-multitext-resizer")
+    resizer = page.locator("[class*='multitext-resizer']")
     resizer_box = resizer.bounding_box()
     print(f"DEBUG - Resizer Bounding Box: {resizer_box}")
     
@@ -146,10 +153,161 @@ def test_multitext_layout_and_features(page: Page, comfyui_server, wait_for_comf
     debug_logs = page.evaluate("window.RESIZE_DEBUG")
     print(f"DEBUG - Browser Resize Logs: {json.dumps(debug_logs, indent=2)}")
     
-    new_width = sidebar.bounding_box()["width"]
+    new_width = page.locator("[class*='multitext-sidebar']:not([class*='toolbar']):not([class*='search'])").bounding_box()["width"]
     print(f"DEBUG - Initial Width: {initial_width}, New Width: {new_width}")
     assert new_width > initial_width + 100, f"Sidebar should be resized, but got {new_width}"
     page.screenshot(path=os.path.join(screenshot_dir, "02_after_resize.png"))
+
+    # ---------------------------------------------------------
+    # 2.5 タブのはみ出し検証 (新規追加)
+    # ---------------------------------------------------------
+    page.evaluate("""() => {
+        const node = window.app.graph._nodes[0];
+        for (let i = 0; i < 20; i++) {
+            const id = node.multitext_widget.addItemWithName('file', `overflow_test_${i}.txt`, undefined, `content ${i}`);
+            node.multitext_widget.openFile(id);
+        }
+    }""")
+    
+    # ウィジェット要素が出現するのを待つ (難読化対応属性セレクタ)
+    page.wait_for_selector("[class*='multitext-tabs-container']", state="attached", timeout=10000)
+    
+    # デバッグ: クラス名ダンプ
+    all_classes = page.evaluate("""() => {
+        const getClasses = (root) => {
+            let res = [];
+            if (root.className) {
+                const c = root.className;
+                res.push(typeof c === 'string' ? c : (c.baseVal || ""));
+            }
+            for (const child of root.children || []) res = res.concat(getClasses(child));
+            if (root.shadowRoot) res = res.concat(getClasses(root.shadowRoot));
+            return res;
+        };
+        return getClasses(document.body).filter(c => typeof c === 'string' && c.includes("webui-monaco-prompt"));
+    }""")
+    print(f"DEBUG - All monaco classes: {all_classes}")
+
+    # CSS Modules 難読化対応のセレクタで検証
+    tabs_info = page.evaluate("""() => {
+        const findByPart = (root, part) => {
+            if (root.className && typeof root.className === 'string' && root.className.includes(part)) return root;
+            for (const child of Array.from(root.children || [])) {
+                const found = findByPart(child, part);
+                if (found) return found;
+            }
+            if (root.shadowRoot) {
+                const found = findByPart(root.shadowRoot, part);
+                if (found) return found;
+            }
+            return null;
+        };
+
+        const tabs = findByPart(document.body, "multitext-tabs-container");
+        const container = findByPart(document.body, "multitext-container");
+        if (!tabs || !container) return { error: "Elements not found", tabsFound: !!tabs, containerFound: !!container };
+        
+        return {
+            tabsRight: tabs.getBoundingClientRect().right,
+            containerRight: container.getBoundingClientRect().right,
+            overflowX: window.getComputedStyle(tabs).overflowX,
+            scrollWidth: tabs.scrollWidth,
+            clientWidth: tabs.clientWidth
+        };
+    }""")
+    print(f"DEBUG - Overflow Tabs Info: {tabs_info}")
+    assert "error" not in tabs_info, f"Should find tab elements: {tabs_info.get('error')}"
+    assert tabs_info["overflowX"] == "hidden", f"Tabs should be hidden overflow, but got {tabs_info['overflowX']}"
+    assert tabs_info["tabsRight"] <= tabs_info["containerRight"] + 15, f"Tabs should be clipped within container: tabsRight({tabs_info['tabsRight']}) > containerRight({tabs_info['containerRight']})"
+    
+    # スクロール検証
+    scroll_debug = page.evaluate("""() => {
+        const findByPart = (root, part) => {
+            if (root.className && typeof root.className === 'string' && root.className.includes(part) && !root.className.includes("toolbar")) return root;
+            for (const child of Array.from(root.children || [])) {
+                const found = findByPart(child, part);
+                if (found) return found;
+            }
+            if (root.shadowRoot) {
+                const found = findByPart(root.shadowRoot, part);
+                if (found) return found;
+            }
+            return null;
+        };
+        const tabs = findByPart(document.body, "multitext-tabs-container");
+        if (!tabs) return { error: "Tabs not found" };
+        return {
+            scrollLeft: tabs.scrollLeft,
+            scrollWidth: tabs.scrollWidth,
+            clientWidth: tabs.clientWidth,
+            rect: tabs.getBoundingClientRect()
+        };
+    }""")
+    print(f"DEBUG - Scroll Initial State: {scroll_debug}")
+    assert "error" not in scroll_debug, "Tabs container for scroll should be found"
+    # スクロール検証: 内容がコンテナ幅を超えていることを確認
+    assert scroll_debug["scrollWidth"] > scroll_debug["clientWidth"], f"Content should be wider than container: {scroll_debug['scrollWidth']} > {scroll_debug['clientWidth']}"
+    
+    # 既に右端までスクロールされている可能性があるため、一度左へ戻してからスクロール検証
+    page.evaluate("""() => {
+        const findByPart = (root, part) => {
+            if (root.className && typeof root.className === 'string' && root.className.includes(part) && !root.className.includes("toolbar")) return root;
+            for (const child of Array.from(root.children || [])) {
+                const found = findByPart(child, part);
+                if (found) return found;
+            }
+            if (root.shadowRoot) {
+                const found = findByPart(root.shadowRoot, part);
+                if (found) return found;
+            }
+            return null;
+        };
+        const tabs = findByPart(document.body, "multitext-tabs-container");
+        if (tabs) tabs.scrollLeft = 0;
+    }""")
+    page.wait_for_timeout(500)
+    
+    initial_scroll = 0
+    page.hover("[class*='multitext-tabs-container']")
+    # JSでスクロールさせる（overflow: hidden の場合、ホイールイベントだけではスクロールしない場合があるため）
+    page.evaluate("""() => {
+        const findByPart = (root, part) => {
+            if (root.className && typeof root.className === 'string' && root.className.includes(part) && !root.className.includes("toolbar")) return root;
+            for (const child of Array.from(root.children || [])) {
+                const found = findByPart(child, part);
+                if (found) return found;
+            }
+            if (root.shadowRoot) {
+                const found = findByPart(root.shadowRoot, part);
+                if (found) return found;
+            }
+            return null;
+        };
+        const tabs = findByPart(document.body, "multitext-tabs-container");
+        if (tabs) tabs.scrollLeft += 100;
+    }""")
+    page.wait_for_timeout(500)
+    
+    new_scroll = page.evaluate("""() => {
+        const findByPart = (root, part) => {
+            if (root.className && typeof root.className === 'string' && root.className.includes(part) && !root.className.includes("toolbar")) return root;
+            for (const child of Array.from(root.children || [])) {
+                const found = findByPart(child, part);
+                if (found) return found;
+            }
+            if (root.shadowRoot) {
+                const found = findByPart(root.shadowRoot, part);
+                if (found) return found;
+            }
+            return null;
+        };
+        const tabs = findByPart(document.body, "multitext-tabs-container");
+        return tabs ? tabs.scrollLeft : -1;
+    }""")
+    print(f"DEBUG - Scroll check: Initial={initial_scroll}, New={new_scroll}")
+    # 少なくとも 0 より大きくなっていることを確認
+    assert new_scroll > 0, f"Should be able to scroll tabs via JS: {new_scroll}"
+    page.screenshot(path=os.path.join(screenshot_dir, "02_5_tab_overflow_fix.png"))
 
     # ---------------------------------------------------------
     # 3. D&D検証

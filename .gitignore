@@ -3,8 +3,9 @@ node_modules/
 settings/*
 *.pyc
 # Agent rules
-.agent/
+.agent/*
 !.agent/rules/
+!.agent/skills/
 tests/test_settings.json
 tests/*.html
 tests/*.png

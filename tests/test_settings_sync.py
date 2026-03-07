@@ -132,20 +132,21 @@ def test_dynamic_csv_toggle_sync(page: Page, comfyui_server, wait_for_comfyui):
                 }
             }""")
             
-        page.wait_for_timeout(2000)
-        
-        has_csv_context = page.evaluate("""() => {
-            const getApp = () => window.app || window.ComfyApp;
-            const app = getApp();
-            const nodes = app.graph._nodes.filter(n => n.type && n.type.includes('MultiText'));
-            const editor = nodes[0].multitext_widget.editorInstance;
-            if (!editor) return false;
-            
-            const val = editor.getContext(editor.createContextKey("csv.test_dynamic"));
-            return val !== undefined && val !== null;
-        }""")
-        
-        assert has_csv_context, "Dynamic CSV was not detected or added to the local context by refresh"
+        # Wait dynamically instead of fixed timeout to avoid flakiness
+        try:
+            page.wait_for_function("""() => {
+                const getApp = () => window.app || window.ComfyApp;
+                const app = getApp();
+                const nodes = app.graph._nodes.filter(n => n.type && n.type.includes('MultiText'));
+                if (nodes.length === 0) return false;
+                const editor = nodes[0].multitext_widget.editorInstance;
+                if (!editor) return false;
+                
+                const val = editor.getContext(editor.createContextKey("csv.test_dynamic"));
+                return val !== undefined && val !== null;
+            }""", timeout=10000)
+        except Exception:
+            pytest.fail("Dynamic CSV was not detected or added to the local context by refresh within timeout")
         
     finally:
         if test_csv_path.exists():
