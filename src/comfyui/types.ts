@@ -7,11 +7,13 @@ interface ExtraModel {
     model: monaco.editor.ITextModel
     onActivate: () => void
     decorationIds: string[]
+    nodeDecorationIds: string[]
 }
 
 type PromptEditor = WebuiMonacoPrompt.PromptEditor & {
     instanceStyle?: HTMLStyleElement
     findDecorationIds?: string[]
+    nodeDecorationIds?: string[]
     extraModels?: ExtraModel[]
 }
 

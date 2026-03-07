@@ -8,19 +8,7 @@ import {default as style} from "./index.css"
 
 const $el = utils.$el
 const getStyle = (name: string) => utils.getStyle(style, name)
-const TooltipSurroundingLines = 2
-const TooltipDistance = 20
-
-let tooltip: HTMLElement
-let tooltipBody: HTMLDivElement
-let tooltipStyle: HTMLStyleElement
-
-function initTooltip() {
-    if (tooltip) return
-    tooltip = createFindWidgetTooltip()
-    tooltipBody = tooltip.querySelector("div") as HTMLDivElement
-    tooltipStyle = tooltip.querySelector("style") as HTMLStyleElement
-}
+// ツールチップ関連は utils に移動
 
 interface FindWidgetElements {
     header: HTMLDivElement
@@ -361,92 +349,22 @@ class FindWidget {
                 utils.setActiveNode(app, node)
             })
 
-            setTooltip(trEl)
+            utils.setSearchTooltip(trEl)
 
             tbodyEl.appendChild(trEl)
         }
     }
 
     clearElements(element: HTMLElement) {
-        initTooltip()
+        utils.initSearchTooltip()
         while (element.hasChildNodes()) {
             element.removeChild(element.firstChild!)
         }
-        tooltip.style.display = "none"
+        utils.clearSearchTooltip()
     }
 }
 
-const createFindWidgetTooltip = () => {
-    const tooltip = $el("div", {
-        className: ["text-sm"].join(" "),
-        style: {
-            display: "none",
-            position: "fixed",
-            backgroundColor: "var(--bg-color)",
-            color: "var(--fg-color)",
-            overflowWrap: "anywhere",
-            zIndex: 999999,
-        }
-    }) as HTMLElement
-
-    const scopedStyle = document.createElement("style")
-    const body = document.createElement("div")
-
-    tooltip.appendChild(scopedStyle)
-    tooltip.appendChild(body)
-
-    document.body.appendChild(tooltip)
-
-    return tooltip
-}
-const setTooltip = (targetElement: HTMLElement) => {
-    targetElement.addEventListener("mouseenter", (ev) => {
-        initTooltip()
-        while (tooltipBody.firstChild) {
-            tooltipBody.removeChild(tooltipBody.firstChild)
-        }
-        const instance = link[targetElement.dataset.instanceId!]
-
-        // instance removed
-        if (!instance) {
-            return
-        }
-
-        const monaco = instance.monaco
-        const line = +(targetElement.dataset.startLine!)
-        const range = TooltipSurroundingLines
-        const filename = targetElement.dataset.filename
-        const modelId = targetElement.dataset.modelId
-
-        if (monaco.instanceStyle) {
-            tooltipStyle.textContent = `@scope {
-                ${monaco.instanceStyle.textContent}
-                .monaco-editor {
-                    padding: 1rem;
-                }
-            }`
-        }
-
-        const extraModel = modelId ? monaco.extraModels?.find((e: any) => e.id === modelId) : monaco.extraModels?.find((e: any) => e.filename === filename)
-        const targetModel = extraModel?.model
-        const contentElement = monaco.getLinesTable(Math.max(1, line - range), line, line + range, targetModel)
-        tooltipBody.appendChild(contentElement)
-
-        tooltip.style.display = "block"
-    })
-
-    targetElement.addEventListener("mousemove", (ev) => {
-        tooltip.style.left = (ev.clientX + TooltipDistance) + 'px'
-        tooltip.style.top = (ev.clientY + TooltipDistance) + 'px'
-
-        if (document.documentElement.clientHeight < ev.clientY + TooltipDistance + tooltip.getBoundingClientRect().height) {
-            tooltip.style.top = (ev.clientY - TooltipDistance  - tooltipBody.getBoundingClientRect().height) + 'px'
-        }
-    })
-    targetElement.addEventListener("mouseout", (ev) => {
-        tooltip.style.display = "none"
-    })
-}
+// tooltip logic moved to utils.ts
 
 export {
     FindWidget,

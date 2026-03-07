@@ -501,49 +501,77 @@ class MultiTextWidget {
             this.elements.searchInput?.focus();
         } else {
             if (this.elements.searchInput) this.elements.searchInput.value = "";
-            this.renderSearchResults([]);
+            this.executeSearch();
         }
     }
 
     private executeSearch() {
-        const word = this.elements.searchInput?.value.trim();
+        const word = this.elements.searchInput?.value.trim() || "";
+        
+        if (!this.editor) return;
+
+        // utils.findInstance を使用して詳細なマッチ情報を取得 (ローカルデコレーションを有効化)
+        const results = utils.findInstance(this.editor, word, false, false, false, true, "nodeDecorationIds");
+        
         if (!word) {
             this.renderSearchResults([]);
             return;
         }
 
-        const results: { id: string; name: string; match: string }[] = [];
-        
-        const searchInTree = (items: TreeItem[]) => {
-            for (const item of items) {
-                if (item.type === 'file') {
-                    const model = this.models[item.id];
-                    const content = model ? model.getValue() : (item.content || "");
-                    if (content.toLowerCase().includes(word.toLowerCase())) {
-                        results.push({ id: item.id, name: item.name, match: "Match found" });
-                    }
-                }
-                if (item.children) searchInTree(item.children);
-            }
-        };
-        
-        searchInTree(this.data.tree);
         this.renderSearchResults(results);
     }
 
-    private renderSearchResults(results: { id: string; name: string; match: string }[]) {
+    private renderSearchResults(results: any[]) {
         if (!this.elements.searchResults) return;
         this.elements.searchResults.innerHTML = "";
-        
+        utils.initSearchTooltip();
+
         results.forEach(result => {
             const item = document.createElement("div");
             item.className = getStyle("webui-monaco-prompt-multitext-search-result-item");
-            item.innerText = `${result.name}: ${result.match}`;
+            
+            // 行番号と列番号を含めて表示
+            const line = result.match.range.startLineNumber;
+            const col = result.match.range.startColumn;
+            item.innerText = `${result.filename}: Ln ${line}, Col ${col}`;
+            
+            // ツールチップ用のデータをセット
+            item.dataset.nodeId = (this as any)._node?.id;
+            item.dataset.instanceId = "" + this.editor.getInstanceId();
+            item.dataset.startLine = "" + line;
+            item.dataset.startCol = "" + col;
+            item.dataset.filename = result.filename || "";
+            if (result.extraModel?.id) {
+                item.dataset.modelId = result.extraModel.id;
+            }
+
+            utils.setSearchTooltip(item);
+
             item.addEventListener("click", () => {
-                this.openFile(result.id);
+                // ファイルを切り替える (ExtraModel の onActivate を呼ぶ)
+                if (result.extraModel) {
+                    result.extraModel.onActivate();
+                }
+
+                // 該当行へジャンプ
+                const monaco = this.editor.monaco;
+                monaco.focus();
+                monaco.setPosition({
+                    lineNumber: line,
+                    column: col,
+                });
+                monaco.revealLineInCenterIfOutsideViewport(line, Monaco.editor.ScrollType.Immediate);
             });
             this.elements.searchResults!.appendChild(item);
         });
+        
+        if (results.length === 0 && this.elements.searchInput?.value.trim()) {
+            const noResult = document.createElement("div");
+            noResult.className = getStyle("webui-monaco-prompt-multitext-search-result-item");
+            noResult.innerText = "No results found";
+            noResult.style.cursor = "default";
+            this.elements.searchResults.appendChild(noResult);
+        }
     }
 
     private addItem(type: 'file' | 'folder', parentId?: string) {

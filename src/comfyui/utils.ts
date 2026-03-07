@@ -1,8 +1,103 @@
 import * as WebuiMonacoPrompt from "../index"
-import { PromptEditor, NodeFindMatch } from "./types"
+import { PromptEditor, NodeFindMatch, ExtraModel } from "./types"
 import { ui } from "./api"
+import { link } from "./link"
 // @ts-ignore
 import * as codicon from "monaco-editor/esm/vs/base/common/codiconsUtil"
+
+const TooltipSurroundingLines = 2
+const TooltipDistance = 20
+
+let tooltip: HTMLElement
+let tooltipBody: HTMLDivElement
+let tooltipStyle: HTMLStyleElement
+
+function initSearchTooltip() {
+    if (tooltip) return
+    tooltip = createSearchTooltip()
+    tooltipBody = tooltip.querySelector("div") as HTMLDivElement
+    tooltipStyle = tooltip.querySelector("style") as HTMLStyleElement
+}
+
+const createSearchTooltip = () => {
+    const tooltip = $el("div", {
+        className: ["text-sm"].join(" "),
+        style: {
+            display: "none",
+            position: "fixed",
+            backgroundColor: "var(--bg-color)",
+            color: "var(--fg-color)",
+            overflowWrap: "anywhere",
+            zIndex: 999999,
+        }
+    }) as HTMLElement
+
+    const scopedStyle = document.createElement("style")
+    const body = document.createElement("div")
+
+    tooltip.appendChild(scopedStyle)
+    tooltip.appendChild(body)
+
+    document.body.appendChild(tooltip)
+
+    return tooltip
+}
+
+const setSearchTooltip = (targetElement: HTMLElement) => {
+    targetElement.addEventListener("mouseenter", (ev) => {
+        initSearchTooltip()
+        while (tooltipBody.firstChild) {
+            tooltipBody.removeChild(tooltipBody.firstChild)
+        }
+        const instance = link[targetElement.dataset.instanceId!]
+
+        // instance removed
+        if (!instance) {
+            return
+        }
+
+        const monaco = instance.monaco
+        const line = +(targetElement.dataset.startLine!)
+        const range = TooltipSurroundingLines
+        const filename = targetElement.dataset.filename
+        const modelId = targetElement.dataset.modelId
+
+        if (monaco.instanceStyle) {
+            tooltipStyle.textContent = `@scope {
+                ${monaco.instanceStyle.textContent}
+                .monaco-editor {
+                    padding: 1rem;
+                }
+            }`
+        }
+
+        const extraModel = modelId ? monaco.extraModels?.find((e: any) => e.id === modelId) : monaco.extraModels?.find((e: any) => e.filename === filename)
+        const targetModel = extraModel?.model
+        const contentElement = monaco.getLinesTable(Math.max(1, line - range), line, line + range, targetModel)
+        tooltipBody.appendChild(contentElement)
+
+        tooltip.style.display = "block"
+    })
+
+    targetElement.addEventListener("mousemove", (ev) => {
+        tooltip.style.left = (ev.clientX + TooltipDistance) + 'px'
+        tooltip.style.top = (ev.clientY + TooltipDistance) + 'px'
+
+        if (document.documentElement.clientHeight < ev.clientY + TooltipDistance + tooltip.getBoundingClientRect().height) {
+            tooltip.style.top = (ev.clientY - TooltipDistance  - tooltipBody.getBoundingClientRect().height) + 'px'
+        }
+    })
+    targetElement.addEventListener("mouseout", (ev) => {
+        tooltip.style.display = "none"
+    })
+}
+
+const clearSearchTooltip = () => {
+    initSearchTooltip()
+    if (tooltip) {
+        tooltip.style.display = "none"
+    }
+}
 
 
 // Codicon を style 要素でロード
@@ -72,15 +167,15 @@ const updateThemeStyle = (instance: PromptEditor) => {
 }
 
 // すべての WebUI Monaco Prompt インスタンスで検索
-function find(searchString: string, isRegex: boolean, matchCase: boolean, matchWordOnly: boolean) {
+function find(searchString: string, isRegex: boolean, matchCase: boolean, matchWordOnly: boolean, decorationKey: string = "findDecorationIds") {
     const allMmatches: NodeFindMatch[] = []
     WebuiMonacoPrompt.runAllInstances<PromptEditor>((instance) => {
-        Array.prototype.push.apply(allMmatches, findInstance(instance, searchString, isRegex, matchCase, matchWordOnly))
+        Array.prototype.push.apply(allMmatches, findInstance(instance, searchString, isRegex, matchCase, matchWordOnly, true, decorationKey))
     })
     return allMmatches
 }
 
-function findInstance(instance: PromptEditor, searchString: string, isRegex: boolean, matchCase: boolean, matchWordOnly: boolean, decoration: boolean = true) {
+function findInstance(instance: PromptEditor, searchString: string, isRegex: boolean, matchCase: boolean, matchWordOnly: boolean, decoration: boolean = true, decorationKey: string = "findDecorationIds") {
     const allMatches: NodeFindMatch[] = []
     const editor = instance.monaco
     const editorConfig = editor.getConfiguration()
@@ -111,8 +206,9 @@ function findInstance(instance: PromptEditor, searchString: string, isRegex: boo
 
         // デコレーション（メインモデルのみ）
         if (decoration) {
-            instance.findDecorationIds = mainModel.deltaDecorations(
-                instance.findDecorationIds || [],
+            const decKey = decorationKey as keyof PromptEditor;
+            (instance as any)[decKey] = mainModel.deltaDecorations(
+                (instance as any)[decKey] || [],
                 matches.map((findMatch) => {
                     return {
                         range: findMatch.range,
@@ -148,8 +244,9 @@ function findInstance(instance: PromptEditor, searchString: string, isRegex: boo
 
             // 追加モデルのデコレーション設定
             if (decoration) {
-                extra.decorationIds = extra.model.deltaDecorations(
-                    extra.decorationIds || [],
+                const decKey = decorationKey as keyof ExtraModel;
+                (extra as any)[decKey] = extra.model.deltaDecorations(
+                    (extra as any)[decKey] || [],
                     matches.map((findMatch) => {
                         return {
                             range: findMatch.range,
@@ -250,11 +347,15 @@ export {
     loadStyle,
     getThemeClassName,
     updateThemeStyle,
-    find,
-    replace,
     setActiveNode,
     applyCommonEditorSetup,
+    find,
+    findInstance,
+    replace,
     guid,
     $el,
     getStyle,
+    initSearchTooltip,
+    setSearchTooltip,
+    clearSearchTooltip,
 }

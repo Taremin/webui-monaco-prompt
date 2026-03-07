@@ -12,6 +12,7 @@ declare let __webpack_public_path__: any;
 interface Window {
     WebuiMonacoPromptBaseURL: string
     WebuiMonacoPrompt: typeof WebuiMonacoPrompt
+    WebuiMonacoPromptUtils: typeof utils
 }
 declare var window: Window
 
@@ -28,6 +29,7 @@ utils.loadStyle(dir, "multitext.css")
 // import は __webpack_public_path__ を使う場合は処理順の関係で使えない
 const MonacoPrompt = require("../index") as typeof WebuiMonacoPrompt
 window.WebuiMonacoPrompt = MonacoPrompt
+window.WebuiMonacoPromptUtils = utils
 
 const languages = [
     {id: "comfy-prompt", lang: comfyPrompt},

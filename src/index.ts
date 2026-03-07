@@ -1612,6 +1612,12 @@ class PromptEditor extends HTMLElement {
         if (!targetModel) {
             throw new Error("Model not found in Monaco Editor")
         }
+
+        // 非アクティブなモデルの場合、トークン化が完了していない可能性があるため強制的に実行する
+        if ((targetModel as any).tokenization) {
+            (targetModel as any).tokenization.forceTokenization(targetModel.getLineCount());
+        }
+
         const currentModel = this.monaco.getModel()
         const isCurrentModel = targetModel === currentModel
         const lineCount = Math.min(end, targetModel.getLineCount())

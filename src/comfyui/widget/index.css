@@ -257,22 +257,32 @@
 
 .webui-monaco-prompt-multitext-search-results {
     background-color: #252526 !important;
-    max-height: 200px !important;
+    max-height: 300px !important;
     overflow-y: auto !important;
     border-bottom: 1px solid #333 !important;
     display: flex !important;
     flex-direction: column !important;
+    flex-shrink: 0 !important;
 }
 
 .webui-monaco-prompt-multitext-search-result-item {
-    padding: 6px 8px !important;
+    padding: 2px 8px !important;
     cursor: pointer !important;
-    font-size: 12px !important;
+    font-size: 11px !important;
+    line-height: 22px !important;
+    /* ツリーアイテムの高さ 22px に合わせる */
+    height: 22px !important;
+    min-height: 22px !important;
+    /* 強制的に高さを確保 */
+    flex-shrink: 0 !important;
+    /* flexコンテナ内で縮まないようにする */
     color: #cccccc !important;
     white-space: nowrap !important;
     overflow: hidden !important;
     text-overflow: ellipsis !important;
     border-bottom: 1px solid #333 !important;
+    display: flex !important;
+    align-items: center !important;
 }
 
 .webui-monaco-prompt-multitext-search-result-item:hover {
