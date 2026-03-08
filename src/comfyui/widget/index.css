@@ -113,6 +113,10 @@
     background-color: #2a2d2e !important;
 }
 
+.webui-monaco-prompt-multi-text-container-item-header-title {
+    /* title styles */
+}
+
 .webui-monaco-prompt-multitext-tree-item.active {
     background-color: #37373d !important;
     color: #ffffff !important;
@@ -387,7 +391,7 @@
     background-color: #37373d;
 }
 
-.webui-monaco-prompt-filter-rule-row.dragging {
+.webui-monaco-prompt-filter-rule-row.webui-monaco-prompt-dragging {
     opacity: 0.5;
     border: 1px dashed #007acc;
 }
@@ -462,14 +466,15 @@
 
 /* 状態クラス: 各ウィジェットで getStyle 経由で使用可能にするため、単独でも定義 */
 .active {
-    /* Base active state */
+    display: inline-block;
+    /* ensure it is not empty */
 }
 
 .disabled {
-    /* Base disabled state */
+    /* base disabled property */
 }
 
-.dragging {
+.webui-monaco-prompt-dragging {
     /* Base dragging state */
 }
 
@@ -490,6 +495,7 @@
 .webui-monaco-prompt-filter-rule-row.disabled .webui-monaco-prompt-filter-select {
     background-color: #252526;
     color: #666;
+    pointer-events: none;
 }
 
 .webui-monaco-prompt-filter-disable-btn {

@@ -11,3 +11,4 @@ tests/*.html
 tests/*.png
 tests/*.log
 tmp/
+PROJECT_OVERVIEW.md
