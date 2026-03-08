@@ -4,6 +4,7 @@ import { link } from "../link"
 import * as Monaco from 'monaco-editor/esm/vs/editor/editor.api'
 import * as WebuiMonacoPrompt from "../../index"
 import { WebuiMonacoPromptAdapter, PromptEditor, ExtraModel } from "../types"
+import { updateInstanceSettings, saveSettings } from "../settings"
 import { default as style } from "./index.css"
 
 const getStyle = (name: string) => utils.getStyle(style, name)
@@ -771,6 +772,17 @@ class MultiTextWidget {
 
             const app = (window as any).app || ((window as any).comfyAPI && (window as any).comfyAPI.app) || (window as any).ComfyApp;
             utils.applyCommonEditorSetup(app, this.editor, (this as any)._node);
+
+            this.editor.onChangeTheme(() => {
+                this.editor!.monaco._themeService.onDidColorThemeChange(() => {
+                    utils.updateThemeStyle(this.editor!)
+                })
+            })
+
+            updateInstanceSettings(this.editor)
+            utils.updateThemeStyle(this.editor)
+
+            this.editor.onChangeBeforeSync(() => saveSettings(this.editor!))
         }
 
         if (this.editor) {

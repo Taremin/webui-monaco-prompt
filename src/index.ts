@@ -4,6 +4,7 @@ import { sdPrompt, sdDynamicPrompt } from './languages'
 import { provider, createDynamicSuggest, addCSV, loadCSV, getCount, addData, clearCSV, getReplaceUnderscore, updateReplaceUnderscore, getLoadedCSV, addLoadedCSV, getEnabledCSV } from './completion'
 import { addActionWithCommandOption, addActionWithSubMenu, ActionsPartialDescripter, getMenuId, updateSubMenu, removeSubMenu } from './monaco_utils'
 import { MultipleSelectInstance, multipleSelect} from 'multiple-select-vanilla'
+import * as utils from './utils'
 // @ts-ignore
 import { ContextKeyExpr } from 'monaco-editor/esm/vs/platform/contextkey/common/contextkey'
 // @ts-ignore
@@ -547,6 +548,15 @@ class PromptEditor extends HTMLElement {
 
     updateAutoComplete() {
         const csvfiles = getLoadedCSV()
+        
+        // Ensure context keys are initialized for new CSVs
+        for (const filename of csvfiles) {
+            const basename = filename.split(".", 2)[0]
+            const contextKey = this.createContextKey("csv", basename)
+            if (this.getContext(contextKey) === undefined) {
+                this.setContext(contextKey, true)
+            }
+        }
 
         // context menu
         const order = 9
@@ -1626,9 +1636,20 @@ class PromptEditor extends HTMLElement {
         const table = document.createElement("table")
 
         container.appendChild(styleContainer)
-        styleContainer.textContent = `@scope { ${ this.monaco._themeService._themeCSS } }`
-
         table.classList.add(style["find-lines-table"], "monaco-editor")
+
+        const findmatchClass = utils.getThemeClassName()
+        const theme = this.monaco._themeService.getColorTheme()
+        const findmatchColor = theme.getColor("editor.findMatchBackground", true)
+        const findmatchBorder = theme.getColor("editor.findMatchBorder", true)
+        let findmatchStyles = ""
+        if (findmatchColor) findmatchStyles += `background-color: ${findmatchColor.toString()};`
+        if (findmatchBorder) findmatchStyles += `border-color: ${findmatchBorder.toString()};`
+
+        styleContainer.textContent = `@scope { 
+            ${ this.monaco._themeService._themeCSS }
+            .${findmatchClass} { ${findmatchStyles} }
+        }`
 
         const options = new ViewLineOptions({ options: this.monaco.getOptions() }, this.getThemeId())
         for (let currentLineNum = Math.max(start, 1); currentLineNum <= lineCount; ++currentLineNum) {

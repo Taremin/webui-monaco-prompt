@@ -87,6 +87,25 @@ def test_settings_sync_between_editors(page: Page, comfyui_server, wait_for_comf
 
 def test_dynamic_csv_toggle_sync(page: Page, comfyui_server, wait_for_comfyui):
     page.set_default_timeout(60000)
+    page.set_viewport_size({"width": 1920, "height": 1080})
+    page.goto(comfyui_server)
+    wait_for_comfyui(page)
+
+    page.evaluate("() => { if (typeof app !== 'undefined' && app.graph) { app.graph.clear(); } }")
+    
+    page.evaluate(f"""() => {{
+        const getApp = () => window.app || window.ComfyApp;
+        const app = getApp();
+        const types = Object.keys(window.LiteGraph.registered_node_types);
+        const nodeType = types.find(t => t.includes('WebuiMonacoPromptMultiText') || t.includes('MultiText'));
+        const node1 = window.LiteGraph.createNode(nodeType);
+        node1.pos = [100, 300];
+        app.graph.add(node1);
+        app.canvas.centerOnNode(node1);
+    }}""")
+    
+    wait_for_monaco_editor(page)
+
     csv_dir = Path(os.getcwd()) / "csv"
     csv_dir.mkdir(exist_ok=True)
     test_csv_path = csv_dir / "test_dynamic.csv"

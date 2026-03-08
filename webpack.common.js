@@ -6,7 +6,12 @@ module.exports = {
 		main: './src/main.ts',
 	},
 	resolve: {
-		extensions: ['.ts', '.js', 'tsx']
+		extensions: ['.ts', '.js', '.tsx']
+	},
+	externals: {
+		"../../scripts/app.js": "undefined",
+		"../../scripts/api.js": "undefined",
+		"../../scripts/ui.js": "undefined",
 	},
 	output: {
 		filename: '[name].bundle.js',

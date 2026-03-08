@@ -55,17 +55,17 @@ def test_multitext_full_search(page: Page, comfyui_server, wait_for_comfyui):
     page.click("[title='Search']")
     
     # 検索入力欄が出るまで待つ
-    page.wait_for_selector("[class*='search-input']", timeout=10000)
-    search_input = page.locator("[class*='search-input']")
+    page.wait_for_selector("input[class*='search-input']", timeout=10000)
+    search_input = page.locator("input[class*='search-input']")
     search_input.fill("secret")
     search_input.press("Enter")
     
     # 検索結果が出るのを待つ
-    page.wait_for_selector("[class*='search-result-item']", timeout=10000)
+    page.wait_for_selector("div[class*='search-result-item']", timeout=10000)
     
     print("Step 4: Click result and verify Switch")
     # 目的のファイルの結果をクリック
-    target_row = page.locator("[class*='search-result-item']").filter(has_text=second_file).first
+    target_row = page.locator("div[class*='search-result-item']").filter(has_text=second_file).first
     target_row.click()
     
     page.wait_for_timeout(1000)

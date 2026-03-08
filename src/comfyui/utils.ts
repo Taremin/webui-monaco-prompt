@@ -1,7 +1,7 @@
-import * as WebuiMonacoPrompt from "../index"
 import { PromptEditor, NodeFindMatch, ExtraModel } from "./types"
 import { ui } from "./api"
 import { link } from "./link"
+import { getThemeClassName, guid, getStyle } from "../utils"
 // @ts-ignore
 import * as codicon from "monaco-editor/esm/vs/base/common/codiconsUtil"
 
@@ -21,7 +21,7 @@ function initSearchTooltip() {
 
 const createSearchTooltip = () => {
     const tooltip = $el("div", {
-        className: ["text-sm"].join(" "),
+        className: ["text-sm", "monaco-prompt-search-tooltip"].join(" "),
         style: {
             display: "none",
             position: "fixed",
@@ -130,8 +130,6 @@ const loadStyle = (baseurl: string, filename: string) => {
 }
 
 // Monaco のテーマに合わせて検索マッチ部分の style 要素を生成・更新
-const themeStyleClassName = "webui-monaco-prompt-findmatch"
-const getThemeClassName = () => themeStyleClassName
 const updateThemeStyle = (instance: PromptEditor) => {
     let themeStyle
 
@@ -169,9 +167,12 @@ const updateThemeStyle = (instance: PromptEditor) => {
 // すべての WebUI Monaco Prompt インスタンスで検索
 function find(searchString: string, isRegex: boolean, matchCase: boolean, matchWordOnly: boolean, decorationKey: string = "findDecorationIds") {
     const allMmatches: NodeFindMatch[] = []
-    WebuiMonacoPrompt.runAllInstances<PromptEditor>((instance) => {
-        Array.prototype.push.apply(allMmatches, findInstance(instance, searchString, isRegex, matchCase, matchWordOnly, true, decorationKey))
-    })
+    const WebuiMonacoPrompt = (window as any).WebuiMonacoPrompt
+    if (WebuiMonacoPrompt && WebuiMonacoPrompt.runAllInstances) {
+        (WebuiMonacoPrompt.runAllInstances as (callback: (instance: PromptEditor) => void) => void)((instance: PromptEditor) => {
+            Array.prototype.push.apply(allMmatches, findInstance(instance, searchString, isRegex, matchCase, matchWordOnly, true, decorationKey))
+        })
+    }
     return allMmatches
 }
 
@@ -264,9 +265,12 @@ function findInstance(instance: PromptEditor, searchString: string, isRegex: boo
 }
 
 function replace(searchString: string, replaceString: string, isRegex: boolean, matchCase: boolean, matchWordOnly: boolean) {
-    WebuiMonacoPrompt.runAllInstances<PromptEditor>((instance) => {
-        replaceInInstance(instance, searchString, replaceString, isRegex, matchCase, matchWordOnly)
-    })
+    const WebuiMonacoPrompt = (window as any).WebuiMonacoPrompt
+    if (WebuiMonacoPrompt && WebuiMonacoPrompt.runAllInstances) {
+        (WebuiMonacoPrompt.runAllInstances as (callback: (instance: PromptEditor) => void) => void)((instance: PromptEditor) => {
+            replaceInInstance(instance, searchString, replaceString, isRegex, matchCase, matchWordOnly)
+        })
+    }
 }
 
 function replaceInInstance(instance: PromptEditor, searchString: string, replaceString: string, isRegex: boolean, matchCase: boolean, matchWordOnly: boolean) {
@@ -325,22 +329,7 @@ const applyCommonEditorSetup = (app: any, editor: PromptEditor, node: any) => {
     editor.addEventListener("click", mouseHandler, {capture: true})
 }
 
-const guid = () => {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        const r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-    });
-}
-
 const $el = (...args: any[]) => ui.$el(...args)
-
-const getStyle = (styleObj: any, name: string) => {
-    const s = styleObj[name];
-    if (s === undefined) {
-        throw new Error(`[WebuiMonacoPrompt] Style not found: ${name}`);
-    }
-    return s;
-}
 
 export {
     loadCodicon,

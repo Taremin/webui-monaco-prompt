@@ -11,7 +11,7 @@ module.exports = Object.assign({}, common, {
     main: './src/comfyui/index.ts',
   },
   resolve: {
-    extensions: ['.ts', '.js', 'tsx']
+    extensions: ['.ts', '.js', '.tsx']
   },
   experiments: {
     outputModule: true,

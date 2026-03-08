@@ -149,7 +149,6 @@ async function loadCSV (files: string[]) {
         }
         const basename = filenameParts[0]
         const value = await fetch(path).then(res => res.text())
-
         MonacoPrompt.addCSV(basename, value)
     }
 }
