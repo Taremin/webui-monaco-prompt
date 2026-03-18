@@ -3,9 +3,8 @@ import os
 import json
 from playwright.sync_api import Page, expect
 
-def test_verify_ui_appearance(page: Page, comfyui_server, wait_for_comfyui):
+def test_verify_ui_appearance(page: Page, comfyui_server, wait_for_comfyui, wmp_helpers):
     """UIの外観を検証し、スクリーンショットを撮影するテスト"""
-    page.set_default_timeout(60000)
     page.set_viewport_size({"width": 1280, "height": 720})
     
     # スクリーンショット保存用ディレクトリ
@@ -13,32 +12,21 @@ def test_verify_ui_appearance(page: Page, comfyui_server, wait_for_comfyui):
     os.makedirs(screenshot_dir, exist_ok=True)
 
     print(f"Navigating to {comfyui_server}...")
-    page.goto(comfyui_server)
-    wait_for_comfyui(page)
-
-    # ワークフローをクリア
-    page.evaluate("() => { if (typeof app !== 'undefined' && app.graph) { app.graph.clear(); } }")
-    page.wait_for_function("() => app.graph && app.graph._nodes.length === 0", timeout=10000)
+    wmp_helpers.load_comfyui(page, comfyui_server, wait_for_comfyui)
+    wmp_helpers.wait_for_graph_clear(page)
 
     # MultiTextノードを作成
-    node_type = page.evaluate("""() => {
-        const types = Object.keys(window.LiteGraph.registered_node_types);
-        return types.find(t => t.includes('WebuiMonacoPromptMultiText'));
-    }""")
-    assert node_type, "MultiText node type should be registered"
-
     import uuid
     unique_id = uuid.uuid4().hex[:6]
-    page.evaluate(f"""() => {{
+    node_id = wmp_helpers.create_node(page, "WebuiMonacoPromptMultiText", [100, 100])
+    page.evaluate(f"""(args) => {{
         const app = window.app || window.ComfyApp;
-        const node = window.LiteGraph.createNode("{node_type}");
-        node.title = "MT-VERIFY-UI-{unique_id}";
-        node.pos = [100, 100];
+        const node = app.graph.getNodeById(args.id);
+        node.title = "MT-VERIFY-UI-" + args.unique_id;
         node.setSize([800, 600]);
-        app.graph.add(node);
-    }}""")
+    }}""", {"id": node_id, "unique_id": unique_id})
     
-    page.wait_for_selector(".monaco-editor", state="visible")
+    wmp_helpers.wait_for_editor(page)
 
     # 初期状態のスクリーンショット
     page.screenshot(path=os.path.join(screenshot_dir, "01_initial_state.png"))
@@ -82,8 +70,9 @@ def test_verify_ui_appearance(page: Page, comfyui_server, wait_for_comfyui):
     # 2. アクションボタンの右寄せ検証 (ホバー)
     item_selector = "[class*='tree-item']:has-text('new_file.txt')"
     page.hover(item_selector)
-    page.wait_for_timeout(500)
+    wmp_helpers.wait_for_ui_stabilize(page, 500)
     page.screenshot(path=os.path.join(screenshot_dir, "03_hover_actions_right.png"))
+
 
     # 3. リサイズハンドルの検証 (ドラッグ)
     page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)

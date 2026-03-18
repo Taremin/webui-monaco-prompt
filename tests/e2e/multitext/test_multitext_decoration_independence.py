@@ -3,7 +3,7 @@ import time
 import uuid
 from playwright.sync_api import Page, expect
 
-def test_multitext_decoration_independence(page: Page, comfyui_server, wait_for_comfyui):
+def test_multitext_decoration_independence(page: Page, comfyui_server, wait_for_comfyui, wmp_helpers):
     """サイドバー検索とノード内検索のデコレーション（ハイライト）が独立していることを確認する"""
     url = comfyui_server
     page.goto(url)
@@ -35,7 +35,7 @@ def test_multitext_decoration_independence(page: Page, comfyui_server, wait_for_
                 const node = app.graph._nodes.find(n => n.title === title);
                 return node && node.multitext_widget && !!node.multitext_widget.editorInstance;
             }}
-        """, arg=title, timeout=60000)
+        """, arg=title)
 
     # テキスト入力
     page.evaluate(f"""() => {{
@@ -61,7 +61,7 @@ def test_multitext_decoration_independence(page: Page, comfyui_server, wait_for_
         const nodes = app.graph._nodes.filter(n => n.multitext_widget);
         if (nodes.length !== 2) return false;
         return nodes.every(n => (n.multitext_widget.editorInstance.findDecorationIds || []).length > 0);
-    }}""", timeout=10000)
+    }}""")
 
     dec_counts = page.evaluate(f"""() => {{
         const app = window.app || window.ComfyApp;
@@ -91,7 +91,7 @@ def test_multitext_decoration_independence(page: Page, comfyui_server, wait_for_
         const app = window.app || window.ComfyApp;
         const nodeA = app.graph._nodes.find(n => n.title === '{node_a_title}');
         return (nodeA.multitext_widget.editorInstance.nodeDecorationIds || []).length > 0;
-    }}""", timeout=10000)
+    }}""")
 
     dec_counts2 = page.evaluate(f"""() => {{
         const app = window.app || window.ComfyApp;
@@ -127,7 +127,7 @@ def test_multitext_decoration_independence(page: Page, comfyui_server, wait_for_
         const app = window.app || window.ComfyApp;
         const nodeA = app.graph._nodes.find(n => n.title === '{node_a_title}');
         return (nodeA.multitext_widget.editorInstance.nodeDecorationIds || []).length === 0;
-    }}""", timeout=10000)
+    }}""")
 
     dec_counts3 = page.evaluate(f"""() => {{
         const app = window.app || window.ComfyApp;

@@ -4,15 +4,6 @@ import os
 from pathlib import Path
 from playwright.sync_api import Page, expect
 
-def wait_for_monaco_editor(page: Page):
-    try:
-        page.wait_for_selector("prompt-editor", state="attached", timeout=45000)
-        page.wait_for_selector(".monaco-editor", state="visible", timeout=30000)
-    except Exception as e:
-        print(f"Failed to find monaco-editor: {e}")
-        page.screenshot(path="e2e_error_csv_parse.png")
-        raise e
-
 def wait_for_node_registration(page: Page):
     return page.evaluate("""async () => {
         const check = () => {
@@ -30,8 +21,7 @@ def wait_for_node_registration(page: Page):
         return null;
     }""")
 
-def test_csv_parse_error_recovery(page: Page, comfyui_server, wait_for_comfyui):
-    page.set_default_timeout(60000)
+def test_csv_parse_error_recovery(page: Page, comfyui_server, wait_for_comfyui, wmp_helpers):
     
     csv_dir = Path(os.getcwd()) / "csv"
     csv_dir.mkdir(exist_ok=True)
@@ -43,24 +33,16 @@ def test_csv_parse_error_recovery(page: Page, comfyui_server, wait_for_comfyui):
             f.write(content)
 
         page.set_viewport_size({"width": 1920, "height": 1080})
-        page.goto(comfyui_server)
-        wait_for_comfyui(page)
+        wmp_helpers.load_comfyui(page, comfyui_server, wait_for_comfyui)
 
-        page.evaluate("() => { if (typeof app !== 'undefined' && app.graph) { app.graph.clear(); } }")
+        wmp_helpers.wait_for_graph_clear(page)
         
         node_type = wait_for_node_registration(page)
         assert node_type, "MultiText node type should be registered."
         
-        page.evaluate(f"""() => {{
-            const getApp = () => window.app || window.ComfyApp;
-            const app = getApp();
-            const node1 = window.LiteGraph.createNode('{node_type}');
-            node1.pos = [100, 300];
-            app.graph.add(node1);
-            app.canvas.centerOnNode(node1);
-        }}""")
+        wmp_helpers.create_node(page, node_type, [100, 300])
         
-        wait_for_monaco_editor(page)
+        wmp_helpers.wait_for_editor(page)
         
         has_editor = page.evaluate("""() => {
             const getApp = () => window.app || window.ComfyApp;

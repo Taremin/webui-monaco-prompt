@@ -67,4 +67,6 @@ const language: languages.IMonarchLanguage = {
 export {
 	conf,
 	language,
+    conf as baseConf,
+    language as baseLanguage,
 }

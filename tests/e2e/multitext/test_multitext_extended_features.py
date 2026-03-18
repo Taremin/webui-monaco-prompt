@@ -69,7 +69,7 @@ def create_items_api(page: Page, items):
         print("ERROR: create_items_api failed in browser")
     time.sleep(1.0)
 
-def test_multitext_tab_auto_scroll(page: Page, comfyui_server, wait_for_comfyui):
+def test_multitext_tab_auto_scroll(page: Page, comfyui_server, wait_for_comfyui, wmp_helpers):
     """タブの自動スクロールを確認する"""
     setup_console_log(page)
     page.goto(comfyui_server)
@@ -83,22 +83,22 @@ def test_multitext_tab_auto_scroll(page: Page, comfyui_server, wait_for_comfyui)
     tabs_container = page.locator("[class*='multitext-tabs-container']").first
     
     # default.txtが画面に出るまで少し待機
-    page.wait_for_selector("[class*='multitext-tree-name']", timeout=10000)
+    page.wait_for_selector("[class*='multitext-tree-name']")
     
     # 最初のファイルを選択
     page.locator("[class*='multitext-tree-name']", has_text="default.txt").first.click(force=True)
-    page.wait_for_timeout(1000)
+    wmp_helpers.wait_for_ui_stabilize(page, 1000)
     scroll_left_start = tabs_container.evaluate("el => el.scrollLeft")
     
     # 最後のファイルを選択
     page.locator("[class*='multitext-tree-name']", has_text="file_25.txt").first.click(force=True)
-    page.wait_for_timeout(3000)
+    wmp_helpers.wait_for_ui_stabilize(page, 3000)
     scroll_left_end = tabs_container.evaluate("el => el.scrollLeft")
     
     print(f"DEBUG: scrollLeft start={scroll_left_start}, end={scroll_left_end}")
     assert scroll_left_end > scroll_left_start
 
-def test_multitext_multiple_selection_dnd(page: Page, comfyui_server, wait_for_comfyui):
+def test_multitext_multiple_selection_dnd(page: Page, comfyui_server, wait_for_comfyui, wmp_helpers):
     """複数選択D&Dを確認する"""
     setup_console_log(page)
     page.goto(comfyui_server)
@@ -110,14 +110,14 @@ def test_multitext_multiple_selection_dnd(page: Page, comfyui_server, wait_for_c
     create_items_api(page, items)
 
     # 確実にツリーが描画されるのを待つ
-    page.wait_for_selector("[class*='multitext-tree-name']", timeout=10000)
+    page.wait_for_selector("[class*='multitext-tree-name']")
 
     # Ctrl選択
     page.locator("[class*='multitext-tree-name']", has_text="move_me_1.txt").first.click(force=True)
     page.locator("[class*='multitext-tree-name']", has_text="move_me_2.txt").first.click(modifiers=["Control"], force=True)
     page.locator("[class*='multitext-tree-name']", has_text="move_me_3.txt").first.click(modifiers=["Control"], force=True)
     
-    page.wait_for_timeout(1000)
+    wmp_helpers.wait_for_ui_stabilize(page, 1000)
     
     # 選択されたツリーアイテムの数を検証 (属性セレクタを使用)
     selected_count = page.evaluate("""() => {
@@ -131,7 +131,7 @@ def test_multitext_multiple_selection_dnd(page: Page, comfyui_server, wait_for_c
     target = page.locator("[class*='multitext-tree-name']", has_text="target_folder").first
     
     source.drag_to(target, force=True)
-    page.wait_for_timeout(1000)
+    wmp_helpers.wait_for_ui_stabilize(page, 1000)
     
     # 選択されたツリーアイテムの数を検証 (属性セレクタを使用)
     selected_count = page.evaluate("""() => {
@@ -149,7 +149,7 @@ def test_multitext_multiple_selection_dnd(page: Page, comfyui_server, wait_for_c
     expect(children.get_by_text("move_me_2.txt")).to_be_visible()
     expect(children.get_by_text("move_me_3.txt")).to_be_visible()
 
-def test_multitext_shift_selection(page: Page, comfyui_server, wait_for_comfyui):
+def test_multitext_shift_selection(page: Page, comfyui_server, wait_for_comfyui, wmp_helpers):
     """Shift選択（範囲選択）を確認する"""
     setup_console_log(page)
     page.goto(comfyui_server)
@@ -159,13 +159,13 @@ def test_multitext_shift_selection(page: Page, comfyui_server, wait_for_comfyui)
     items = [("file", f"range_{i}.txt") for i in range(1, 6)]
     create_items_api(page, items)
     
-    page.wait_for_selector("[class*='multitext-tree-name']", timeout=10000)
+    page.wait_for_selector("[class*='multitext-tree-name']")
     
     # 最初と最後をShiftクリック
     page.locator("[class*='multitext-tree-name']", has_text="range_1.txt").first.click(force=True)
     page.locator("[class*='multitext-tree-name']", has_text="range_5.txt").first.click(modifiers=["Shift"], force=True)
     
-    page.wait_for_timeout(1000)
+    wmp_helpers.wait_for_ui_stabilize(page, 1000)
     
     # 選択されたツリーアイテムの数を検証
     selected_count = page.evaluate("""() => {
@@ -176,7 +176,7 @@ def test_multitext_shift_selection(page: Page, comfyui_server, wait_for_comfyui)
     
     assert selected_count == 5
 
-def test_multitext_search_toggle_and_clear(page: Page, comfyui_server, wait_for_comfyui):
+def test_multitext_search_toggle_and_clear(page: Page, comfyui_server, wait_for_comfyui, wmp_helpers):
     """検索バーのトグル表示とクリアボタンの動作を確認する"""
     setup_console_log(page)
     page.goto(comfyui_server)
@@ -205,8 +205,8 @@ def test_multitext_search_toggle_and_clear(page: Page, comfyui_server, wait_for_
     assert page.evaluate(search_btn_js) is True
     
     # 表示されるのを待つ
-    expect(search_container).to_be_visible(timeout=30000)
-    expect(search_results).to_be_visible(timeout=30000)
+    expect(search_container).to_be_visible()
+    expect(search_results).to_be_visible()
     
     # 検索入力欄に文字を入力
     search_input = page.locator("input[class*='search-input']").first
@@ -230,5 +230,5 @@ def test_multitext_search_toggle_and_clear(page: Page, comfyui_server, wait_for_
     assert page.evaluate(search_btn_js) is True
     
     # 非表示になることを確認
-    expect(search_container).to_be_hidden(timeout=30000)
-    expect(search_results).to_be_hidden(timeout=30000)
+    expect(search_container).to_be_hidden()
+    expect(search_results).to_be_hidden()

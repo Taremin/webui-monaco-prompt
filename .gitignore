@@ -6,9 +6,13 @@ settings/*
 .agent/*
 !.agent/rules/
 !.agent/skills/
+!.agents/rules/
+.agents/*
+!.agents/skills/
 tests/test_settings.json
 tests/*.html
 tests/*.png
 tests/*.log
+tests/debug_dumps/
 tmp/
 PROJECT_OVERVIEW.md

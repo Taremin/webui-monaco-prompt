@@ -4,29 +4,22 @@ import os
 import re
 from playwright.sync_api import Page, expect
 
-def test_json_filter_toggle_behavior(page: Page, comfyui_server, wait_for_comfyui):
+def test_json_filter_toggle_behavior(page: Page, comfyui_server, wait_for_comfyui, wmp_helpers):
     """ルールの無効化・有効化トグルが正常に動作し、一度無効化してもオンに戻せることを検証する"""
     page.on("console", lambda msg: print(f"BROWSER CONSOLE: {msg.text}"))
-    page.set_default_timeout(60000)
     page.set_viewport_size({"width": 1280, "height": 720})
 
-    page.goto(comfyui_server)
-    wait_for_comfyui(page)
+    wmp_helpers.load_comfyui(page, comfyui_server, wait_for_comfyui)
+    wmp_helpers.wait_for_graph_clear(page)
 
     # 1. ノードの作成
-    page.evaluate("""() => {
-        app.graph.clear();
-        const filter = LiteGraph.createNode("WebuiMonacoPromptJsonFilter");
-        filter.pos = [200, 200];
-        app.graph.add(filter);
-        app.graph.change();
-    }""")
+    wmp_helpers.create_node(page, "WebuiMonacoPromptJsonFilter", [200, 200])
 
     page.wait_for_selector("[class*='filter-container']", state="visible")
     
     # 2. ルール追加
     page.click("[class*='filter-add-btn']")
-    page.wait_for_selector("[class*='filter-rule-row']", timeout=10000)
+    page.wait_for_selector("[class*='filter-rule-row']")
     
     # 無効トグルボタンを取得 (⏻)
     disable_btn = page.locator("[class*='filter-disable-btn']").first

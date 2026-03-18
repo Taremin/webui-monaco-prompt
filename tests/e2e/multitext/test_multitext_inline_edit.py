@@ -36,7 +36,7 @@ def add_node_api_force(page: Page):
         time.sleep(2.0)
     raise Exception("MultiText node type not found")
 
-def test_multitext_inline_edit(page: Page, comfyui_server, wait_for_comfyui):
+def test_multitext_inline_edit(page: Page, comfyui_server, wait_for_comfyui, wmp_helpers):
     """インライン編集機能の動作確認（Renameボタン, ダブルクリック, Enter, Escape, blur）"""
     setup_console_log(page)
     
@@ -49,7 +49,7 @@ def test_multitext_inline_edit(page: Page, comfyui_server, wait_for_comfyui):
     
     # サイドバーのアイテムが表示されるまで待機（default.txt）
     item_selector = "[class*='tree-name']"
-    expect(page.locator(item_selector).first).to_be_visible(timeout=10000)
+    expect(page.locator(item_selector).first).to_be_visible()
     expect(page.locator(item_selector).first).to_have_text("default.txt")
 
     # 3. 編集ボタンをクリックしてインライン編集に切り替わるか確認

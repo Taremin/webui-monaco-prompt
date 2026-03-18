@@ -2,7 +2,7 @@ import pytest
 import time
 from playwright.sync_api import Page, expect
 
-def test_ui_no_undefined_classes(page: Page, comfyui_server, wait_for_comfyui):
+def test_ui_no_undefined_classes(page: Page, comfyui_server, wait_for_comfyui, wmp_helpers):
     """UI要素の属性値（特に class）に 'undefined' が含まれていないこと、および JS エラーがないことを確認する"""
     url = comfyui_server
     
@@ -10,34 +10,27 @@ def test_ui_no_undefined_classes(page: Page, comfyui_server, wait_for_comfyui):
     console_errors = []
     page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
     
-    page.goto(url)
-    wait_for_comfyui(page)
+    wmp_helpers.load_comfyui(page, comfyui_server, wait_for_comfyui)
+    wmp_helpers.wait_for_graph_clear(page)
 
     print("Step 1: Create all relevant nodes")
-    page.evaluate("""() => {
-        const app = window.app || window.ComfyApp;
-        app.graph.clear();
-        
-        const nodes = [
-            "WebuiMonacoPromptMultiText",
-            "WebuiMonacoPromptFind",
-            "WebuiMonacoPromptReplace",
-            "WebuiMonacoPromptJsonFilter"
-        ];
-        
-        nodes.forEach((type, i) => {
-            const node = LiteGraph.createNode(type);
-            node.pos = [100, 100 + (i * 300)];
-            app.graph.add(node);
-        });
-    }""")
+    nodes = [
+        "WebuiMonacoPromptMultiText",
+        "WebuiMonacoPromptFind",
+        "WebuiMonacoPromptReplace",
+        "WebuiMonacoPromptJsonFilter"
+    ]
+    for i, node_type in enumerate(nodes):
+        wmp_helpers.create_node(page, node_type, [100, 100 + (i * 300)])
     
     print("Step 2: Open Search Sidebar")
-    page.click("i.pi-search") # サイドバーのアイコンをクリック
-    time.sleep(1)
+    # サイドバーのWebuiMonacoPrompt検索パネルを開く
+    # V2: registerSidebarTab で登録されたボタンは aria-label で識別される
+    page.click("button[aria-label='WebuiMonacoPrompt Search']")
+    wmp_helpers.wait_for_ui_stabilize(page)
     
     # 描画時間を確保
-    time.sleep(2)
+    wmp_helpers.wait_for_ui_stabilize(page, 2000)
 
     print("Step 3: Check for 'undefined' in attributes and classes")
     # DOM全体から調査

@@ -3,35 +3,29 @@ import time
 from playwright.sync_api import Page, expect
 
 
-def test_monaco_editor_replacement(page: Page, comfyui_server, wait_for_comfyui):
+def test_monaco_editor_replacement(page: Page, comfyui_server, wait_for_comfyui, wmp_helpers):
     """CLIP Text Encode ノードの textarea が Monaco Editor に置換されているか確認する"""
-    # 基本タイムアウトを設定
-    page.set_default_timeout(60000)
     page.set_viewport_size({"width": 1920, "height": 1080})
-    page.goto(comfyui_server)
-    wait_for_comfyui(page)
+    wmp_helpers.load_comfyui(page, comfyui_server, wait_for_comfyui)
 
     # ノードが生成され、Monaco Promptがtextareaをスキャンして置換するまでの猶予
-    # Stability Matrix等の重い環境では時間がかかるため最大60秒待機
-    page.wait_for_selector(".monaco-editor", state="visible", timeout=60000)
+    wmp_helpers.wait_for_editor(page)
     
     editor_count = page.locator(".monaco-editor").count()
     assert editor_count > 0, "Monaco Editor should be initialized and present in the UI"
 
-def test_autocomplete_menu(page: Page, comfyui_server, wait_for_comfyui):
+def test_autocomplete_menu(page: Page, comfyui_server, wait_for_comfyui, wmp_helpers):
     """プロンプト入力時に補完メニューが表示されるか確認する"""
-    page.set_default_timeout(60000)
     # コンソールログを収集するためのリスト
     console_logs = []
     page.on("console", lambda msg: console_logs.append(f"[{msg.type}] {msg.text}"))
 
     page.set_viewport_size({"width": 1920, "height": 1080})
-    page.goto(comfyui_server)
-    wait_for_comfyui(page)
+    wmp_helpers.load_comfyui(page, comfyui_server, wait_for_comfyui)
 
     # prompt-editor カスタム要素が生成されるのを待つ
     try:
-        page.wait_for_selector("prompt-editor", state="attached", timeout=60000)
+        wmp_helpers.wait_for_editor(page)
 
         # prompt-editor の Shadow DOM 内の textarea にフォーカスし、
         # テキストを入力して補完をトリガーする
@@ -52,7 +46,7 @@ def test_autocomplete_menu(page: Page, comfyui_server, wait_for_comfyui):
         }""")
         print(f"Focus result: {result}")
 
-        page.wait_for_timeout(500)
+        wmp_helpers.wait_for_ui_stabilize(page, timeout=500)
 
         # Monaco エディタの内容をクリアしてテキストを入力
         page.evaluate("""() => {
@@ -66,7 +60,7 @@ def test_autocomplete_menu(page: Page, comfyui_server, wait_for_comfyui):
             pe.focus();
         }""")
 
-        page.wait_for_timeout(500)
+        wmp_helpers.wait_for_ui_stabilize(page, timeout=500)
 
         # Monaco の suggest（補完）をトリガー
         # keyboard.press("Control+ ") はShadow DOM越しでは機能しないため、
@@ -101,7 +95,7 @@ def test_autocomplete_menu(page: Page, comfyui_server, wait_for_comfyui):
             }""")
             if has_suggest:
                 break
-            page.wait_for_timeout(1000)
+            wmp_helpers.wait_for_ui_stabilize(page, timeout=1000)
 
         if not has_suggest:
             # デバッグ情報を収集
@@ -147,18 +141,16 @@ def test_autocomplete_menu(page: Page, comfyui_server, wait_for_comfyui):
 
 
 
-def test_settings_persistence(page: Page, comfyui_server, wait_for_comfyui):
+def test_settings_persistence(page: Page, comfyui_server, wait_for_comfyui, wmp_helpers):
     """設定が変更され、リロード後も維持されるか確認する"""
-    page.set_default_timeout(60000)
     page.set_viewport_size({"width": 1920, "height": 1080})
-    page.goto(comfyui_server)
-    wait_for_comfyui(page)
+    wmp_helpers.load_comfyui(page, comfyui_server, wait_for_comfyui)
 
     # 設定ダイアログを開ける状態か確認しつつ開く (Ctrl + ,)
     # ComfyUIのメニューがロードされ、設定ボタン（または同等のUI）が存在するのを待つ
     page.wait_for_function("() => typeof app !== 'undefined' && app.ui && app.ui.settings")
     page.keyboard.press("Control+,")
-    page.wait_for_selector("div[role='dialog']:visible, .comfy-modal:visible, .p-dialog:visible", timeout=30000)
+    page.wait_for_selector("div[role='dialog']:visible, .comfy-modal:visible, .p-dialog:visible")
 
     # WebUI Monaco Prompt のカテゴリを探す
     monaco_category = page.locator("text=WebUI Monaco Prompt").or_(page.locator("text=webui-monaco-prompt"))
@@ -187,24 +179,20 @@ def test_settings_persistence(page: Page, comfyui_server, wait_for_comfyui):
             new_minimap_toggle = page.get_by_label("Minimap").or_(page.get_by_text("Minimap"))
             assert new_minimap_toggle.is_checked() != initial_checked, "Settings should be persisted after reload"
 
-def test_multitext_reload(page, comfyui_server, wait_for_comfyui):
+def test_multitext_reload(page, comfyui_server, wait_for_comfyui, wmp_helpers):
     """MultiTextウィジェットで入力した内容がリロード後も復元されるか確認する"""
-    page.set_default_timeout(60000)
     page.set_viewport_size({"width": 1920, "height": 1080})
-    page.goto(comfyui_server)
+    wmp_helpers.load_comfyui(page, comfyui_server, wait_for_comfyui)
     
     # コンソールログを収集
     page.on("console", lambda msg: print(f"Browser Console [{msg.type}]: {msg.text}"))
-    wait_for_comfyui(page)
     
     print("Waiting for page load...")
     page.wait_for_load_state("domcontentloaded")
     print("Page basic load finished.")
 
     # ワークフローをクリア
-    page.evaluate("() => { if (typeof app !== 'undefined' && app.graph) { app.graph.clear(); } }")
-    # グラフのノードが0になるのを待機
-    page.wait_for_function("() => app.graph && app.graph._nodes.length === 0")
+    wmp_helpers.wait_for_graph_clear(page)
 
     # 登録されているノードの一覧から正しい名前を探す
     # 登録されるまでリトライするように wait_for_function 内で行う
@@ -231,14 +219,7 @@ def test_multitext_reload(page, comfyui_server, wait_for_comfyui):
     print(f"Target node type found: {node_type}")
     
     # ノード追加
-    page.evaluate(f"""() => {{
-        const getApp = () => window.app || (window.comfyAPI && window.comfyAPI.app) || window.ComfyApp;
-        const app = getApp();
-        const node = window.LiteGraph.createNode("{node_type}");
-        node.pos = [400, 300];
-        app.graph.add(node);
-        app.canvas.centerOnNode(node);
-    }}""")
+    wmp_helpers.create_node(page, node_type, [400, 300])
     
     # ノードがグラフに追加されるのを待機
     page.wait_for_function("() => app.graph && app.graph._nodes.length > 0")
@@ -248,7 +229,7 @@ def test_multitext_reload(page, comfyui_server, wait_for_comfyui):
     
     # セレクタを広範にするため prompt-editor 自体を待つ
     try:
-        page.wait_for_selector("prompt-editor", state="attached", timeout=45000)
+        wmp_helpers.wait_for_editor(page)
         print("prompt-editor attached.")
     except Exception as e:
         page.screenshot(path="e2e_error_editor_attached.png")
@@ -323,7 +304,7 @@ def test_multitext_reload(page, comfyui_server, wait_for_comfyui):
 
     # ComfyUIのオートセーブ (グラフ変更検知) が作動するよう少し待機
     # ウィジェット側の setValue / syncData で app.graph.change() は発火するため、自動で保存されるはず
-    page.wait_for_timeout(2000)
+    wmp_helpers.wait_for_ui_stabilize(page, timeout=2000)
 
     # --- 診断: リロード直前にグラフの内部状態と localStorage を確認 ---
     graph_before = page.evaluate("() => JSON.stringify(window.app.graph.serialize())")
@@ -343,7 +324,7 @@ def test_multitext_reload(page, comfyui_server, wait_for_comfyui):
             app.graph.change();
         }
     }""")
-    page.wait_for_timeout(1000)
+    wmp_helpers.wait_for_ui_stabilize(page, timeout=1000)
 
     # リロード
     print("Reloading page...")
@@ -369,7 +350,7 @@ def test_multitext_reload(page, comfyui_server, wait_for_comfyui):
         print("CRITICAL: test_text was OVERWRITTEN in localStorage by ComfyUI!")
 
     # Monaco Editor が再度表示されるのを確認
-    page.wait_for_selector(".monaco-editor", state="visible", timeout=30000)
+    wmp_helpers.wait_for_editor(page)
 
     # 値が保持されているか確認
     # リロード後のエディタの値をノード経由で取得 (リトライあり)
@@ -404,7 +385,7 @@ def test_multitext_reload(page, comfyui_server, wait_for_comfyui):
         if test_text in val:
             break
         print(f"Waiting for value in editor (attempt {i+1}). Current: '{val}'")
-        page.wait_for_timeout(1000)
+        wmp_helpers.wait_for_ui_stabilize(page, timeout=1000)
 
     print(f"Value after reload: {val}")
     assert test_text in val, f"Expected text '{test_text}' not found after reload even after retry. Current value: {val}"

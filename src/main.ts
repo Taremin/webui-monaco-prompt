@@ -210,6 +210,42 @@ const me = "webui-monaco-prompt";
                 .then(res => res.json())
                 .catch(err => console.error("fetch error:", EndPoint, err))
 
+            // Preset Dialog for WebUI
+            let presetDialog: any = null
+            const getPresetDialog = () => {
+                if (!presetDialog) {
+                    presetDialog = new MonacoPrompt.PresetDialog({
+                        onSave: (name, features) => {
+                            MonacoPrompt.runAllInstances((instance: any) => {
+                                instance.saveCustomPreset(name, features)
+                                return true
+                            })
+                        },
+                        onApply: (id) => {
+                            MonacoPrompt.runAllInstances((instance: any) => {
+                                instance.applyPreset(id)
+                            })
+                        },
+                        onDelete: (id) => {
+                            MonacoPrompt.removeUserPreset(id)
+                            MonacoPrompt.runAllInstances((instance: any) => {
+                                instance.syncLanguageFeatures()
+                                instance.updatePresetOptions()
+                            })
+                        },
+                        getCurrentFeatures: () => {
+                            let features = {}
+                            MonacoPrompt.runAllInstances((instance: any) => {
+                                features = { ...instance.languageFeatures }
+                                return true
+                            })
+                            return features
+                        }
+                    })
+                }
+                return presetDialog
+            }
+
             for (const id of promptIds.concat(styleEditorIds, extraIds)) {
                 const container = document.getElementById(id)
                 if (!container) {
@@ -221,6 +257,9 @@ const me = "webui-monaco-prompt";
                     handleTextAreaValue: true,
                     overlayZIndex: 99999,
                 })
+                editor.onOpenPresetDialog = () => {
+                    getPresetDialog().show()
+                }
 
                 // custom suggest
                 for(const {keybinding, model} of models) {

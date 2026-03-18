@@ -1,6 +1,12 @@
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.api'
 import { initVimMode } from 'monaco-vim'
 import { sdPrompt, sdDynamicPrompt } from './languages'
+import { baseConf, baseLanguage } from './languages/sd-prompt'
+import { allFeatures, getFeature, LanguageFeatureToggle } from './languages/features'
+import { composeLanguage } from './languages/composer'
+import { builtinPresets, getAllPresets, getPreset, addUserPreset, removeUserPreset, loadUserPresets, getUserPresets, LanguagePreset } from './languages/presets'
+import { PresetDialog } from './preset_dialog'
+export { PresetDialog }
 import { provider, createDynamicSuggest, addCSV, loadCSV, getCount, addData, clearCSV, getReplaceUnderscore, updateReplaceUnderscore, getLoadedCSV, addLoadedCSV, getEnabledCSV } from './completion'
 import { addActionWithCommandOption, addActionWithSubMenu, ActionsPartialDescripter, getMenuId, updateSubMenu, removeSubMenu } from './monaco_utils'
 import { MultipleSelectInstance, multipleSelect} from 'multiple-select-vanilla'
@@ -45,10 +51,10 @@ import style from "./styles/index.css"
 import { deepEqual } from 'fast-equals'
 
 
-// define prompt language
 const sdLanguages = [
     {id: "sd-prompt", lang: sdPrompt},
-    {id: "sd-dynamic-prompt", lang: sdDynamicPrompt}
+    {id: "sd-dynamic-prompt", lang: sdDynamicPrompt},
+    {id: "composed-prompt", lang: { conf: baseConf, language: baseLanguage }} // Initial state
 ]
 const addLanguages = (languages: typeof sdLanguages) => {
     for (const {id, lang} of languages) {
@@ -97,6 +103,8 @@ interface PromptEditorSettings {
     mode: PromptEditorMode,
     theme: string,
     language: string,
+    languageFeatures: LanguageFeatureToggle,
+    languagePreset: string,
     showHeader: boolean,
     fontSize: number,
     fontFamily: string,
@@ -113,6 +121,8 @@ interface PromptEditorElements {
     inner: HTMLDivElement
     monaco: HTMLDivElement
     language: HTMLSelectElement
+    preset: HTMLSelectElement
+    featureToggles: Record<string, HTMLInputElement>
     theme: HTMLSelectElement
     keyBindings: HTMLSelectElement
     status: HTMLDivElement
@@ -148,6 +158,8 @@ class PromptEditor extends HTMLElement {
     theme: string
     showHeader: boolean
     vim: any // monaco-vim instance
+    languageFeatures: LanguageFeatureToggle = {}
+    currentPreset: string = 'comfy-dynamic-prompt'
     textareaDescriptor: PropertyDescriptor
     textareaDisplay: string
     onChangeShowHeaderCallbacks: Array<() => void>
@@ -170,6 +182,7 @@ class PromptEditor extends HTMLElement {
     onChangeFontFamilyBeforeSyncCallbacks: Array<() => void>
     onChangeAutoCompleteToggleCallbacks: Array<() => void>
     onChangeAutoCompleteToggleBeforeSyncCallbacks: Array<() => void>
+    onOpenPresetDialog?: (instance: PromptEditor) => void
     _id: number
     
     constructor(textarea: HTMLTextAreaElement, options: Partial<PromptEditorOptions>={}) {
@@ -288,6 +301,10 @@ class PromptEditor extends HTMLElement {
 
         this.setEventHandler()
 
+        this.polyfillMonacoEditorConfiguration()
+
+        this.showHeader = false
+
         settings.instances[this._id] = this
     }
 
@@ -351,6 +368,32 @@ class PromptEditor extends HTMLElement {
 
     createContextKey(...args: string[]) {
         return [ContextPrefix, ...args].join('.')
+    }
+
+    private toContextKeyFromCsvToggleKey(rawKey: string) {
+        const prefix = `${ContextPrefix}.csv.`
+        if (rawKey.startsWith(prefix)) {
+            return rawKey
+        }
+        if (rawKey.startsWith("csv.")) {
+            return this.createContextKey("csv", rawKey.slice(4))
+        }
+        return this.createContextKey("csv", rawKey)
+    }
+
+    private normalizeCsvToggleForStorage(values: Record<string, boolean>) {
+        const result: Record<string, boolean> = {}
+        const prefix = `${ContextPrefix}.csv.`
+        for (const [rawKey, enabled] of Object.entries(values)) {
+            let key = rawKey
+            if (rawKey.startsWith(prefix)) {
+                key = `csv.${rawKey.slice(prefix.length)}`
+            } else if (!rawKey.startsWith("csv.")) {
+                key = `csv.${rawKey}`
+            }
+            result[key] = enabled
+        }
+        return result
     }
 
     setContextMenu() {
@@ -458,27 +501,7 @@ class PromptEditor extends HTMLElement {
             contextMenuGroupId: 'monaco-prompt-editor',
         })
 
-        addActionWithSubMenu(this.monaco, {
-            title: "Language",
-            context: ["MonacoPromptEditorLanguage", this._id].join("_"),
-            group: 'monaco-prompt-editor',
-            order: 6,
-            actions: monaco.languages.getLanguages().map(lang => {
-                return {
-                    id: ["language", lang.id].join("_"),
-                    label: lang.id,
-                    run: () => {
-                        this.changeLanguage(lang.id)
-                        this.syncLanguage()
-                    },
-                    commandOptions: {
-                        toggled: {
-                            condition: ContextKeyExpr.deserialize(`${this.createContextKey("language")} == '${lang.id}'`)
-                        }
-                    }
-                }
-            })
-        })
+        // Language menu is removed in favor of presets
         addActionWithSubMenu(this.monaco, {
             title: "KeyBindings",
             context: ["MonacoPromptEditorKeyBindings", this._id].join("_"),
@@ -516,6 +539,28 @@ class PromptEditor extends HTMLElement {
                     commandOptions: {
                         toggled: {
                             condition: ContextKeyExpr.deserialize(`${this.createContextKey("theme")} == '${value}'`)
+                        }
+                    }
+                }
+            })
+        })
+
+        addActionWithSubMenu(this.monaco, {
+            title: "Language Preset",
+            context: ["MonacoPromptEditorLanguagePreset", this._id].join("_"),
+            group: 'monaco-prompt-editor',
+            order: 9,
+            actions: getAllPresets().map(preset => {
+                return {
+                    id: ["preset", preset.id].join("_"),
+                    label: preset.label,
+                    run: () => {
+                        this.applyPreset(preset.id)
+                        this.syncLanguageFeatures()
+                    },
+                    commandOptions: {
+                        toggled: {
+                            condition: ContextKeyExpr.deserialize(`${this.createContextKey("languagePreset")} == '${preset.id}'`)
                         }
                     }
                 }
@@ -705,6 +750,7 @@ class PromptEditor extends HTMLElement {
         this.setContext(this.createContextKey("minimap"), this.monaco.getOption(monaco.editor.EditorOption.minimap).enabled)
         this.setContext(this.createContextKey("replaceUnderscore"), getReplaceUnderscore())
         this.setContext(this.createContextKey("keybinding"), this.mode)
+        this.setContext(this.createContextKey("languagePreset"), this.currentPreset)
 
         this.updateAutoCompleteHeaderToggle()
     }
@@ -770,6 +816,7 @@ class PromptEditor extends HTMLElement {
             callback()
         }
     }
+
 
     changeLanguage(languageId: string) {
         if (this.elements.language) {
@@ -983,6 +1030,18 @@ class PromptEditor extends HTMLElement {
                     this.syncReplaceUnderscore()
                 }
             },
+            ...allFeatures.map(feature => ({
+                label: feature.label,
+                callback: (label: HTMLLabelElement, checkbox: HTMLInputElement) => {
+                    if (!this.elements.featureToggles) this.elements.featureToggles = {}
+                    this.elements.featureToggles[feature.id] = checkbox
+                },
+                isEnabledCallback: () => !!this.languageFeatures[feature.id],
+                toggleCallback: (ev: Event) => {
+                    this.changeLanguageFeature(feature.id, !this.languageFeatures[feature.id])
+                    this.syncLanguageFeatures()
+                }
+            }))
         ] as PromptEditorCheckboxParam[]) {
             headerElement.appendChild(this.createCheckbox(label, callback, isEnabledCallback, toggleCallback, title))
         }
@@ -1004,18 +1063,24 @@ class PromptEditor extends HTMLElement {
                 }
             },
             {
-                label: "Language",
-                data: this._arrayToObject(monaco.languages.getLanguages().map(lang => lang.id)),
+                label: "Preset",
+                data: getAllPresets().reduce((acc: any, p) => { acc[p.label] = p.id; return acc }, {}),
                 callback: (label: HTMLLabelElement, select: HTMLSelectElement) => {
-                    this.elements.language = select
+                    this.elements.preset = select
+                    
+                    // Custom用のダミーオプションも追加しておく
+                    const opt = document.createElement('option')
+                    opt.textContent = "Custom"
+                    opt.value = "custom"
+                    select.appendChild(opt)
                 },
                 isSelectedCallback: (dataValue: string) => {
-                    return dataValue === this.monaco.getModel()!.getLanguageId()
+                    return dataValue === this.currentPreset
                 },
                 changeCallback: (ev: Event) => {
                     const value = (ev.target as HTMLSelectElement).value
-                    this.syncLanguage()
-                    //this.changeLanguage(value)
+                    this.applyPreset(value)
+                    this.syncLanguageFeatures()
                 }
             },
             {
@@ -1057,6 +1122,14 @@ class PromptEditor extends HTMLElement {
             ))
         }
 
+        const manageBtn = document.createElement('button')
+        manageBtn.textContent = 'Manage Presets'
+        manageBtn.style.cursor = 'pointer'
+        manageBtn.addEventListener('click', () => {
+             this.showPresetDialog()
+        })
+        headerElement.appendChild(manageBtn)
+
         headerElement.addEventListener("contextmenu", (ev: MouseEvent) => {
             ev.stopPropagation()
             ev.preventDefault()
@@ -1066,6 +1139,7 @@ class PromptEditor extends HTMLElement {
             (item as HTMLElement).style.marginRight = "1rem"
         })
     }
+
 
     syncLanguage() {
         if (!this.elements.language) {
@@ -1082,6 +1156,131 @@ class PromptEditor extends HTMLElement {
         } else {
             runAllInstances((instance) => {
                 instance.changeLanguage(value)
+            })
+        }
+    }
+
+    rebuildLanguage() {
+        const enabledFeatures = allFeatures.filter(f => this.languageFeatures[f.id])
+        const { conf, language } = composeLanguage(baseConf, baseLanguage, enabledFeatures)
+        
+        const langId = 'composed-prompt'
+        // Tokens provider and configuration can be updated even if already registered
+        monaco.languages.setMonarchTokensProvider(langId, language)
+        monaco.languages.setLanguageConfiguration(langId, conf)
+        
+        const model = this.monaco.getModel()
+        if (model) {
+            // Ensure the language ID is set to composed-prompt
+            if (model.getLanguageId() !== langId) {
+                monaco.editor.setModelLanguage(model, langId)
+            }
+            this.setContext(this.createContextKey("language"), langId)
+            console.error(`[WebuiMonacoPrompt] [${performance.now().toFixed(2)}ms] rebuildLanguage complete for`, langId, "with features:", enabledFeatures.map(f => f.id), "raw features:", JSON.stringify(this.languageFeatures))
+        }
+    }
+
+    changeLanguageFeature(featureId: string, enabled: boolean, options?: { skipPresetUpdate?: boolean }) {
+        this.languageFeatures[featureId] = enabled
+        if (this.elements.featureToggles && this.elements.featureToggles[featureId]) {
+            this.elements.featureToggles[featureId].checked = enabled
+        }
+        if (!options?.skipPresetUpdate) {
+            this.updatePresetSelection()
+        }
+        this.rebuildLanguage()
+    }
+
+    showPresetDialog() {
+        if (this.onOpenPresetDialog) {
+            this.onOpenPresetDialog(this)
+        }
+    }
+
+    applyPreset(presetId: string) {
+        if (presetId === 'custom') return
+        const preset = getPreset(presetId)
+        if (!preset) return
+        this.currentPreset = presetId
+        if (this.elements.preset) {
+            this.elements.preset.value = presetId
+        }
+        this.setContext(this.createContextKey("languagePreset"), presetId)
+        for (const [featureId, enabled] of Object.entries(preset.features)) {
+            this.languageFeatures[featureId] = enabled
+            if (this.elements.featureToggles && this.elements.featureToggles[featureId]) {
+                this.elements.featureToggles[featureId].checked = enabled
+            }
+        }
+        this.rebuildLanguage()
+    }
+
+    saveCustomPreset(name: string, features?: LanguageFeatureToggle) {
+        const id = 'custom-' + name.toLowerCase().replace(/[^a-z0-9]/g, '-')
+        addUserPreset({
+            id,
+            label: name,
+            features: features ? { ...features } : { ...this.languageFeatures },
+            isBuiltin: false,
+        })
+        this.updatePresetOptions()
+        this.applyPreset(id)
+        this.syncLanguageFeatures()
+    }
+
+    updatePresetOptions() {
+        if (this.elements.preset) {
+            const select = this.elements.preset
+            const currentVal = select.value
+            select.innerHTML = ''
+            const all = getAllPresets()
+            for (const p of all) {
+                const opt = document.createElement('option')
+                opt.textContent = p.label
+                opt.value = p.id
+                select.appendChild(opt)
+            }
+            const customOpt = document.createElement('option')
+            customOpt.textContent = "Custom"
+            customOpt.value = "custom"
+            select.appendChild(customOpt)
+            select.value = currentVal
+        }
+    }
+
+    updatePresetSelection() {
+        const all = getAllPresets()
+        let matchedId = 'custom'
+        for (const preset of all) {
+            if (deepEqual(preset.features, this.languageFeatures)) {
+                matchedId = preset.id
+                break
+            }
+        }
+        this.currentPreset = matchedId
+        if (this.elements.preset) {
+            this.elements.preset.value = matchedId
+        }
+    }
+
+    syncLanguageFeatures() {
+        const app = (window as any).app;
+        if (app && app.ui && app.ui.settings) {
+            app.ui.settings.setSettingValue("WebuiMonacoPrompt.LanguageFeatures", this.languageFeatures)
+            for (const [featureId, enabled] of Object.entries(this.languageFeatures)) {
+                app.ui.settings.setSettingValue(`WebuiMonacoPrompt.LanguageFeature.${featureId}`, enabled)
+            }
+            app.ui.settings.setSettingValue("WebuiMonacoPrompt.LanguagePreset", this.currentPreset)
+            
+            // ユーザプリセットも保存
+            const userPresets = getAllPresets().filter(p => !p.isBuiltin)
+            app.ui.settings.setSettingValue("WebuiMonacoPrompt.LanguageUserPresets", JSON.stringify(userPresets))
+        } else {
+            runAllInstances((instance) => {
+                instance.languageFeatures = { ...this.languageFeatures }
+                instance.currentPreset = this.currentPreset
+                instance.updatePresetSelection()
+                instance.rebuildLanguage()
             })
         }
     }
@@ -1251,7 +1450,8 @@ class PromptEditor extends HTMLElement {
 
         const app = (window as any).app;
         if (app && app.ui && app.ui.settings) {
-            app.ui.settings.setSettingValue("WebuiMonacoPrompt.CsvToggle", values)
+            const payload = this.normalizeCsvToggleForStorage(values)
+            app.ui.settings.setSettingValue("WebuiMonacoPrompt.CsvToggle", payload)
         } else {
             runAllInstances((instance) => {
                 for (const [contextKey, value] of Object.entries(values)) {
@@ -1259,6 +1459,10 @@ class PromptEditor extends HTMLElement {
                 }
             })
         }
+    }
+
+    getEnabledFeatures() {
+        return { ...this.languageFeatures }
     }
 
     createCheckbox(
@@ -1411,6 +1615,8 @@ class PromptEditor extends HTMLElement {
             lineNumbers: this.elements.lineNumbers?.checked,
             replaceUnderscore: getReplaceUnderscore(),
             language: this.monaco.getModel()!.getLanguageId(),
+            languageFeatures: { ...this.languageFeatures },
+            languagePreset: this.currentPreset,
             theme: this.theme,
             mode: this.mode,
             fontSize: this.getContext(this.createContextKey("fontSize")),
@@ -1454,14 +1660,44 @@ class PromptEditor extends HTMLElement {
         ) {
             this.changeReplaceUnderscore(settings.replaceUnderscore)
         }
+
         if (
             settings.language !== void 0 && (
                 force ||
                 settings.language !== currentSettings.language
             )
         ) {
-            this.changeLanguage(settings.language)
+            // languageFeatures が設定されている場合は優先されるため、初期マイグレーションとして機能
+            if (settings.languageFeatures === void 0) {
+                this.changeLanguage(settings.language)
+            }
         }
+
+        const freezePreset = settings.languagePreset !== void 0 && settings.languagePreset !== "custom"
+
+        if (settings.languagePreset !== void 0 && (
+            force || settings.languagePreset !== currentSettings.languagePreset
+        )) {
+            this.applyPreset(settings.languagePreset)
+        }
+
+        if (settings.languageFeatures !== void 0 && (
+            force || !deepEqual(settings.languageFeatures, currentSettings.languageFeatures)
+        )) {
+            for (const [featureId, enabled] of Object.entries(settings.languageFeatures)) {
+                this.changeLanguageFeature(featureId, enabled, { skipPresetUpdate: freezePreset })
+            }
+        }
+
+        if (freezePreset) {
+            const presetId = settings.languagePreset as string
+            this.currentPreset = presetId
+            if (this.elements.preset) {
+                this.elements.preset.value = presetId
+            }
+            this.setContext(this.createContextKey("languagePreset"), presetId)
+        }
+
         if (
             settings.theme !== void 0 && (
                 force ||
@@ -1503,7 +1739,12 @@ class PromptEditor extends HTMLElement {
                 !deepEqual(settings.csvToggle, currentSettings.csvToggle)
             )
         ) {
-            for (const [contextKey, enabled] of Object.entries(settings.csvToggle)) {
+            const normalized: Record<string, boolean> = {}
+            for (const [rawKey, enabled] of Object.entries(settings.csvToggle)) {
+                const contextKey = this.toContextKeyFromCsvToggleKey(rawKey)
+                normalized[contextKey] = enabled
+            }
+            for (const [contextKey, enabled] of Object.entries(normalized)) {
                 if (currentSettings.csvToggle[contextKey] !== enabled) {
                     this.changeAutoCompleteToggle(contextKey, enabled, true)
                 }
@@ -1559,6 +1800,7 @@ class PromptEditor extends HTMLElement {
     onChangeModeBeforeSync(callback: () => void) {
         this.onChangeModeBeforeSyncCallbacks.push(callback)
     }
+
     onChangeLanguage(callback: () => void) {
         this.onChangeLanguageCallbacks.push(callback)
     }
@@ -1828,6 +2070,42 @@ const _clearCSV = () => {
 }
 
 const getLanguages = () => monaco.languages.getLanguages().map(lang => lang.id)
+const getAllFeatures = () => allFeatures
+
+const showPresetManager = () => {
+    const instance = PromptEditor.prototype.getCurrentFocus()
+    new PresetDialog({
+        onSave: (name, features) => {
+            addUserPreset({
+                id: name,
+                label: name,
+                features: features,
+                isBuiltin: false
+            })
+            const app = (window as any).app
+            if (app?.ui?.settings) {
+                app.ui.settings.setSettingValue("WebuiMonacoPrompt.LanguageUserPresets", JSON.stringify(getUserPresets()))
+            }
+        },
+        onApply: (presetId) => {
+            const app = (window as any).app
+            if (app?.ui?.settings) {
+                app.ui.settings.setSettingValue("WebuiMonacoPrompt.LanguagePreset", presetId)
+            }
+        },
+        onDelete: (presetId) => {
+            removeUserPreset(presetId)
+            const app = (window as any).app
+            if (app?.ui?.settings) {
+                app.ui.settings.setSettingValue("WebuiMonacoPrompt.LanguageUserPresets", JSON.stringify(getUserPresets()))
+            }
+        },
+        getCurrentFeatures: () => {
+            if (instance) return instance.getEnabledFeatures()
+            return {}
+        }
+    }).show()
+}
 
 const KeyMod = monaco.KeyMod
 const KeyCode = monaco.KeyCode
@@ -1855,4 +2133,14 @@ export {
     CompletionItem,
     CompletionItemKind,
     CompletionItemInsertTextRule,
+    getAllPresets,
+    getPreset,
+    loadUserPresets,
+    getUserPresets,
+    addUserPreset,
+    removeUserPreset,
+    LanguageFeatureToggle,
+    LanguagePreset,
+    getAllFeatures,
+    showPresetManager,
 }

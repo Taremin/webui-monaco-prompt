@@ -5,27 +5,15 @@ import subprocess
 from playwright.sync_api import Page
 
 
-def test_multitext_cross_file_search(page: Page, comfyui_server, wait_for_comfyui):
+def test_multitext_cross_file_search(page: Page, comfyui_server, wait_for_comfyui, wmp_helpers):
     """複数ファイルを横断してCOMMON_WORDが検索され、結果クリックで正しいファイルに切り替わることを確認する"""
-    url = comfyui_server
-    print(f"Connecting to {url}...")
-    
-    page.goto(url, timeout=60000)
-    wait_for_comfyui(page)
+    wmp_helpers.load_comfyui(page, comfyui_server, wait_for_comfyui)
+    wmp_helpers.wait_for_graph_clear(page)
 
     print("Step 1: Create MultiText and Find Nodes")
-    page.evaluate("""() => {
-        const app = window.app || window.ComfyApp;
-        app.graph.clear();
-        
-        const mNode = LiteGraph.createNode("WebuiMonacoPromptMultiText");
-        mNode.pos = [100, 100];
-        app.graph.add(mNode);
-        
-        const fNode = LiteGraph.createNode("WebuiMonacoPromptFind");
-        fNode.pos = [100, 500];
-        app.graph.add(fNode);
-    }""")
+    wmp_helpers.create_node(page, "WebuiMonacoPromptMultiText", [100, 100])
+    wmp_helpers.create_node(page, "WebuiMonacoPromptFind", [100, 500])
+
     # ウィジェットが完全に初期化されるまで待機
     page.wait_for_function("""
         () => {
@@ -33,7 +21,7 @@ def test_multitext_cross_file_search(page: Page, comfyui_server, wait_for_comfyu
             const node = app.graph._nodes.find(n => n.multitext_widget);
             return node && node.multitext_widget && !!node.multitext_widget.editorInstance;
         }
-    """, timeout=60000)
+    """)
 
     print("Step 2: Setup multiple files")
     # default.txt にテキスト設定
@@ -49,7 +37,7 @@ def test_multitext_cross_file_search(page: Page, comfyui_server, wait_for_comfyu
         const node = app.graph._nodes.find(n => n.multitext_widget);
         node.multitext_widget.addItemWithName('file', 'test1.txt');
     }""")
-    time.sleep(0.5)
+    wmp_helpers.wait_for_ui_stabilize(page, 500)
     file2_name = "test1.txt"
     page.evaluate(f"""() => {{
         const app = window.app || window.ComfyApp;
@@ -71,7 +59,7 @@ def test_multitext_cross_file_search(page: Page, comfyui_server, wait_for_comfyu
         const node = app.graph._nodes.find(n => n.multitext_widget);
         node.multitext_widget.addItemWithName('file', 'test2.txt');
     }""")
-    time.sleep(0.5)
+    wmp_helpers.wait_for_ui_stabilize(page, 500)
     file3_name = "test2.txt"
     page.evaluate(f"""() => {{
         const app = window.app || window.ComfyApp;
@@ -102,7 +90,7 @@ def test_multitext_cross_file_search(page: Page, comfyui_server, wait_for_comfyu
         const f = findFile(node.multitext_widget.data.tree, 'default.txt');
         if (f) node.multitext_widget.openFile(f.id);
     }""")
-    time.sleep(1)
+    wmp_helpers.wait_for_ui_stabilize(page)
 
     print("Step 3: Cross-file search")
     search_word = "COMMON_WORD"
@@ -113,7 +101,7 @@ def test_multitext_cross_file_search(page: Page, comfyui_server, wait_for_comfyu
         findWidget.elements.input.value = "{search_word}";
         findWidget.execute();
     }}""")
-    time.sleep(2)
+    wmp_helpers.wait_for_ui_stabilize(page, 2000)
 
     rows_text = page.evaluate("""() => {
         const app = window.app || window.ComfyApp;
@@ -135,7 +123,7 @@ def test_multitext_cross_file_search(page: Page, comfyui_server, wait_for_comfyu
         findWidget.elements.input.value = "UNIQUE_THREE";
         findWidget.execute();
     }""")
-    time.sleep(1)
+    wmp_helpers.wait_for_ui_stabilize(page)
     
     page.evaluate(f"""() => {{
         const app = window.app || window.ComfyApp;
@@ -145,7 +133,7 @@ def test_multitext_cross_file_search(page: Page, comfyui_server, wait_for_comfyu
         if (!targetRow) throw new Error("Target row for {file3_name} not found");
         targetRow.click();
     }}""")
-    time.sleep(1)
+    wmp_helpers.wait_for_ui_stabilize(page)
 
     active_file = page.evaluate("""() => {
         const app = window.app || window.ComfyApp;

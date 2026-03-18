@@ -2,24 +2,22 @@ import pytest
 import uuid
 from playwright.sync_api import Page
 
-def test_multitext_tree_operations(page: Page, comfyui_server, wait_for_comfyui):
+def test_multitext_tree_operations(page: Page, comfyui_server, wait_for_comfyui, wmp_helpers):
     """(非破壊方式) ツリー操作のE2Eテスト"""
-    page.set_default_timeout(60000)
     page.set_viewport_size({"width": 1920, "height": 1080})
     
-    page.goto(comfyui_server)
-    wait_for_comfyui(page)
+    wmp_helpers.load_comfyui(page, comfyui_server, wait_for_comfyui)
+    wmp_helpers.wait_for_graph_clear(page)
 
     node_title = f"MT-TREE-{uuid.uuid4().hex[:6]}"
-    page.evaluate(f"""(title) => {{
-        const node = LiteGraph.createNode("WebuiMonacoPromptMultiText");
-        node.title = title;
-        node.pos = [300, 300];
+    node_id = wmp_helpers.create_node(page, "WebuiMonacoPromptMultiText", [300, 300])
+    page.evaluate(f"""(args) => {{
+        const node = app.graph.getNodeById(args.id);
+        node.title = args.title;
         node.setSize([800, 600]);
-        (window.app || window.ComfyApp).graph.add(node);
-    }}""", node_title)
+    }}""", {"id": node_id, "title": node_title})
     
-    page.wait_for_selector(".monaco-editor", state="visible")
+    wmp_helpers.wait_for_editor(page)
 
     print("Step 1: Adding folder...")
     page.evaluate(f"""(title) => {{
@@ -28,7 +26,7 @@ def test_multitext_tree_operations(page: Page, comfyui_server, wait_for_comfyui)
     }}""", node_title)
     
     # ウィジェット内部のデータをチェック
-    page.wait_for_timeout(1000)
+    wmp_helpers.wait_for_ui_stabilize(page)
     has_folder = page.evaluate(f"""(title) => {{
         const node = (window.app || window.ComfyApp).graph._nodes.find(n => n.title === title);
         return node.multitext_widget.data.tree.some(i => i.name === 'new_folder');
@@ -42,7 +40,7 @@ def test_multitext_tree_operations(page: Page, comfyui_server, wait_for_comfyui)
         node.multitext_widget.addItemWithName('file', 'child.txt', folder.id);
     }}""", node_title)
     
-    page.wait_for_timeout(500)
+    wmp_helpers.wait_for_ui_stabilize(page, 500)
     is_nested = page.evaluate(f"""(title) => {{
         const node = (window.app || window.ComfyApp).graph._nodes.find(n => n.title === title);
         const folder = node.multitext_widget.data.tree.find(i => i.name === 'new_folder');
@@ -58,7 +56,7 @@ def test_multitext_tree_operations(page: Page, comfyui_server, wait_for_comfyui)
         node.multitext_widget.moveItems([file.id], undefined);
     }}""", node_title)
     
-    page.wait_for_timeout(500)
+    wmp_helpers.wait_for_ui_stabilize(page, 500)
     is_root = page.evaluate(f"""(title) => {{
         const node = (window.app || window.ComfyApp).graph._nodes.find(n => n.title === title);
         return node.multitext_widget.data.tree.some(i => i.name === 'child.txt');
@@ -66,3 +64,4 @@ def test_multitext_tree_operations(page: Page, comfyui_server, wait_for_comfyui)
     assert is_root, "File was not moved to root"
 
     print("--- NON-DESTRUCTIVE TREE TEST PASSED ---")
+

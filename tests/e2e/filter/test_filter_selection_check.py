@@ -3,38 +3,25 @@ import pytest
 import os
 from playwright.sync_api import Page, expect
 
-def test_json_filter_input_selection_behavior(page: Page, comfyui_server, wait_for_comfyui):
+def test_json_filter_input_selection_behavior(page: Page, comfyui_server, wait_for_comfyui, wmp_helpers):
     """入力要素内でのドラッグ操作によって文字列の範囲選択が正しく行われることを検証する"""
     page.on("console", lambda msg: print(f"BROWSER CONSOLE: {msg.text}"))
-    page.set_default_timeout(60000)
     page.set_viewport_size({"width": 1280, "height": 720})
 
-    page.goto(comfyui_server)
-    wait_for_comfyui(page)
+    wmp_helpers.load_comfyui(page, comfyui_server, wait_for_comfyui)
+    wmp_helpers.wait_for_graph_clear(page)
 
     # 1. ルールを作成
-    page.evaluate("""() => {
-        try {
-            app.graph.clear();
-            const filter = LiteGraph.createNode("WebuiMonacoPromptJsonFilter");
-            if (!filter) throw new Error("Could not create WebuiMonacoPromptJsonFilter node");
-            filter.pos = [200, 200];
-            app.graph.add(filter);
-            app.graph.change();
-        } catch (e) {
-            console.error("ERROR in evaluate:", e.message, e.stack);
-            throw e;
-        }
-    }""")
+    wmp_helpers.create_node(page, "WebuiMonacoPromptJsonFilter", [200, 200])
 
-    page.wait_for_selector("[class*='filter-container']", state="visible", timeout=30000)
+    page.wait_for_selector("[class*='filter-container']", state="visible")
     page.click("[class*='filter-add-btn']")
-    page.wait_for_timeout(500)
+    wmp_helpers.wait_for_ui_stabilize(page, timeout=500)
     
     # 2. テスト用文字列を入力
     input_el = page.locator("[class*='filter-input']").first
     input_el.fill("SELECT_THIS_TEXT")
-    page.wait_for_timeout(500)
+    wmp_helpers.wait_for_ui_stabilize(page, timeout=500)
     
     # 3. 範囲選択をシミュレート (座標を計算してドラッグ)
     print("\n--- Verifying Text Selection via Dragging ---")
@@ -58,14 +45,14 @@ def test_json_filter_input_selection_behavior(page: Page, comfyui_server, wait_f
     
     page.mouse.move(start_x, start_y)
     page.mouse.down()
-    page.wait_for_timeout(200)
+    wmp_helpers.wait_for_ui_stabilize(page, timeout=200)
     
     # ドラッグ移動。steps を増やして滑らかに。
     page.mouse.move(end_x, start_y, steps=20)
-    page.wait_for_timeout(300)
+    wmp_helpers.wait_for_ui_stabilize(page, timeout=300)
     
     page.mouse.up()
-    page.wait_for_timeout(500)
+    wmp_helpers.wait_for_ui_stabilize(page, timeout=500)
     
     # 4. selectionStart / selectionEnd を確認
     selection_state = page.evaluate("""() => {

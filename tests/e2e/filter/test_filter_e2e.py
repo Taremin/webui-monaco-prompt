@@ -6,21 +6,19 @@ import time
 import re
 from playwright.sync_api import Page, expect
 
-def test_json_filter_full_workflow(page: Page, comfyui_server, wait_for_comfyui):
+def test_json_filter_full_workflow(page: Page, comfyui_server, wait_for_comfyui, wmp_helpers):
     """MultiTextからJsonFilterへの連携と、UI操作によるフィルタリングの動的変化を検証する"""
     page.on("console", lambda msg: print(f"BROWSER CONSOLE: {msg.text}"))
-    page.set_default_timeout(60000)
     page.set_viewport_size({"width": 1280, "height": 720})
 
-    page.goto(comfyui_server)
-    wait_for_comfyui(page)
+    wmp_helpers.load_comfyui(page, comfyui_server, wait_for_comfyui)
 
     screenshot_dir = os.path.join(os.getcwd(), "tests", "screenshots_filter")
     os.makedirs(screenshot_dir, exist_ok=True)
 
-    # 1. ノードの作成と接続
+    # 1. ノード의作成と接続
+    wmp_helpers.wait_for_graph_clear(page)
     page.evaluate("""() => {
-        app.graph.clear();
         const mt = LiteGraph.createNode("WebuiMonacoPromptMultiText");
         mt.pos = [100, 100];
         app.graph.add(mt);
@@ -42,7 +40,7 @@ def test_json_filter_full_workflow(page: Page, comfyui_server, wait_for_comfyui)
     }""")
 
     # フィルターのコンテナが出現するまで待つ
-    page.wait_for_selector("[class*='filter-container']", state="visible", timeout=30000)
+    page.wait_for_selector("[class*='filter-container']", state="visible")
     
     # 2. MultiTextにテストデータを投入
     page.evaluate("""() => {
@@ -56,7 +54,7 @@ def test_json_filter_full_workflow(page: Page, comfyui_server, wait_for_comfyui)
 
     # 3. フィルタールールの設定 (appleを含まないものに絞る)
     page.click("[class*='filter-add-btn']")
-    page.wait_for_selector("[class*='filter-rule-row']", timeout=10000)
+    page.wait_for_selector("[class*='filter-rule-row']")
     page.fill("[class*='filter-input']", "apple")
     
     # NOT条件を有効化
@@ -65,39 +63,28 @@ def test_json_filter_full_workflow(page: Page, comfyui_server, wait_for_comfyui)
     expect(not_btn).to_have_class(re.compile(r"active"))
     
     # 4. 実行
-    page.evaluate("""async () => {
-        await app.queuePrompt(0);
-    }""")
-    
-    # 実行完了を待つ
-    page.wait_for_timeout(3000)
-    
+    preview_val = wmp_helpers.run_and_wait_output(page)
+
     # 5. PreviewAny の結果を検証
     # apple.txt が除外され、banana.txt の内容 "yellow fruit" が表示されているはず
-    preview_val = page.evaluate("""() => {
-        const preview = app.graph._nodes.find(n => n.type === "PreviewAny");
-        return preview ? preview.widgets[0].value : null;
-    }""")
     print(f"PREVIEW VALUE: {preview_val}")
-    # ComfyUIのPreviewAnyはリストを文字列化したものを表示することが多い
+    # ComfyUI's PreviewAny is a bit tricky
     assert "yellow fruit" in str(preview_val)
     assert "red fruit" not in str(preview_val)
-    
+
     page.screenshot(path=os.path.join(screenshot_dir, "01_workflow_success.png"))
 
-def test_json_filter_error_case(page: Page, comfyui_server, wait_for_comfyui):
+def test_json_filter_error_case(page: Page, comfyui_server, wait_for_comfyui, wmp_helpers):
     """不正な入力（壊れたJSON）を与えた際にノードが適切にエラー状態になるか検証する"""
     page.on("console", lambda msg: print(f"BROWSER CONSOLE: {msg.text}"))
-    page.set_default_timeout(60000)
-    page.goto(comfyui_server)
-    wait_for_comfyui(page)
+    wmp_helpers.load_comfyui(page, comfyui_server, wait_for_comfyui)
     
     screenshot_dir = os.path.join(os.getcwd(), "tests", "screenshots_filter")
     os.makedirs(screenshot_dir, exist_ok=True)
 
     # 1. グラフ構築
+    wmp_helpers.wait_for_graph_clear(page)
     page.evaluate("""() => {
-        app.graph.clear();
         const filter = LiteGraph.createNode("WebuiMonacoPromptJsonFilter");
         app.graph.add(filter);
         
@@ -114,7 +101,7 @@ def test_json_filter_error_case(page: Page, comfyui_server, wait_for_comfyui):
     }""")
     
     # サーバー側でのエラー発生とUIへの反映を待つ
-    page.wait_for_timeout(3000)
+    wmp_helpers.wait_for_ui_stabilize(page, timeout=3000)
     
     # 3. ノードがエラー表示（赤枠等）になっているか検証
     # ComfyUIは実行エラー時にノードの .show_errors または特定のクラスを付与する
@@ -130,12 +117,10 @@ def test_json_filter_error_case(page: Page, comfyui_server, wait_for_comfyui):
     # 実際の ComfyUI ではノードが赤く光る。Playwright ではスクショで確認。
     page.screenshot(path=os.path.join(screenshot_dir, "02_error_visual_check.png"))
 
-def test_json_filter_persistence(page: Page, comfyui_server, wait_for_comfyui):
+def test_json_filter_persistence(page: Page, comfyui_server, wait_for_comfyui, wmp_helpers):
     """シリアライズ・デシリアライズを通じて設定したルールが保持されているか検証する"""
     page.on("console", lambda msg: print(f"BROWSER CONSOLE: {msg.text}"))
-    page.set_default_timeout(60000)
-    page.goto(comfyui_server)
-    wait_for_comfyui(page)
+    wmp_helpers.load_comfyui(page, comfyui_server, wait_for_comfyui)
     
     screenshot_dir = os.path.join(os.getcwd(), "tests", "screenshots_filter")
     os.makedirs(screenshot_dir, exist_ok=True)
@@ -165,11 +150,11 @@ def test_json_filter_persistence(page: Page, comfyui_server, wait_for_comfyui):
         app.canvas.draw(true);
     }}""", serialized_data)
     
-    page.wait_for_timeout(5000)
+    wmp_helpers.wait_for_ui_stabilize(page, timeout=5000)
     
     # 3. 検証
     try:
-        page.wait_for_selector("[class*='filter-container']", state="attached", timeout=10000)
+        page.wait_for_selector("[class*='filter-container']", state="attached")
         input_el = page.locator("[class*='filter-input']").first
         expect(input_el).to_have_value("persistence_test")
         

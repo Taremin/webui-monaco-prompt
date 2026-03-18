@@ -1,9 +1,8 @@
 import pytest
 from playwright.sync_api import Page, expect
 
-def test_multitext_keyboard_propagation(page: Page, comfyui_server, wait_for_comfyui):
+def test_multitext_keyboard_propagation(page: Page, comfyui_server, wait_for_comfyui, wmp_helpers):
     """MultiTextウィジェットでのキー入力がComfyUI側に伝播しないことを確認する"""
-    page.set_default_timeout(60000)
     page.set_viewport_size({"width": 1920, "height": 1080})
     page.goto(comfyui_server)
     
@@ -15,7 +14,7 @@ def test_multitext_keyboard_propagation(page: Page, comfyui_server, wait_for_com
 
     # ワークフローをクリア
     page.evaluate("() => { if (typeof app !== 'undefined' && app.graph) { app.graph.clear(); } }")
-    page.wait_for_function("() => app.graph && app.graph._nodes.length === 0")
+    wmp_helpers.wait_for_graph_clear(page)
 
     # MultiTextノード名を取得
     node_type = page.evaluate("""async () => {
@@ -49,20 +48,7 @@ def test_multitext_keyboard_propagation(page: Page, comfyui_server, wait_for_com
     page.wait_for_function("() => app.graph && app.graph._nodes.length > 0")
 
     # エディターの準備完了を待つ
-    page.wait_for_selector("prompt-editor", state="attached", timeout=45000)
-    
-    # Textareaを見つけてフォーカス
-    page.evaluate("""() => new Promise(resolve => {
-        const check = () => {
-            const editor = document.querySelector('prompt-editor');
-            if (editor) {
-                const root = editor.shadowRoot || editor;
-                if (root.querySelector('textarea')) return resolve();
-            }
-            setTimeout(check, 100);
-        };
-        check();
-    })""")
+    wmp_helpers.wait_for_editor(page)
     
     page.evaluate("""() => {
         const editor = document.querySelector('prompt-editor');
@@ -78,15 +64,16 @@ def test_multitext_keyboard_propagation(page: Page, comfyui_server, wait_for_com
     if box:
         page.mouse.click(box['x'] + box['width']/2, box['y'] + box['height']/2)
 
-    page.wait_for_timeout(500)
+    wmp_helpers.wait_for_ui_stabilize(page, 500)
 
     # 削除キー(DeleteやBackspace)を打つ。伝播していればノードが削除される。
     page.keyboard.press("Backspace")
     page.keyboard.press("Delete")
     page.keyboard.press("q") # q等も他のショートカットに割り当てられる可能性がある
 
-    page.wait_for_timeout(1000)
+    wmp_helpers.wait_for_ui_stabilize(page)
 
     # ノードが消滅せずに存在していることを確認する
     node_count = page.evaluate("() => app.graph._nodes.length")
     assert node_count == 1, f"Keyboard event propagated and deleted the node! Expected 1 node, got {node_count}"
+

@@ -11,6 +11,202 @@ from pathlib import Path
 TESTS_DIR = Path(__file__).parent
 SETTINGS_PATH = TESTS_DIR / "test_settings.json"
 
+# グローバルなタイムアウト定数
+DEFAULT_TEST_TIMEOUT = 10000  # 10秒
+UI_RENDER_TIMEOUT = 10000     # UI要素の描画やアニメーション待ち
+NODE_LOAD_TIMEOUT = 30000     # ノードの登録・読み込み待ち (これだけは少し長めを許容)
+
+@pytest.fixture(autouse=True)
+def setup_playwright_timeout(page):
+    """すべてのテストでPlaywrightのデフォルトタイムアウトを自動設定する"""
+    page.set_default_timeout(DEFAULT_TEST_TIMEOUT)
+
+@pytest.fixture
+def wmp_helpers():
+    class Helpers:
+        @staticmethod
+        def load_comfyui(page, comfyui_server, wait_for_comfyui):
+            """ComfyUIを開き、初期ロードが完了するまで待機する"""
+            page.goto(comfyui_server)
+            wait_for_comfyui(page)
+
+        @staticmethod
+        def wait_for_editor(page):
+            # Editorの初期化は重い環境だと時間がかかるため、必要に応じて専用のタイムアウトを使用
+            try:
+                page.wait_for_selector("prompt-editor", state="attached", timeout=NODE_LOAD_TIMEOUT)
+            except:
+                pass
+            page.wait_for_selector(".monaco-editor", state="visible", timeout=NODE_LOAD_TIMEOUT)
+            
+        @staticmethod
+        def wait_for_graph_clear(page):
+            page.evaluate("() => { if (typeof app !== 'undefined' && app.graph) { app.graph.clear(); } }")
+            page.wait_for_function("() => app.graph && app.graph._nodes.length === 0", timeout=UI_RENDER_TIMEOUT)
+
+        @staticmethod
+        def wait_for_ui_stabilize(page, timeout=1000):
+            page.wait_for_timeout(timeout)
+
+        @staticmethod
+        def create_node(page, type_name, pos=(100, 100)):
+            """JS経由でノードを作成してグラフに追加する"""
+            return page.evaluate(f"""(args) => {{
+                const node = LiteGraph.createNode(args.type);
+                node.pos = args.pos;
+                app.graph.add(node);
+                if (app.canvas) app.canvas.centerOnNode(node);
+                return node.id;
+            }}""", {"type": type_name, "pos": pos})
+
+        @staticmethod
+        def run_and_wait_output(page, preview_node_type="PreviewAny"):
+            """プロンプトを実行し、指定したタイプのノードに出力が現れるまで待機する"""
+            page.evaluate("app.queuePrompt(0)")
+            page.wait_for_function(f"""() => {{
+                const preview = app.graph._nodes.find(n => n.type === "{preview_node_type}");
+                if (!preview || !preview.widgets || !preview.widgets[0]) return false;
+                const val = preview.widgets[0].value;
+                return val && String(val).length > 0;
+            }}""", timeout=NODE_LOAD_TIMEOUT)
+            
+            return page.evaluate(f"""() => {{
+                const preview = app.graph._nodes.find(n => n.type === "{preview_node_type}");
+                return preview.widgets[0].value;
+            }}""")
+
+        @staticmethod
+        def open_settings(page):
+            """ComfyUIの設定ダイアログを開く"""
+            # Close any existing legacy modals first
+            page.evaluate("""() => {
+                const modals = document.querySelectorAll(".comfy-modal");
+                for (const m of modals) {
+                    if (m.style.display !== 'none') {
+                        const btn = m.querySelector("button");
+                        if (btn) btn.click();
+                    }
+                }
+            }""")
+
+            # Try sidebar button click (V2)
+            try:
+                # Wait for sidebar button to be present and click it
+                btn = page.locator('button[aria-label^="Settings"]').first
+                btn.wait_for(state="visible", timeout=2000)
+                btn.click()
+            except:
+                # Try keyboard shortcut (Ctrl + ,)
+                page.keyboard.press("Control+,")
+            
+            # Wait for V2 settings dialog (p-dialog) specifically
+            try:
+                page.wait_for_selector(".p-dialog:visible", timeout=10000)
+            except:
+                # Last resort fallback to API but try to force V2
+                page.evaluate("""() => {
+                    const getApp = () => window.app || (window.comfyAPI && window.comfyAPI.app) || window.ComfyApp;
+                    const app = getApp();
+                    if (app && app.ui && app.ui.settings) app.ui.settings.show();
+                }""")
+                page.wait_for_selector(".p-dialog:visible, .comfy-modal:visible", timeout=UI_RENDER_TIMEOUT)
+
+        @staticmethod
+        def switch_settings_category(page, category_name="WebuiMonacoPrompt"):
+            """V2設定ダイアログでカテゴリを切り替える"""
+            page.evaluate(f"""(name) => {{
+                const items = document.querySelectorAll('li[aria-label], .p-listbox-item');
+                for (const item of items) {{
+                    if (item.getAttribute('aria-label') === name || item.textContent.trim() === name) {{
+                        item.click();
+                        return true;
+                    }}
+                }}
+                return false;
+            }}""", category_name)
+            page.wait_for_timeout(500)
+
+        @staticmethod
+        def set_comfy_setting(page, setting_id, value):
+            """ComfyUIの設定値をセットし、localStorageと同期させる"""
+            page.evaluate(f"""(args) => {{
+                const k = args.id;
+                const v = args.val;
+                const getApp = () => window.app || (window.comfyAPI && window.comfyAPI.app) || window.ComfyApp;
+                const app = getApp();
+
+                // 1. localStorage (V2用の Comfy.Settings 重層化構造)
+                try {{
+                    const raw = localStorage.getItem("Comfy.Settings") || "{{}}";
+                    const settings = JSON.parse(raw);
+                    settings[k] = v;
+                    localStorage.setItem("Comfy.Settings", JSON.stringify(settings));
+                    localStorage.setItem("Comfy.Settings." + k, JSON.stringify(v));
+                }} catch(e) {{ console.error("LS sync failed", e); }}
+
+                // 2. App 内部状態同期
+                if (app && app.ui && app.ui.settings) {{
+                    app.ui.settings.setSettingValue(k, v);
+                    if (app.ui.settings.values) app.ui.settings.values[k] = v;
+                    if (typeof app.ui.settings.save === 'function') app.ui.settings.save();
+                }}
+                
+                // 通知イベント
+                window.dispatchEvent(new CustomEvent("comfy-settings-changed", {{ detail: {{ id: k, value: v }} }}));
+            }}""", {"id": setting_id, "val": value})
+            page.wait_for_timeout(500)
+
+        @staticmethod
+        def get_comfy_setting(page, setting_id):
+            """ComfyUIの設定値を取得する"""
+            return page.evaluate(f"""(id) => {{
+                const getApp = () => window.app || (window.comfyAPI && window.comfyAPI.app) || window.ComfyApp;
+                const app = getApp();
+                if (app && app.ui && app.ui.settings) {{
+                    return app.ui.settings.getSettingValue(id);
+                }}
+                const raw = localStorage.getItem("Comfy.Settings") || "{{}}";
+                return JSON.parse(raw)[id];
+            }}""", setting_id)
+
+        @staticmethod
+        def open_preset_dialog(page):
+            """Manage Presets ダイアログを開く"""
+            clicked = page.evaluate("""() => {
+                // V1 style
+                let btn = document.querySelector("#webui-monaco-manage-btn button");
+                if (btn) { btn.click(); return true; }
+                
+                // V2 style (Search by button text)
+                const allBtns = Array.from(document.querySelectorAll('button'));
+                const openBtn = allBtns.find(b => b.textContent === "Open Dialog" || b.textContent.includes("Manage Language Presets"));
+                if (openBtn) { openBtn.click(); return true; }
+
+                return false;
+            }""")
+            
+            if not clicked:
+                try:
+                    # 最終手段: Playwright locator (timeout を短くして失敗を早く検知)
+                    page.get_by_role("button", name="Open Dialog").first.click(timeout=3000)
+                    clicked = True
+                except Exception as e:
+                    print(f"Warning: Failed to click Open Dialog button: {e}")
+                    
+                    # API 経由で直接ダイアログを開くフォールバック
+                    print("Falling back to API to open preset dialog...")
+                    page.evaluate("""() => {
+                        if (window.WebuiMonacoPrompt && window.WebuiMonacoPrompt.getPresetDialog) {
+                            window.WebuiMonacoPrompt.getPresetDialog().show();
+                        }
+                    }""")
+                    clicked = True
+            
+            if clicked:
+                page.wait_for_selector("#webui-monaco-preset-dialog", state="visible", timeout=UI_RENDER_TIMEOUT)
+
+    return Helpers
+
 @pytest.fixture(scope="session")
 def test_settings():
     """test_settings.json から設定を読み込む"""
@@ -81,13 +277,16 @@ def comfyui_server(test_settings):
     import threading
     import queue
     
+    log_file = open("comfyui_server.log", "w", encoding="utf-8", buffering=1)
     output_queue = queue.Queue()
-    def enqueue_output(out, queue):
+    def enqueue_output(out, queue, log):
         for line in iter(out.readline, ''):
             queue.put(line)
+            log.write(line)
         out.close()
+        log.close()
     
-    t = threading.Thread(target=enqueue_output, args=(process.stdout, output_queue))
+    t = threading.Thread(target=enqueue_output, args=(process.stdout, output_queue, log_file))
     t.daemon = True
     t.start()
 
@@ -153,8 +352,22 @@ def wait_for_comfyui():
         try:
             page.wait_for_function("""
                 () => {
-                    const getApp = () => window.app || (window.comfyAPI && window.comfyAPI.app) || window.ComfyApp || (window.parent && window.parent.app);
-                    const app = getApp();
+                    const findApp = (root) => {
+                        if (root.app) return root.app;
+                        if (root.comfyAPI && root.comfyAPI.app) return root.comfyAPI.app;
+                        if (root.ComfyApp) return root.ComfyApp;
+                        
+                        // V2のカスタムエレメントを探す
+                        const canvas = document.querySelector("comfy-canvas");
+                        if (canvas && canvas.app) return canvas.app;
+                        
+                        const menu = document.querySelector("comfy-menu");
+                        if (menu && menu.app) return menu.app;
+
+                        return null;
+                    };
+                    
+                    const app = findApp(window) || (window.parent && findApp(window.parent));
                     return !!(app && app.graph);
                 }
             """, timeout=180000)
@@ -175,3 +388,44 @@ def wait_for_comfyui():
             pass
             
     return _wait
+
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    # execute all other hooks to obtain the report object
+    outcome = yield
+    rep = outcome.get_result()
+
+    # we only look at "call" phase failures (not setup/teardown)
+    if rep.when != "call":
+        return
+        
+    if not (rep.failed or (hasattr(rep, "wasxfail") and not rep.passed)):
+        return
+
+    # Check if the test has a 'page' fixture
+    if "page" not in item.funcargs:
+        return
+
+    page = item.funcargs["page"]
+    try:
+        import datetime
+        timestamp = datetime.datetime.now().strftime("%H%M%S")
+        # Clean test name for filename
+        safe_name = item.name.replace("[", "_").replace("]", "_").replace("/", "_").replace(":", "_")
+        
+        dump_dir = Path("debug_dumps")
+        dump_dir.mkdir(parents=True, exist_ok=True)
+        
+        html_filename = dump_dir / f"failure_{safe_name}_{timestamp}.html"
+        with open(html_filename, "w", encoding="utf-8") as f:
+            f.write(page.content())
+        
+        print(f"\n[DEBUG] Captured HTML failure dump to {html_filename}")
+        
+        # Screenshot too if possible
+        png_filename = dump_dir / f"failure_{safe_name}_{timestamp}.png"
+        page.screenshot(path=str(png_filename))
+        print(f"[DEBUG] Captured screenshot to {png_filename}")
+
+    except Exception as e:
+        print(f"\n[DEBUG] Failed to capture failure info: {e}")

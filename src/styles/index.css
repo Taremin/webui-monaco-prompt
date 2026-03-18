@@ -51,3 +51,105 @@
 .find-line-content {
     overflow-wrap: anywhere;
 }
+
+.dialogOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+}
+
+.dialog {
+    background: #222;
+    color: #eee;
+    padding: 1.5rem;
+    border-radius: 8px;
+    border: 1px solid #444;
+    min-width: 450px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+    font-family: inherit;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.dialog h3 {
+    margin: 0;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #444;
+    font-size: 1.2rem;
+}
+
+.dialog input[type="text"] {
+    background: #333;
+    color: #eee;
+    border: 1px solid #555;
+    padding: 0.5rem;
+    border-radius: 4px;
+    outline: none;
+}
+
+.dialog input[type="text"]:focus {
+    border-color: #777;
+}
+
+.dialog button {
+    background: #444;
+    color: #eee;
+    border: 1px solid #666;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.9rem;
+}
+
+.dialog button:hover {
+    background: #555;
+    border-color: #888;
+}
+
+.dialog button:active {
+    background: #333;
+}
+
+.dialog-list {
+    max-height: 250px;
+    overflow-y: auto;
+    border: 1px solid #444;
+    padding: 0.5rem;
+    background: #1a1a1a;
+    border-radius: 4px;
+}
+
+.dialog-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem;
+    border-bottom: 1px solid #333;
+}
+
+.dialog-item:last-child {
+    border-bottom: none;
+}
+
+.dialog-item-label {
+    flex: 1;
+    margin-right: 1rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dialog-footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 0.5rem;
+}

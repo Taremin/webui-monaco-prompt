@@ -86,23 +86,28 @@ class WebuiMonacoPromptMultiText:
     def process(self, text):
         import json
         try:
-            data = json.loads(text)
-            tree = data.get("tree", [])
+            # text がリストで渡される場合の対応 (INPUT_IS_LIST=True ではないが、念のため)
+            input_str = text[0] if isinstance(text, list) and len(text) > 0 else text
             
+            try:
+                data = json.loads(input_str)
+            except Exception:
+                # パース失敗時はそのまま返す
+                return ([input_str], [json.dumps({"name": "default.txt", "type": "file", "content": input_str, "path": "default.txt"})])
+            
+            tree = data.get("tree", [])
             contents = []
             json_list = []
 
             def traverse(items, current_path=""):
                 for item in items:
                     name = item.get("name", "")
-                    # パスの構築 (スラッシュ区切り)
                     path = f"{current_path}/{name}" if current_path else name
                     
                     if item.get("type") == "file":
                         content = item.get("content", "")
                         contents.append(content)
                         
-                        # path情報を付与したコピーを作成してJSON化
                         item_copy = item.copy()
                         item_copy["path"] = path
                         json_list.append(json.dumps(item_copy))
@@ -112,12 +117,10 @@ class WebuiMonacoPromptMultiText:
                         traverse(children, path)
 
             traverse(tree)
-            print(f"DEBUG - MultiText process: input_len={len(text)}, output_files={len(contents)}")
             return (contents, json_list)
-        except Exception as e:
-            print(f"DEBUG - MultiText process ERROR: {str(e)}")
-            # パース失敗時（非 JSON 入力等）は、入力テキストをそのまま一つのファイルコンテンツとして返す
-            return ([text], [json.dumps({"name": "default.txt", "type": "file", "content": text, "path": "default.txt"})])
+        except Exception:
+            # 最後の手段として空のリストを返してクラッシュを避ける
+            return ([], [])
 
 
 class WebuiMonacoPromptJsonFilter:

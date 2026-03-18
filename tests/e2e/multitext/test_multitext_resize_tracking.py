@@ -3,9 +3,8 @@ import os
 import json
 from playwright.sync_api import Page, expect
 
-def test_multitext_resize_tracking(page: Page, comfyui_server, wait_for_comfyui):
+def test_multitext_resize_tracking(page: Page, comfyui_server, wait_for_comfyui, wmp_helpers):
     """リサイズバーがマウスカーソルに追従するか（特にズーム時）を検証する"""
-    page.set_default_timeout(60000)
     page.set_viewport_size({"width": 1280, "height": 720})
 
     screenshot_dir = os.path.join(os.getcwd(), "tests", "screenshots_resize_tracking")
@@ -17,7 +16,7 @@ def test_multitext_resize_tracking(page: Page, comfyui_server, wait_for_comfyui)
 
     # ワークフローをクリア
     page.evaluate("() => { if (typeof app !== 'undefined' && app.graph) { app.graph.clear(); } }")
-    page.wait_for_function("() => app.graph && app.graph._nodes.length === 0", timeout=10000)
+    wmp_helpers.wait_for_graph_clear(page)
 
     # MultiTextノードを作成
     node_type = page.evaluate("""() => {
@@ -37,14 +36,14 @@ def test_multitext_resize_tracking(page: Page, comfyui_server, wait_for_comfyui)
         app.graph.add(node);
     }}""")
 
-    page.wait_for_selector(".monaco-editor", state="attached")
+    wmp_helpers.wait_for_editor(page)
 
     # リサイザーの位置を検証する関数
     def perform_resize_and_check(drag_distance_x, scale=1.0):
         print(f"\\n--- Testing resize tracking at scale: {scale} ---")
         # スケール設定
         page.evaluate(f"window.app.canvas.ds.scale = {scale}; window.app.canvas.setDirty(true, true);")
-        page.wait_for_timeout(500)
+        wmp_helpers.wait_for_ui_stabilize(page, 500)
 
         resizer = page.locator("[class*='multitext-resizer']")
         initial_box = resizer.bounding_box()
@@ -61,7 +60,7 @@ def test_multitext_resize_tracking(page: Page, comfyui_server, wait_for_comfyui)
 
         # ドラッグ中
         page.mouse.move(target_x, start_y, steps=10)
-        page.wait_for_timeout(500) # リサイズ処理が反映されるのを待つ
+        wmp_helpers.wait_for_ui_stabilize(page, 500) # リサイズ処理が反映されるのを待つ
 
         # ドラッグ中のリサイザーの位置を取得
         current_box = resizer.bounding_box()
@@ -71,7 +70,7 @@ def test_multitext_resize_tracking(page: Page, comfyui_server, wait_for_comfyui)
 
         # ドラッグ終了
         page.mouse.up()
-        page.wait_for_timeout(500)
+        wmp_helpers.wait_for_ui_stabilize(page, 500)
         
         try:
             debug_logs = page.evaluate("window.RESIZE_DEBUG")

@@ -4,26 +4,25 @@ import json
 import time
 from playwright.sync_api import Page, expect
 
-def test_multitext_min_size_layout(page: Page, comfyui_server, wait_for_comfyui):
+def test_multitext_min_size_layout(page: Page, comfyui_server, wait_for_comfyui, wmp_helpers):
     """ノードを最小サイズにリサイズした際のレイアウト崩れ（はみ出し、タブ隠れ）を検証する"""
-    page.set_default_timeout(60000)
-    page.goto(comfyui_server)
-    wait_for_comfyui(page)
+    wmp_helpers.load_comfyui(page, comfyui_server, wait_for_comfyui)
+    wmp_helpers.wait_for_graph_clear(page)
 
     screenshot_dir = os.path.join(os.getcwd(), "tests", "screenshots_min_size")
     os.makedirs(screenshot_dir, exist_ok=True)
 
     # MultiTextノードを作成
+    wmp_helpers.create_node(page, "WebuiMonacoPromptMultiText", [100, 100])
+    
+    # エディタの存在確認
+    wmp_helpers.wait_for_editor(page)
+
+    # 最初は十分なサイズで作成し、ノードIDを取得
     node_info = page.evaluate("""() => {
         const app = window.app || window.ComfyApp;
-        app.graph.clear();
-        const types = Object.keys(window.LiteGraph.registered_node_types);
-        const mtType = types.find(t => t.includes('WebuiMonacoPromptMultiText'));
-        const node = window.LiteGraph.createNode(mtType);
-        node.pos = [100, 100];
-        // 最初は十分なサイズで作成
+        const node = app.graph._nodes[0];
         node.size = [400, 400];
-        app.graph.add(node);
         return { id: node.id };
     }""")
 
@@ -39,7 +38,7 @@ def test_multitext_min_size_layout(page: Page, comfyui_server, wait_for_comfyui)
         app.canvas.setDirty(true, true);
     }}""", node_info['id'])
     
-    page.wait_for_timeout(1000)
+    wmp_helpers.wait_for_ui_stabilize(page, 1000)
     page.screenshot(path=os.path.join(screenshot_dir, "01_min_size.png"))
 
     # タブの出現を待機

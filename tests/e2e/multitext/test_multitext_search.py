@@ -3,25 +3,23 @@ import time
 import uuid
 from playwright.sync_api import Page, expect
 
-def test_multitext_full_search(page: Page, comfyui_server, wait_for_comfyui):
+def test_multitext_full_search(page: Page, comfyui_server, wait_for_comfyui, wmp_helpers):
     """(UI操作方式) 非アクティブファイルの内容も検索で見つかることを確認する"""
-    url = comfyui_server
-    page.goto(url)
-    wait_for_comfyui(page)
+    wmp_helpers.load_comfyui(page, comfyui_server, wait_for_comfyui)
+    wmp_helpers.wait_for_graph_clear(page)
     page.set_viewport_size({"width": 1920, "height": 1080})
 
     # 一意のタイトルを持つノードを作成 (隔離)
     node_title = f"MT-SEARCH-UI-{uuid.uuid4().hex[:6]}"
     print(f"Creating node with title: {node_title}")
 
-    page.evaluate(f"""(title) => {{
+    node_id = wmp_helpers.create_node(page, "WebuiMonacoPromptMultiText", [200, 200])
+    page.evaluate(f"""(args) => {{
         const app = window.app || window.ComfyApp;
-        const node = LiteGraph.createNode("WebuiMonacoPromptMultiText");
-        node.title = title;
-        node.pos = [200, 200];
+        const node = app.graph.getNodeById(args.id);
+        node.title = args.title;
         node.setSize([800, 600]);
-        app.graph.add(node);
-    }}""", node_title)
+    }}""", {"id": node_id, "title": node_title})
     
     # ノードとエディタの準備待ち
     page.wait_for_function(f"""
@@ -30,7 +28,7 @@ def test_multitext_full_search(page: Page, comfyui_server, wait_for_comfyui):
             const node = app.graph && app.graph._nodes.find(n => n.title === title && n.multitext_widget);
             return node && node.multitext_widget && !!node.multitext_widget.editorInstance;
         }}
-    """, arg=node_title, timeout=60000)
+    """, arg=node_title)
 
     print("Step 2: Setup files and content via JS")
     second_file = "search_test_ui.txt"
@@ -48,27 +46,27 @@ def test_multitext_full_search(page: Page, comfyui_server, wait_for_comfyui):
         const d = w.data.tree.find(i => i.name === 'default.txt');
         w.openFile(d.id);
     }}""", node_title)
-    time.sleep(1)
+    wmp_helpers.wait_for_ui_stabilize(page)
 
     print("Step 3: Perform Search via UI")
     # 検索タブを開く
     page.click("[title='Search']")
     
     # 検索入力欄が出るまで待つ
-    page.wait_for_selector("input[class*='search-input']", timeout=10000)
+    page.wait_for_selector("input[class*='search-input']")
     search_input = page.locator("input[class*='search-input']")
     search_input.fill("secret")
     search_input.press("Enter")
     
     # 検索結果が出るのを待つ
-    page.wait_for_selector("div[class*='search-result-item']", timeout=10000)
+    page.wait_for_selector("div[class*='search-result-item']")
     
     print("Step 4: Click result and verify Switch")
     # 目的のファイルの結果をクリック
     target_row = page.locator("div[class*='search-result-item']").filter(has_text=second_file).first
     target_row.click()
     
-    page.wait_for_timeout(1000)
+    wmp_helpers.wait_for_ui_stabilize(page)
     
     # アクティブファイルが切り替わったかJSで確認
     active_name = page.evaluate(f"""(title) => {{
@@ -82,3 +80,4 @@ def test_multitext_full_search(page: Page, comfyui_server, wait_for_comfyui):
     
     assert active_name == second_file, f"Active file should be {second_file}, but got {active_name}"
     print("Verification successful: UI Search & Switch Passed.")
+
