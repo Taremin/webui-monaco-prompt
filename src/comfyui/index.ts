@@ -6,6 +6,7 @@ import { app, api } from "./api"
 import { loadSetting, saveSettings, updateInstanceSettings } from "./settings"
 import { comfyPrompt, comfyDynamicPrompt } from "./languages"
 import { escapeHTML } from "../utils"
+import { PresetDialog } from "../preset_dialog"
 
 declare let __webpack_public_path__: any;
 
@@ -15,6 +16,7 @@ interface Window {
     WebuiMonacoPromptUtils: typeof utils
 }
 declare var window: Window
+declare var LGraphCanvas: any
 
 // set dynamic path
 const srcURL = new URL(document.currentScript ? (document.currentScript as HTMLScriptElement).src : import.meta.url)
@@ -30,6 +32,14 @@ utils.loadStyle(dir, "multitext.css")
 const MonacoPrompt = require("../index") as typeof WebuiMonacoPrompt
 window.WebuiMonacoPrompt = MonacoPrompt
 window.WebuiMonacoPromptUtils = utils
+
+// テスト用に露出
+if (typeof window !== "undefined") {
+    (window as any).WebuiMonacoPrompt = {
+        ...(window as any).WebuiMonacoPrompt,
+        getPresetDialog: () => getPresetDialog() // 遅延評価
+    }
+}
 
 const languages = [
     {id: "comfy-prompt", lang: comfyPrompt},
@@ -137,16 +147,13 @@ async function refreshSnippets() {
 }
 
 let csvfiles: string[]
-async function loadCSV (files: string[]) {
+async function loadCSVContent (files: string[]) {
     MonacoPrompt.clearCSV()
 
     for (const filename of files) {
         if (!filename) continue
         const path = [dir, filename].join('/')
         const filenameParts = filename.split('.')
-        if (filenameParts.length > 2) {
-            throw new Error("Invalid filename (too many '.')")
-        }
         const basename = filenameParts[0]
         const value = await fetch(path).then(res => res.text())
         MonacoPrompt.addCSV(basename, value)
@@ -155,7 +162,8 @@ async function loadCSV (files: string[]) {
 
 async function refreshCSV() {
     csvfiles = await fetch("/webui-monaco-prompt/csv").then(res => res.json())
-    await loadCSV(csvfiles)
+    // 内部的な CSV 内容の読み込み
+    await loadCSVContent(csvfiles)
 }
 
 
@@ -164,16 +172,18 @@ function getCSSRules(target: string[]) {
     const result: {[key: string]: CSSStyleDeclaration[]} = {}
 
     for (const  styleSheet of  document.styleSheets) {
-        for (const rule of styleSheet.cssRules) {
-            if (rule instanceof CSSStyleRule) {
-                if (targetSet.has(rule.selectorText)) {
-                    if (!Array.isArray(result[rule.selectorText])) {
-                        result[rule.selectorText] = []
+        try {
+            for (const rule of styleSheet.cssRules) {
+                if (rule instanceof CSSStyleRule) {
+                    if (targetSet.has(rule.selectorText)) {
+                        if (!Array.isArray(result[rule.selectorText])) {
+                            result[rule.selectorText] = []
+                        }
+                        result[rule.selectorText].push(rule.style)
                     }
-                    result[rule.selectorText].push(rule.style)
                 }
             }
-        }
+        } catch(e) { /* ignore CORS */ }
     }
 
     return result
@@ -191,7 +201,7 @@ function getZIndex(styles: CSSStyleDeclaration[] = []) {
 }
 
 const rules = getCSSRules([".graphdialog"])
-const graphDialogZIndex = getZIndex(rules[".graphdialog"])
+const graphDialogZIndex = getZIndex(rules[".graphdialog"]) || 1000
 
 function styleToString(s: CSSStyleDeclaration, list: string[], isExclude=true) {
     const result = []
@@ -212,7 +222,7 @@ function styleToString(s: CSSStyleDeclaration, list: string[], isExclude=true) {
 function onCreateTextarea(textarea: HTMLTextAreaElement, node: any, force = false) {
     if (!force) {
         const isReplace = app.ui.settings.getSettingValue("WebuiMonacoPrompt.ReplaceTextarea")
-        if (!isReplace) {
+        if (isReplace === false) {
             return
         }
     }
@@ -221,22 +231,25 @@ function onCreateTextarea(textarea: HTMLTextAreaElement, node: any, force = fals
         return
     }
     if (textarea.readOnly) {
-        console.log("[WebuiMonacoPrompt] Skip: TextArea is read-only:", textarea)
         return
     }
 
-    const editor = new WebuiMonacoPrompt.PromptEditor(textarea, {
-        autoLayout: true,
-        handleTextAreaValue: true,
-    })
+    let editor: any
+    try {
+        editor = new WebuiMonacoPrompt.PromptEditor(textarea, {
+            autoLayout: true,
+            handleTextAreaValue: true,
+        })
+    } catch (e) {
+        console.error("[WebuiMonacoPrompt] Failed to create PromptEditor", e)
+        return
+    }
 
-    // style 同期
-    const observer = new MutationObserver((mutations, observer) => {
+    const observer = new MutationObserver((mutations) => {
         for (const mutation of mutations) {
-            if (mutation.target !== textarea) {
-                continue
-            }
-            editor.style.cssText = styleToString((mutation.target as HTMLTextAreaElement).style, [])
+            if (mutation.target !== textarea) continue
+            // Never mirror textarea display:none onto the editor
+            editor.style.cssText = styleToString((mutation.target as HTMLTextAreaElement).style, ["display"])
         }
     })
     editor.style.zIndex = "" + (graphDialogZIndex - 1)
@@ -246,14 +259,8 @@ function onCreateTextarea(textarea: HTMLTextAreaElement, node: any, force = fals
     })
     editor.style.cssText = styleToString(textarea.style, ["display"])
 
-    Object.assign(editor.elements.header!.style, {
-        backgroundColor: "#444",
-        fontSize: "small",
-    })
-    Object.assign(editor.elements.footer!.style, {
-        backgroundColor: "#444",
-        fontSize: "small",
-    })
+    Object.assign(editor.elements.header!.style, { backgroundColor: "#444", fontSize: "small" })
+    Object.assign(editor.elements.footer!.style, { backgroundColor: "#444", fontSize: "small" })
     
     const id = editor.getInstanceId()
     textarea.dataset.webuiMonacoPromptTextareaId = "" + id
@@ -266,11 +273,30 @@ function onCreateTextarea(textarea: HTMLTextAreaElement, node: any, force = fals
     }
 
     utils.applyCommonEditorSetup(app, editor, node)
-
-    if (textarea.parentElement) {
-        textarea.parentElement.append(editor)
+    const attachEditor = () => {
+        const parent = textarea.parentElement
+        if (parent && (!editor.isConnected || editor.parentElement !== parent)) {
+            parent.append(editor)
+            return true
+        }
+        return false
     }
-    
+    const attachObserver = new MutationObserver(() => {
+        if (!editor.isConnected) {
+            attachEditor()
+        }
+    })
+    attachObserver.observe(document.body, { childList: true, subtree: true })
+    attachEditor()
+    ;(editor as any)._attachObserver = attachObserver
+    const attachInterval = setInterval(() => {
+        if (!editor.isConnected) {
+            attachEditor()
+        }
+    }, 500)
+    ;(editor as any)._attachIntervalId = attachInterval
+
+    registerPromptEditor(editor)
     editor.onChangeTheme(() => {
         editor.monaco._themeService.onDidColorThemeChange(() => {
             utils.updateThemeStyle(editor)
@@ -279,7 +305,6 @@ function onCreateTextarea(textarea: HTMLTextAreaElement, node: any, force = fals
 
     updateInstanceSettings(editor)
     utils.updateThemeStyle(editor)
-
     editor.onChangeBeforeSync(() => saveSettings(editor))
 
     return editor
@@ -287,13 +312,19 @@ function onCreateTextarea(textarea: HTMLTextAreaElement, node: any, force = fals
 
 function onRemoveTextarea(textarea: HTMLTextAreaElement) {
     const id = textarea.dataset.webuiMonacoPromptTextareaId
-    if (typeof(id) !== 'string') {
-        return
-    }
+    if (typeof(id) !== 'string') return
 
     const ctx = link[id]
     ctx.observer.disconnect()
     const editor = ctx.monaco
+    const attachObserver = (editor as any)._attachObserver
+    if (attachObserver) {
+        attachObserver.disconnect()
+    }
+    const attachIntervalId = (editor as any)._attachIntervalId
+    if (attachIntervalId) {
+        clearInterval(attachIntervalId)
+    }
     editor.dispose()
     if (editor.parentElement) {
         editor.parentElement.removeChild(ctx.monaco)
@@ -301,38 +332,102 @@ function onRemoveTextarea(textarea: HTMLTextAreaElement) {
     delete link[id]
 }
 
-function hookNodeWidgets(node: any) {
-    if (!node.widgets) {
-        return
+let presetDialog: PresetDialog | null = null
+
+export function showPresetManager() {
+    getPresetDialog().show()
+}
+
+function getPresetDialog() {
+    if (!presetDialog) {
+        presetDialog = new PresetDialog({
+            onSave: (name, features) => {
+                WebuiMonacoPrompt.runAllInstances((instance: any) => {
+                    instance.saveCustomPreset(name, features)
+                    saveSettings(instance)
+                    return true 
+                })
+            },
+            onApply: (id) => {
+                WebuiMonacoPrompt.runAllInstances((instance: any) => {
+                    instance.applyPreset(id)
+                    saveSettings(instance)
+                })
+            },
+            onDelete: (id) => {
+                WebuiMonacoPrompt.removeUserPreset(id)
+                WebuiMonacoPrompt.runAllInstances((instance: any) => {
+                    instance.syncLanguageFeatures()
+                    instance.updatePresetOptions()
+                    saveSettings(instance)
+                })
+            },
+            getCurrentFeatures: () => {
+                let features = {}
+                WebuiMonacoPrompt.runAllInstances((instance: any) => {
+                    features = { ...instance.languageFeatures }
+                    return true
+                })
+                return features
+            }
+        })
     }
-    for (const widget of node.widgets) {
-        if (!widget.element) {
-            continue
-        }
-        // Skip hooking the internal data widget for MultiText node
-        if (node.comfyClass === "WebuiMonacoPromptMultiText" && widget.name === "text") {
-            continue
-        }
+    return presetDialog
+}
+
+function registerPromptEditor(instance: any) {
+    instance.onOpenPresetDialog = () => {
+        getPresetDialog().show()
+    }
+}
+
+function hookNodeWidgets(node: any) {
+    if (!node.widgets) return
+    const processWidget = (widget: any) => {
         if (widget.element instanceof HTMLTextAreaElement) {
             const isReplace = app.ui.settings.getSettingValue("WebuiMonacoPrompt.ReplaceTextarea")
-            if (isReplace) {
+            if (isReplace !== false) {
                 onCreateTextarea(widget.element, node, true)
+            }
+            return true
+        }
+        return false
+    }
+
+    for (const widget of node.widgets) {
+        if (node.comfyClass === "WebuiMonacoPromptMultiText" && widget.name === "text") continue
+        
+        if (!processWidget(widget)) {
+            let timeoutId: any = null;
+            const observer = new MutationObserver(() => {
+                if (widget.element) {
+                    if (processWidget(widget)) {
+                        cleanup();
+                    }
+                }
+            });
+
+            const cleanup = () => {
+                observer.disconnect();
+                if (timeoutId) clearTimeout(timeoutId);
+            };
+
+            observer.observe(document.body, { childList: true, subtree: true });
+            timeoutId = setTimeout(() => {
+                cleanup();
+            }, 5000);
+
+            if (widget.element) {
+                if (processWidget(widget)) {
+                    cleanup();
+                }
             }
         }
     }
     const onRemovedOriginal = node.onRemoved
     node.onRemoved = function() {
-        if (onRemovedOriginal) {
-            onRemovedOriginal.apply(this, arguments)
-        }
-
+        if (onRemovedOriginal) onRemovedOriginal.apply(this, arguments)
         for (const widget of node.widgets) {
-            if (!widget.element) {
-                continue
-            }
-            if (node.comfyClass === "WebuiMonacoPromptMultiText" && widget.name === "text") {
-                continue
-            }
             if (widget.element instanceof HTMLTextAreaElement) {
                 onRemoveTextarea(widget.element)
             }
@@ -346,18 +441,9 @@ interface CustomNodeWidget {
 }
 
 const CustomNode: {[key: string]: CustomNodeWidget} = {
-    find: {
-        nodeType: "WebuiMonacoPromptFind",
-        widget: FindWidget as any,
-    },
-    replace: {
-        nodeType: "WebuiMonacoPromptReplace",
-        widget: ReplaceWidget as any,
-    },
-    multitext: {
-        nodeType: "WebuiMonacoPromptMultiText",
-        widget: MultiTextWidget as any,
-    },
+    find: { nodeType: "WebuiMonacoPromptFind", widget: FindWidget as any },
+    replace: { nodeType: "WebuiMonacoPromptReplace", widget: ReplaceWidget as any },
+    multitext: { nodeType: "WebuiMonacoPromptMultiText", widget: MultiTextWidget as any },
     json_filter: {
         nodeType: "WebuiMonacoPromptJsonFilter",
         widget: class {
@@ -365,19 +451,11 @@ const CustomNode: {[key: string]: CustomNodeWidget} = {
                 const rulesWidget = node.widgets.find((w: any) => w.name === "rules");
                 if (rulesWidget) {
                     rulesWidget.type = "hidden";
-                    
-                    // シリアライズ処理の直前に呼ばれる
                     rulesWidget.beforeQueued = function() {
-                        const rules = node.properties.rules || [];
-                        console.log(`[FilterWidget] beforeQueued - Syncing rules objects to widget:`, rules);
-                        this.value = rules;
+                        this.value = node.properties.rules || [];
                     };
-
-                    // シリアライズ時に値を供給する
                     rulesWidget.serializeValue = function() {
-                        const rules = node.properties.rules || [];
-                        console.log(`[FilterWidget] serializeValue called - returning:`, rules);
-                        return rules;
+                        return node.properties.rules || [];
                     };
                 }
                 const filterWidget = new FilterWidget(node);
@@ -385,14 +463,10 @@ const CustomNode: {[key: string]: CustomNodeWidget} = {
                     hideOnZoom: true,
                     serialize: false,
                 });
-                
-                // サイズ計算のフック
                 (domWidget as any)._node = node;
                 (domWidget as any).computeSize = function(this: any, width: number) {
                     const n = this._node || node;
-                    if (!n || !n.size) return [width, 200];
-                    const outputHeight = n.outputs ? n.outputs.length * 20 : 0;
-                    const targetHeight = Math.max(50, n.size[1] - 36 - outputHeight);
+                    const targetHeight = n && n.size ? Math.max(50, n.size[1] - 36 - (n.outputs ? n.outputs.length * 20 : 0)) : 200;
                     return [width, targetHeight];
                 };
             }
@@ -401,41 +475,31 @@ const CustomNode: {[key: string]: CustomNodeWidget} = {
 }
 
 const CustomNodeFromNodeType = Object.fromEntries(
-    Object.entries(CustomNode).map(([key, value]) => {
-        return [value.nodeType, value]
-    })
+    Object.entries(CustomNode).map(([key, value]) => [value.nodeType, value])
 )
 
-
-// これから追加されるノードの設定
 const register = (app: any) => {
     const multiTextNodes = new Set<any>()
     app.registerExtension({
         name: ["Taremin", "WebuiMonacoPrompt"].join('.'),
-        async beforeRegisterNodeDef(nodeType: any, nodeData: any, app: any) {
+        async beforeRegisterNodeDef(nodeType: any) {
             const originalGetExtraMenuOptions = nodeType.prototype.getExtraMenuOptions;
             nodeType.prototype.getExtraMenuOptions = function(canvas: any, options: any[]) {
-                if (originalGetExtraMenuOptions) {
-                    originalGetExtraMenuOptions.apply(this, arguments);
-                }
+                if (originalGetExtraMenuOptions) originalGetExtraMenuOptions.apply(this, arguments);
 
                 if (multiTextNodes.size > 0) {
                     options.push({
                         content: "Add to MultiText",
                         has_submenu: true,
-                        callback: (value: any, options: any, e: MouseEvent, menu: any, node: any) => {
-                            const targetNodes = Array.from(multiTextNodes);
-                            const submenu = new (window as any).LiteGraph.ContextMenu(
-                                targetNodes.map((tn: any) => ({
+                        callback: (value: any, options: any, e: MouseEvent, menu: any) => {
+                            new (window as any).LiteGraph.ContextMenu(
+                                Array.from(multiTextNodes).map((tn: any) => ({
                                     content: `#${tn.id}: ${tn.title || tn.type}`,
                                     callback: () => {
-                                        const selectedNodes = Object.values(app.canvas.selected_nodes);
-                                        for (const sn of selectedNodes as any[]) {
-                                            // 複数のウィジェットがある可能性があるが、最初の HTMLTextAreaElement を持つものを対象とする
+                                        for (const sn of Object.values(app.canvas.selected_nodes) as any[]) {
                                             const widget = sn.widgets?.find((w: any) => w.element instanceof HTMLTextAreaElement);
-                                            const text = widget ? widget.value : "";
                                             if (tn.multitext_widget) {
-                                                tn.multitext_widget.addItemWithName('file', sn.title || sn.type, null, text);
+                                                tn.multitext_widget.addItemWithName('file', sn.title || sn.type, null, widget ? widget.value : "");
                                                 app.canvas.setDirty(true);
                                             }
                                         }
@@ -449,13 +513,10 @@ const register = (app: any) => {
             };
         },
         async setup() {
+            let isSyncing = false;
             const addSetting = (id: string, name: string, type: string, defaultValue: any, tooltip?: string, options?: any) => {
                 const settingDefinition: any = {
-                    id,
-                    name,
-                    type,
-                    defaultValue,
-                    tooltip,
+                    id, name, type, defaultValue, tooltip,
                     onChange: (value: any) => {
                         const map: Record<string, string> = {
                             "WebuiMonacoPrompt.Minimap": "minimap",
@@ -463,7 +524,7 @@ const register = (app: any) => {
                             "WebuiMonacoPrompt.ReplaceUnderscore": "replaceUnderscore",
                             "WebuiMonacoPrompt.KeyBindings": "mode",
                             "WebuiMonacoPrompt.Theme": "theme",
-                            "WebuiMonacoPrompt.Language": "language",
+                            "WebuiMonacoPrompt.LanguagePreset": "languagePreset",
                             "WebuiMonacoPrompt.ShowHeader": "showHeader",
                             "WebuiMonacoPrompt.FontSize": "fontSize",
                             "WebuiMonacoPrompt.FontFamily": "fontFamily",
@@ -474,52 +535,190 @@ const register = (app: any) => {
                             WebuiMonacoPrompt.runAllInstances((instance) => {
                                 instance.setSettings({ [key]: value }, true)
                             })
+                        } else if (id.startsWith("WebuiMonacoPrompt.LanguageFeature.")) {
+                            const featureId = id.replace("WebuiMonacoPrompt.LanguageFeature.", "")
+                            const boolValue = value === true || value === "true" || value === 1;
+                            WebuiMonacoPrompt.runAllInstances((instance) => {
+                                instance.changeLanguageFeature(featureId, boolValue)
+                            })
+                        }
+
+                        if (isSyncing) return;
+
+                        if (id === "WebuiMonacoPrompt.LanguagePreset") {
+                            const preset = WebuiMonacoPrompt.getPreset(value)
+                            if (preset) {
+                                isSyncing = true
+                                for (const [featureId, enabled] of Object.entries((preset as any).features)) {
+                                    app.ui.settings.setSettingValue(`WebuiMonacoPrompt.LanguageFeature.${featureId}`, enabled)
+                                }
+                                isSyncing = false
+                            }
+                        } else if (id.startsWith("WebuiMonacoPrompt.LanguageFeature.")) {
+                            WebuiMonacoPrompt.runAllInstances((instance) => {
+                                isSyncing = true
+                                app.ui.settings.setSettingValue("WebuiMonacoPrompt.LanguagePreset", instance.currentPreset)
+                                isSyncing = false
+                                return true
+                            })
                         }
                     }
                 }
                 if (options) {
-                    Object.assign(settingDefinition, options)
+                    const originalOnChange = settingDefinition.onChange;
+                    const optionsOnChange = options.onChange;
+                    Object.assign(settingDefinition, options);
+                    if (optionsOnChange) {
+                        settingDefinition.onChange = (value: any) => {
+                            if (originalOnChange) originalOnChange(value);
+                            optionsOnChange(value);
+                        };
+                    }
                 }
-                app.ui.settings.addSetting(settingDefinition)
+                return app.ui.settings.addSetting(settingDefinition)
             }
 
-            addSetting("WebuiMonacoPrompt.ShowHeader", "Show Header", "boolean", false, "Show the Monaco Editor header")
-            addSetting("WebuiMonacoPrompt.Minimap", "Show Minimap", "boolean", true, "Show the Monaco Editor minimap")
-            addSetting("WebuiMonacoPrompt.LineNumbers", "Show Line Numbers", "boolean", true, "Show line numbers")
-            addSetting("WebuiMonacoPrompt.ReplaceUnderscore", "Replace Underscore", "boolean", false, "Replace underscores with spaces in autocomplete")
-            addSetting("WebuiMonacoPrompt.FontSize", "Font Size", "slider", 12, "Font size of the editor", { attrs: { min: 8, max: 48, step: 1 } })
-            addSetting("WebuiMonacoPrompt.FontFamily", "Font Family", "text", "", "Font family of the editor")
-            addSetting("WebuiMonacoPrompt.Language", "Language", "combo", "comfy-prompt", "Default language", { options: MonacoPrompt.getLanguages() })
-            addSetting("WebuiMonacoPrompt.KeyBindings", "Key Bindings", "combo", "VIM", "Keybindings", { options: ["NORMAL", "VIM"] })
-            addSetting("WebuiMonacoPrompt.Theme", "Theme", "combo", "vsc-dark", "Theme", { options: ["vs", "vs-dark", "hc-black", "hc-light"] })
+            // V2 UI の初期化完了を待つために少し遅延させる
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            addSetting("WebuiMonacoPrompt.ShowHeader", "Show Header", "boolean", false)      
+            addSetting("WebuiMonacoPrompt.Minimap", "Show Minimap", "boolean", true)        
+            addSetting("WebuiMonacoPrompt.LineNumbers", "Show Line Numbers", "boolean", true)
+            addSetting("WebuiMonacoPrompt.ReplaceUnderscore", "Replace Underscore", "boolean", false)
+            addSetting("WebuiMonacoPrompt.FontSize", "Font Size", "slider", 12, "", { attrs: { min: 8, max: 48, step: 1 } })
+            addSetting("WebuiMonacoPrompt.FontFamily", "Font Family", "text", "")
+            addSetting("WebuiMonacoPrompt.LanguagePreset", "Language Preset", "combo", "comfy-dynamic-prompt", "", { options: [...WebuiMonacoPrompt.getAllPresets().map(p => p.id), "custom"] })
+            addSetting("WebuiMonacoPrompt.KeyBindings", "Key Bindings", "combo", "VIM", "", { options: ["NORMAL", "VIM"] })
+            addSetting("WebuiMonacoPrompt.Theme", "Theme", "combo", "vsc-dark", "", { options: ["vs", "vs-dark", "hc-black", "hc-light"] })
             addSetting("WebuiMonacoPrompt.CsvToggle", "CSV Toggle", "hidden", {})
+
+            const defaultFeatures = WebuiMonacoPrompt.getPreset('comfy-dynamic-prompt')?.features || {}
+            for (const feature of WebuiMonacoPrompt.getAllFeatures()) {
+                const featureId = `WebuiMonacoPrompt.LanguageFeature.${feature.id}`
+                const existingValue = app.ui.settings.getSettingValue(featureId)
+                const presetDefault = feature.id in defaultFeatures ? defaultFeatures[feature.id] : false
+                addSetting(featureId, `Language Feature: ${feature.label}`, "boolean", existingValue !== undefined ? existingValue : presetDefault)
+            }
+
+            addSetting("WebuiMonacoPrompt.ReplaceTextarea", "Replace Textarea", "boolean", true, "", {
+                onChange: (value: boolean) => {
+                    const nodes = app.graph._nodes
+                    for (const node of nodes) {
+                        if (!node.widgets) continue;
+                        for (const widget of node.widgets) {
+                            if (node.comfyClass === "WebuiMonacoPromptMultiText" && widget.name === "text") continue;
+                            if (widget.element instanceof HTMLTextAreaElement) {
+                                if (value) onCreateTextarea(widget.element, node, true);
+                                else onRemoveTextarea(widget.element);
+                            }
+                        }
+                    }
+                }
+            })
+
+            // ManagePresets Button for V2
+            addSetting("WebuiMonacoPrompt.ManagePresets", "Manage Language Presets", "custom", null, "", {
+                type: (name: string) => {
+                    const row = document.createElement("tr");
+                    const labelCell = document.createElement("td");
+                    labelCell.textContent = name;
+                    labelCell.style.padding = "8px";
+                    const btnCell = document.createElement("td");
+                    btnCell.style.padding = "8px";
+                    btnCell.style.textAlign = "right";
+                    const btn = document.createElement("button");
+                    btn.textContent = "Open Dialog";
+                    btn.className = "comfy-btn";
+                    btn.style.width = "auto";
+                    btn.onclick = () => getPresetDialog().show();
+                    btnCell.appendChild(btn);
+                    row.append(labelCell, btnCell);
+                    return row;
+                }
+            });
+
+            // CSV Toggle List for V2
+            addSetting("WebuiMonacoPrompt.CSVSettings", "CSV Enabled Files", "custom", null, "", {
+                type: (name: string) => {
+                    const container = document.createElement("div");
+                    container.style.padding = "8px";
+                    const list = document.createElement("div");
+                    list.style.display = "flex";
+                    list.style.flexDirection = "column";
+                    list.style.gap = "4px";
+                    const csvToggle = app.ui.settings.getSettingValue("WebuiMonacoPrompt.CsvToggle") || {};
+                    if (csvfiles && csvfiles.length > 0) {
+                        for (const csv of csvfiles) {
+                            const row = document.createElement("label");
+                            row.style.display = "flex";
+                            row.style.alignItems = "center";
+                            row.style.gap = "8px";
+                            row.style.cursor = "pointer";
+                            const cb = document.createElement("input");
+                            cb.type = "checkbox";
+                            const key = `csv.${csv}`;
+                            cb.checked = csvToggle[key] !== false;
+                            cb.onchange = () => {
+                                const current = app.ui.settings.getSettingValue("WebuiMonacoPrompt.CsvToggle") || {};
+                                current[key] = cb.checked;
+                                app.ui.settings.setSettingValue("WebuiMonacoPrompt.CsvToggle", current);
+                                WebuiMonacoPrompt.runAllInstances((instance) => {
+                                    instance.setSettings({ csvToggle: current }, true);
+                                    saveSettings(instance);
+                                });
+                            };
+                            row.appendChild(cb);
+                            row.appendChild(document.createTextNode(csv));
+                            list.appendChild(row);
+                        }
+                    } else {
+                        const empty = document.createElement("div");
+                        empty.textContent = "No CSV files found or still loading...";
+                        empty.style.opacity = "0.5";
+                        list.appendChild(empty);
+                    }
+                    container.appendChild(list);
+                    const tr = document.createElement("tr");
+                    const td = document.createElement("td");
+                    td.colSpan = 2;
+                    td.appendChild(container);
+                    tr.appendChild(td);
+                    return tr;
+                }
+            });
 
             await refreshCSV()
             await loadSetting()
 
-            // hook refresh button
+            // Settings Sync Listener
+            const onSettingsChanged = (e: any) => {
+                if (isSyncing) return;
+                const id = e.detail?.id || e.detail;
+                if (id && id.startsWith("WebuiMonacoPrompt.")) {
+                    WebuiMonacoPrompt.runAllInstances((instance) => {
+                        try { updateInstanceSettings(instance); } catch(err) {}
+                    });
+                }
+            };
+            (window as any).addEventListener("comfy-settings-changed", onSettingsChanged);
+            (window as any).addEventListener("comfy-setting-changed", onSettingsChanged);
+            document.addEventListener("comfy-settings-changed", onSettingsChanged);
+            document.addEventListener("comfy-setting-changed", onSettingsChanged);
+
             if (app.refreshComboInNodes) {
-                const originalRefreshComboInNodes = app.refreshComboInNodes
+                const original = app.refreshComboInNodes
                 app.refreshComboInNodes = async function() {
-                    const res = originalRefreshComboInNodes.apply(this, arguments)
+                    const res = original.apply(this, arguments)
                     await refreshCSV()
                     await loadSetting()
                     return res
                 }
             }
 
-            // 既存ノードの textarea 置き換えと検索ノードの初期化
-            const nodes = app.graph._nodes
-            if (app.graph.subgraphs) {
-                for (const [k, v] of app.graph.subgraphs.entries()) {
-                    nodes.push(...v._nodes)
-                }
-            }
-            for (const node of nodes) {
-                // textarea 置き換え
+            // Replace existing textareas
+            for (const node of app.graph._nodes) {
                 hookNodeWidgets(node)
-
-                // MultiTextキャッシュ管理
+                WebuiMonacoPrompt.runAllInstances((instance) => registerPromptEditor(instance))
                 if (node.comfyClass === "WebuiMonacoPromptMultiText") {
                     multiTextNodes.add(node);
                     const originalOnRemoved = node.onRemoved;
@@ -528,90 +727,17 @@ const register = (app: any) => {
                         multiTextNodes.delete(node);
                     }
                 }
-
-                // 検索ノード初期化
                 const customNode = CustomNodeFromNodeType[node.comfyClass]
-                if (customNode) {
-                    customNode.widget.fromNode(app, node)
-                }
+                if (customNode) customNode.widget.fromNode(app, node)
             }
 
-            const observer = new MutationObserver((mutations, observer) => {
-                for (const mutation of mutations) {
-                    if (mutation.type !== "childList") {
-                        continue
-                    }
-                    for (const node of mutation.addedNodes) {
-                        if (!(node instanceof HTMLTextAreaElement)) {
-                            continue
-                        }
-                        const id = node.dataset.webuiMonacoPromptTextareaId
-                        if (!id) {
-                            continue
-                        }
-                        if (!node.parentNode) {
-                            continue
-                        }
-                        const parent = node.parentElement
-                        if (!parent) {
-                            continue
-                        }
-                        if (parent.contains(link[id].monaco)) {
-                            continue
-                        }
-                        parent.append(link[id].monaco)
-                    }
-                }
-            })
-            const canvasContainer = document.getElementById("graph-canvas-container")
-            if (canvasContainer) {
-                observer.observe(canvasContainer, {
-                    subtree: true,
-                    childList: true
-                })
-            }
-
-            app.ui.settings.addSetting({
-                id: "WebuiMonacoPrompt.ReplaceTextarea",
-                name: "Replace Textarea",
-                type: "boolean",
-                default: true,
-                onChange: (value: boolean) => {
-                    const nodes = app.graph._nodes
-                    if (app.graph.subgraphs) {
-                        for (const [k, v] of app.graph.subgraphs.entries()) {
-                            nodes.push(...v._nodes)
-                        }
-                    }
-                    for (const node of nodes) {
-                        if (!node.widgets) continue;
-                        for (const widget of node.widgets) {
-                            if (node.comfyClass === "WebuiMonacoPromptMultiText" && widget.name === "text") {
-                                continue;
-                            }
-                            if (widget.element instanceof HTMLTextAreaElement) {
-                                if (value) {
-                                    onCreateTextarea(widget.element, node, true);
-                                } else {
-                                    onRemoveTextarea(widget.element);
-                                }
-                            }
-                        }
-                    }
-                },
-            });
-
-            // setup完了に伴い、すでに追加されたエディタへ設定を遅延適用する
-            WebuiMonacoPrompt.runAllInstances((instance) => {
-                updateInstanceSettings(instance);
-            });
+            // Initial delay apply
+            WebuiMonacoPrompt.runAllInstances((instance) => updateInstanceSettings(instance));
         },
-        nodeCreated(node:any, app: any) {
-            // 既存ノードの widget 置き換え(textarea)
+        nodeCreated(node:any) {
             hookNodeWidgets(node)
-
-            // MultiTextキャッシュ管理
-            if (node.comfyClass === "WebuiMonacoPromptMultiText") {
+            const nodeType = node.type || node.comfyClass;
+            if (nodeType === "WebuiMonacoPromptMultiText") {
                 multiTextNodes.add(node);
                 const originalOnRemoved = node.onRemoved;
                 node.onRemoved = function() {
@@ -619,19 +745,9 @@ const register = (app: any) => {
                     multiTextNodes.delete(node);
                 }
             }
-
-            // Find / Replace widget
-            const customNode = CustomNodeFromNodeType[node.comfyClass]
-            if (!customNode) {
-                return
-            }
-            customNode.widget.fromNode(app, node)
+            const customNode = CustomNodeFromNodeType[nodeType]
+            if (customNode) customNode.widget.fromNode(app, node)
         },
-        // refresh button
-        refreshComboInNodes: async function(nodeDef: any, app: any) {
-            refreshCSV()
-            refreshSnippets()
-        }
     })
 
     if (app.extensionManager && app.extensionManager.registerSidebarTab) {
@@ -648,9 +764,4 @@ const register = (app: any) => {
     }
 }
 
-// 登録実行
-if (app) {
-    register(app)
-} else {
-    console.error("ComfyUI app instance not found")
-}
+if (app) register(app)
