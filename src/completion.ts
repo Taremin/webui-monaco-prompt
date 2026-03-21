@@ -73,36 +73,35 @@ const loadCSV = (filename: string, csv: string) => {
 
 const addCSV = (filename: string, csv: string) => {
     state.loadedCSV[filename] = csv
-
-    if (!state.enabledCSV.includes(filename)) {
-        state.enabledCSV.push(filename)
+    
+    // Do not automatically add to enabledCSV or tags here.
+    // That should be managed by settings (via addLoadedCSV).
+    
+    // Rebuild tags if this file is currently enabled (for hot-reloading)
+    if (state.enabledCSV.includes(filename)) {
+        rebuildTags()
     }
+}
 
-    _addCSV(csv, filename)
+const rebuildTags = () => {
+    clearCSV()
+    for (const filename of state.enabledCSV) {
+        const csv = state.loadedCSV[filename]
+        if (csv) {
+            _addCSV(csv, filename)
+        }
+    }
 }
 
 const addLoadedCSV = (files: string[]) => {
-    const  diff = compareArray(state.enabledCSV, files)
+    const diff = compareArray(state.enabledCSV, files)
 
     if (diff.equal) {
         return
     }
 
     state.enabledCSV = files
-    if (diff.remove.length > 0) {
-        clearCSV()
-    } else if (diff.add.length > 0) {
-        files = diff.add
-    }
-
-    for (const filename of files) {
-        const csv = state.loadedCSV[filename]
-        if (!csv) {
-            console.error(`"${filename}" is not loaded`)
-            continue
-        }
-        _addCSV(csv, filename)
-    }
+    rebuildTags()
 }
 
 const compareArray = (array1: any[], array2: any[]) => {
