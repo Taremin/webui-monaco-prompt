@@ -176,6 +176,10 @@ class PromptEditor extends HTMLElement {
     onChangeModeBeforeSyncCallbacks: Array<() => void>
     onChangeLanguageCallbacks: Array<() => void>
     onChangeLanguageBeforeSyncCallbacks: Array<() => void>
+    onChangeLanguagePresetCallbacks: Array<() => void>
+    onChangeLanguagePresetBeforeSyncCallbacks: Array<() => void>
+    onChangeLanguageFeaturesCallbacks: Array<() => void>
+    onChangeLanguageFeaturesBeforeSyncCallbacks: Array<() => void>
     onChangeFontSizeCallbacks: Array<() => void>
     onChangeFontSizeBeforeSyncCallbacks: Array<() => void>
     onChangeFontFamilyCallbacks: Array<() => void>
@@ -229,6 +233,10 @@ class PromptEditor extends HTMLElement {
         this.onChangeModeBeforeSyncCallbacks = []
         this.onChangeLanguageCallbacks = []
         this.onChangeLanguageBeforeSyncCallbacks = []
+        this.onChangeLanguagePresetCallbacks = []
+        this.onChangeLanguagePresetBeforeSyncCallbacks = []
+        this.onChangeLanguageFeaturesCallbacks = []
+        this.onChangeLanguageFeaturesBeforeSyncCallbacks = []
         this.onChangeFontSizeCallbacks = []
         this.onChangeFontSizeBeforeSyncCallbacks = []
         this.onChangeFontFamilyCallbacks = []
@@ -1151,9 +1159,7 @@ class PromptEditor extends HTMLElement {
         }
         
         const app = (window as any).app;
-        if (app && app.ui && app.ui.settings) {
-            app.ui.settings.setSettingValue("WebuiMonacoPrompt.Language", value)
-        } else {
+        if (!app || !app.ui || !app.ui.settings) {
             runAllInstances((instance) => {
                 instance.changeLanguage(value)
             })
@@ -1264,18 +1270,15 @@ class PromptEditor extends HTMLElement {
     }
 
     syncLanguageFeatures() {
+        for (const callback of this.onChangeLanguageFeaturesBeforeSyncCallbacks) {
+            callback()
+        }
+        for (const callback of this.onChangeLanguagePresetBeforeSyncCallbacks) {
+            callback()
+        }
+
         const app = (window as any).app;
-        if (app && app.ui && app.ui.settings) {
-            app.ui.settings.setSettingValue("WebuiMonacoPrompt.LanguageFeatures", this.languageFeatures)
-            for (const [featureId, enabled] of Object.entries(this.languageFeatures)) {
-                app.ui.settings.setSettingValue(`WebuiMonacoPrompt.LanguageFeature.${featureId}`, enabled)
-            }
-            app.ui.settings.setSettingValue("WebuiMonacoPrompt.LanguagePreset", this.currentPreset)
-            
-            // ユーザプリセットも保存
-            const userPresets = getAllPresets().filter(p => !p.isBuiltin)
-            app.ui.settings.setSettingValue("WebuiMonacoPrompt.LanguageUserPresets", JSON.stringify(userPresets))
-        } else {
+        if (!app || !app.ui || !app.ui.settings) {
             runAllInstances((instance) => {
                 instance.languageFeatures = { ...this.languageFeatures }
                 instance.currentPreset = this.currentPreset
@@ -1295,9 +1298,7 @@ class PromptEditor extends HTMLElement {
         }
         
         const app = (window as any).app;
-        if (app && app.ui && app.ui.settings) {
-            app.ui.settings.setSettingValue("WebuiMonacoPrompt.KeyBindings", value)
-        } else {
+        if (!app || !app.ui || !app.ui.settings) {
             runAllInstances((instance) => {
                 instance.changeMode(value)
             })
@@ -1315,9 +1316,7 @@ class PromptEditor extends HTMLElement {
         }
         
         const app = (window as any).app;
-        if (app && app.ui && app.ui.settings) {
-            app.ui.settings.setSettingValue("WebuiMonacoPrompt.Theme", value)
-        } else {
+        if (!app || !app.ui || !app.ui.settings) {
             runAllInstances((instance) => {
                 instance.changeTheme(value)
             })
@@ -1330,9 +1329,7 @@ class PromptEditor extends HTMLElement {
         }
         
         const app = (window as any).app;
-        if (app && app.ui && app.ui.settings) {
-            app.ui.settings.setSettingValue("WebuiMonacoPrompt.ShowHeader", this.showHeader)
-        } else {
+        if (!app || !app.ui || !app.ui.settings) {
             runAllInstances((instance) => {
                 instance.changeShowHeader(this.showHeader)
             })
@@ -1349,9 +1346,7 @@ class PromptEditor extends HTMLElement {
         }
         
         const app = (window as any).app;
-        if (app && app.ui && app.ui.settings) {
-            app.ui.settings.setSettingValue("WebuiMonacoPrompt.LineNumbers", value)
-        } else {
+        if (!app || !app.ui || !app.ui.settings) {
             runAllInstances((instance) => {
                 instance.changeShowLineNumbers(value)
             })
@@ -1368,9 +1363,7 @@ class PromptEditor extends HTMLElement {
         }
         
         const app = (window as any).app;
-        if (app && app.ui && app.ui.settings) {
-            app.ui.settings.setSettingValue("WebuiMonacoPrompt.Minimap", value)
-        } else {
+        if (!app || !app.ui || !app.ui.settings) {
             runAllInstances((instance) => {
                 instance.changeShowMinimap(value)
             })
@@ -1387,9 +1380,7 @@ class PromptEditor extends HTMLElement {
         }
         
         const app = (window as any).app;
-        if (app && app.ui && app.ui.settings) {
-            app.ui.settings.setSettingValue("WebuiMonacoPrompt.ReplaceUnderscore", value)
-        } else {
+        if (!app || !app.ui || !app.ui.settings) {
             runAllInstances((instance) => {
                 instance.changeReplaceUnderscore(value)
             })
@@ -1403,9 +1394,7 @@ class PromptEditor extends HTMLElement {
         }
         
         const app = (window as any).app;
-        if (app && app.ui && app.ui.settings) {
-            app.ui.settings.setSettingValue("WebuiMonacoPrompt.FontSize", value)
-        } else {
+        if (!app || !app.ui || !app.ui.settings) {
             runAllInstances((instance) => {
                 instance.changeFontSize(value)
             })
@@ -1419,9 +1408,7 @@ class PromptEditor extends HTMLElement {
         }
         
         const app = (window as any).app;
-        if (app && app.ui && app.ui.settings) {
-            app.ui.settings.setSettingValue("WebuiMonacoPrompt.FontFamily", value)
-        } else {
+        if (!app || !app.ui || !app.ui.settings) {
             runAllInstances((instance) => {
                 instance.changeFontFamily(value)
             })
@@ -1449,10 +1436,7 @@ class PromptEditor extends HTMLElement {
         }
 
         const app = (window as any).app;
-        if (app && app.ui && app.ui.settings) {
-            const payload = this.normalizeCsvToggleForStorage(values)
-            app.ui.settings.setSettingValue("WebuiMonacoPrompt.CsvToggle", payload)
-        } else {
+        if (!app || !app.ui || !app.ui.settings) {
             runAllInstances((instance) => {
                 for (const [contextKey, value] of Object.entries(values)) {
                     instance.changeAutoCompleteToggle(contextKey, value, true)
@@ -1622,6 +1606,7 @@ class PromptEditor extends HTMLElement {
             fontSize: this.getContext(this.createContextKey("fontSize")),
             fontFamily: this.getContext(this.createContextKey("fontFamily")),
             csvToggle: this.getLocalContextValues<boolean>("csv"),
+            userPresets: getUserPresets(),
         } as PromptEditorSettings
     }
 
@@ -1809,6 +1794,14 @@ class PromptEditor extends HTMLElement {
         this.onChangeLanguageBeforeSyncCallbacks.push(callback)
     }
 
+    onChangeLanguagePresetBeforeSync(callback: () => void) {
+        this.onChangeLanguagePresetBeforeSyncCallbacks.push(callback)
+    }
+
+    onChangeLanguageFeaturesBeforeSync(callback: () => void) {
+        this.onChangeLanguageFeaturesBeforeSyncCallbacks.push(callback)
+    }
+
     onChangeFontSize(callback: () => void) {
         this.onChangeFontSizeCallbacks.push(callback)
     }
@@ -1854,6 +1847,8 @@ class PromptEditor extends HTMLElement {
         this.onChangeThemeBeforeSync(callback)
         this.onChangeModeBeforeSync(callback)
         this.onChangeLanguageBeforeSync(callback)
+        this.onChangeLanguagePresetBeforeSync(callback)
+        this.onChangeLanguageFeaturesBeforeSync(callback)
         this.onChangeFontSizeBeforeSync(callback)
         this.onChangeFontFamilyBeforeSync(callback)
         this.onChangeAutoCompleteToggleBeforeSync(callback)
@@ -2082,22 +2077,20 @@ const showPresetManager = () => {
                 features: features,
                 isBuiltin: false
             })
-            const app = (window as any).app
-            if (app?.ui?.settings) {
-                app.ui.settings.setSettingValue("WebuiMonacoPrompt.LanguageUserPresets", JSON.stringify(getUserPresets()))
+            if (instance) {
+                instance.syncLanguageFeatures()
             }
         },
         onApply: (presetId) => {
-            const app = (window as any).app
-            if (app?.ui?.settings) {
-                app.ui.settings.setSettingValue("WebuiMonacoPrompt.LanguagePreset", presetId)
+            if (instance) {
+                instance.applyPreset(presetId)
+                instance.syncLanguageFeatures()
             }
         },
         onDelete: (presetId) => {
             removeUserPreset(presetId)
-            const app = (window as any).app
-            if (app?.ui?.settings) {
-                app.ui.settings.setSettingValue("WebuiMonacoPrompt.LanguageUserPresets", JSON.stringify(getUserPresets()))
+            if (instance) {
+                instance.syncLanguageFeatures()
             }
         },
         getCurrentFeatures: () => {

@@ -37,7 +37,8 @@ window.WebuiMonacoPromptUtils = utils
 if (typeof window !== "undefined") {
     (window as any).WebuiMonacoPrompt = {
         ...(window as any).WebuiMonacoPrompt,
-        getPresetDialog: () => getPresetDialog() // 遅延評価
+        getPresetDialog: () => getPresetDialog(),
+        showPresetManager: () => showPresetManager(),
     }
 }
 
@@ -342,29 +343,39 @@ function getPresetDialog() {
     if (!presetDialog) {
         presetDialog = new PresetDialog({
             onSave: (name, features) => {
-                WebuiMonacoPrompt.runAllInstances((instance: any) => {
-                    instance.saveCustomPreset(name, features)
-                    saveSettings(instance)
-                    return true 
+                const id = 'custom-' + name.toLowerCase().replace(/[^a-z0-9]/g, '-')
+                MonacoPrompt.addUserPreset({
+                    id,
+                    label: name,
+                    features: features || {},
+                    isBuiltin: false
                 })
+                MonacoPrompt.runAllInstances((instance: any) => {
+                    instance.updatePresetOptions()
+                    instance.applyPreset(id)
+                    instance.syncLanguageFeatures()
+                    return true
+                })
+                return true
             },
             onApply: (id) => {
-                WebuiMonacoPrompt.runAllInstances((instance: any) => {
+                MonacoPrompt.runAllInstances((instance: any) => {
                     instance.applyPreset(id)
-                    saveSettings(instance)
+                    instance.syncLanguageFeatures()
+                    return true
                 })
             },
             onDelete: (id) => {
-                WebuiMonacoPrompt.removeUserPreset(id)
-                WebuiMonacoPrompt.runAllInstances((instance: any) => {
-                    instance.syncLanguageFeatures()
+                MonacoPrompt.removeUserPreset(id)
+                MonacoPrompt.runAllInstances((instance: any) => {
                     instance.updatePresetOptions()
-                    saveSettings(instance)
+                    instance.syncLanguageFeatures()
+                    return true
                 })
             },
             getCurrentFeatures: () => {
                 let features = {}
-                WebuiMonacoPrompt.runAllInstances((instance: any) => {
+                MonacoPrompt.runAllInstances((instance: any) => {
                     features = { ...instance.languageFeatures }
                     return true
                 })
@@ -513,7 +524,7 @@ const register = (app: any) => {
             };
         },
         async setup() {
-            let isSyncing = false;
+            let isInternalSyncing = true;
             const addSetting = (id: string, name: string, type: string, defaultValue: any, tooltip?: string, options?: any) => {
                 const settingDefinition: any = {
                     id, name, type, defaultValue, tooltip,
@@ -543,22 +554,24 @@ const register = (app: any) => {
                             })
                         }
 
-                        if (isSyncing) return;
+                        if (isInternalSyncing || (window as any).WebuiMonacoPrompt_isSaving) return;
 
                         if (id === "WebuiMonacoPrompt.LanguagePreset") {
                             const preset = WebuiMonacoPrompt.getPreset(value)
                             if (preset) {
-                                isSyncing = true
-                                for (const [featureId, enabled] of Object.entries((preset as any).features)) {
-                                    app.ui.settings.setSettingValue(`WebuiMonacoPrompt.LanguageFeature.${featureId}`, enabled)
-                                }
-                                isSyncing = false
+                                isInternalSyncing = true;
+                                (async () => {
+                                    for (const [featureId, enabled] of Object.entries((preset as any).features)) {
+                                        await app.ui.settings.setSettingValue(`WebuiMonacoPrompt.LanguageFeature.${featureId}`, enabled)
+                                    }
+                                    isInternalSyncing = false
+                                })()
                             }
                         } else if (id.startsWith("WebuiMonacoPrompt.LanguageFeature.")) {
                             WebuiMonacoPrompt.runAllInstances((instance) => {
-                                isSyncing = true
+                                isInternalSyncing = true
                                 app.ui.settings.setSettingValue("WebuiMonacoPrompt.LanguagePreset", instance.currentPreset)
-                                isSyncing = false
+                                isInternalSyncing = false
                                 return true
                             })
                         }
@@ -591,6 +604,7 @@ const register = (app: any) => {
             addSetting("WebuiMonacoPrompt.KeyBindings", "Key Bindings", "combo", "VIM", "", { options: ["NORMAL", "VIM"] })
             addSetting("WebuiMonacoPrompt.Theme", "Theme", "combo", "vsc-dark", "", { options: ["vs", "vs-dark", "hc-black", "hc-light"] })
             addSetting("WebuiMonacoPrompt.CsvToggle", "CSV Toggle", "hidden", {})
+            addSetting("WebuiMonacoPrompt.LanguageUserPresets", "User Presets", "hidden", [])
 
             const defaultFeatures = WebuiMonacoPrompt.getPreset('comfy-dynamic-prompt')?.features || {}
             for (const feature of WebuiMonacoPrompt.getAllFeatures()) {
@@ -659,9 +673,8 @@ const register = (app: any) => {
                             const key = `csv.${csv}`;
                             cb.checked = csvToggle[key] !== false;
                             cb.onchange = () => {
-                                const current = app.ui.settings.getSettingValue("WebuiMonacoPrompt.CsvToggle") || {};
+                                const current = { ...(app.ui.settings.getSettingValue("WebuiMonacoPrompt.CsvToggle") || {}) };
                                 current[key] = cb.checked;
-                                app.ui.settings.setSettingValue("WebuiMonacoPrompt.CsvToggle", current);
                                 WebuiMonacoPrompt.runAllInstances((instance) => {
                                     instance.setSettings({ csvToggle: current }, true);
                                     saveSettings(instance);
@@ -692,7 +705,7 @@ const register = (app: any) => {
 
             // Settings Sync Listener
             const onSettingsChanged = (e: any) => {
-                if (isSyncing) return;
+                if (isInternalSyncing || (window as any).WebuiMonacoPrompt_isSaving) return;
                 const id = e.detail?.id || e.detail;
                 if (id && id.startsWith("WebuiMonacoPrompt.")) {
                     WebuiMonacoPrompt.runAllInstances((instance) => {
@@ -733,6 +746,7 @@ const register = (app: any) => {
 
             // Initial delay apply
             WebuiMonacoPrompt.runAllInstances((instance) => updateInstanceSettings(instance));
+            isInternalSyncing = false;
         },
         nodeCreated(node:any) {
             hookNodeWidgets(node)
