@@ -18,16 +18,25 @@ custom_nodes_path = folder_paths.get_folder_paths("custom_nodes")[0]
 
 @server.PromptServer.instance.routes.get("/webui-monaco-prompt/csv")
 async def get_csv_fils(request):
+    comfy_dir = os.path.join(extension_root_path, "comfy")
+    os.makedirs(comfy_dir, exist_ok=True)
+    
     for path in glob.glob(os.path.join(extension_root_path, "csv", "*.csv"), recursive=True):
         basename = os.path.basename(path)
-        comfy_path = os.path.join(extension_root_path, "comfy", basename)
+        comfy_path = os.path.join(comfy_dir, basename)
 
+        needs_copy = False
         if not os.path.isfile(comfy_path):
+            needs_copy = True
+        elif os.path.getmtime(path) > os.path.getmtime(comfy_path):
+            needs_copy = True
+            
+        if needs_copy:
             shutil.copy2(path, comfy_path)
 
     files = list(map(
         lambda x: os.path.basename(x),
-        glob.glob(extension_root_path + "/comfy/*.csv", recursive=True)
+        glob.glob(os.path.join(comfy_dir, "*.csv"), recursive=True)
     ))
 
     return web.Response(text=json.dumps(files), content_type='application/json')

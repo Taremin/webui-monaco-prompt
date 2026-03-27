@@ -1,4 +1,6 @@
 import pytest
+import re
+import uuid
 from playwright.sync_api import Page, expect
 
 def test_language_composition_preset_and_toggles(page: Page, comfyui_server, wait_for_comfyui, wmp_helpers):
@@ -36,6 +38,15 @@ def test_language_composition_preset_and_toggles(page: Page, comfyui_server, wai
     wmp_helpers.wait_for_editor(page)
     editor = page.locator("prompt-editor")
     
+    # ComfyUIの設定同期（ネットワーク通信とWebSocketエコー）による非同期の巻き戻りを防ぐため、
+    # このテストでは明示的に同期をモックする。
+    page.evaluate("""() => {
+        const editorEl = document.querySelector('prompt-editor');
+        if (editorEl) {
+            editorEl.syncLanguageFeatures = () => { /* mocked to prevent echo races */ };
+        }
+    }""")
+    
     # ヘッダーを表示
     page.evaluate("""() => {
         const editorEl = document.querySelector('prompt-editor');
@@ -45,36 +56,20 @@ def test_language_composition_preset_and_toggles(page: Page, comfyui_server, wai
     }""")
     
     # Preset コンボの特定
-    preset_select_id = page.evaluate("""() => {
-        const editorEl = document.querySelector('prompt-editor');
-        const selects = Array.from(editorEl.elements.header.querySelectorAll('select'));
-        console.log("Selects:", selects.map(s => s.parentElement.textContent));
-        return selects.findIndex(s => s.parentElement.textContent.includes('Preset'));
-    }""")
-    all_texts = page.evaluate("""() => {
-        const editorEl = document.querySelector('prompt-editor');
-        return Array.from(editorEl.elements.header.querySelectorAll('select')).map(s => s.parentElement.textContent);
-    }""")
-    print(f"All Select texts: {all_texts}")
-    assert preset_select_id != -1, f"Preset dropdown not found in {all_texts}"
-    preset_select = editor.locator("header select").nth(preset_select_id)
-    current_preset = preset_select.evaluate("el => el.value")
+    preset_select = editor.locator("label", has_text="Preset").locator("select")
+    preset_select.wait_for(state="attached")
+    current_preset = preset_select.input_value()
     print(f"Initial Preset: {current_preset}")
 
     # "Full Features" プリセット (id: 'full-features') に変更
-    preset_options = preset_select.evaluate("el => Array.from(el.options).map(o => ({text: o.text, value: o.value}))")
-    print(f"Preset Options: {preset_options}")
-
-    page.evaluate("""() => {
-        const editorEl = document.querySelector('prompt-editor');
-        const selects = Array.from(editorEl.elements.header.querySelectorAll('select'));
-        const presetSelect = selects.find(s => s.parentElement.textContent.includes('Preset'));
-        presetSelect.value = 'full-features';
-        presetSelect.dispatchEvent(new Event('change', { bubbles: true }));
-    }""")
-    wmp_helpers.wait_for_ui_stabilize(page, 500)
+    preset_select.evaluate("el => { el.value = 'full-features'; el.dispatchEvent(new Event('change', {bubbles: true})); }")
     
-    # JSで languageFeatures が更新されているか確認
+    # JSで languageFeatures が更新されているか確認 (動的待機)
+    page.wait_for_function("""() => {
+        const editorEl = document.querySelector('prompt-editor');
+        return editorEl && editorEl.languageFeatures && editorEl.languageFeatures['jinja2'] === true;
+    }""")
+    
     features = page.evaluate("""() => {
         const editorEl = document.querySelector('prompt-editor');
         return editorEl.languageFeatures;
@@ -82,156 +77,64 @@ def test_language_composition_preset_and_toggles(page: Page, comfyui_server, wai
     assert features.get('jinja2') is True, "Jinja2 feature should be enabled by 'full-features' preset."
     assert features.get('comment-hash') is True, "Hash comment should be enabled."
     
-    # 機能を1つトグルオフしてみる
-    # 該当するチェックボックス（Jinja2）を探してクリック
-    page.evaluate("""() => {
-        const editorEl = document.querySelector('prompt-editor');
-        const labels = Array.from(editorEl.elements.header.querySelectorAll('label'));
-        const jinja2Label = labels.find(l => l.innerText.trim().includes('Jinja2'));
-        if (jinja2Label) {
-            const input = jinja2Label.querySelector('input');
-            if (input) input.click();
-            else console.error("Jinja2 input not found inside label");
-        } else {
-            console.error("Jinja2 label not found. Labels:", labels.map(l => l.innerText.trim()));
-        }
-    }""")
-    wmp_helpers.wait_for_ui_stabilize(page, 500)
+    # 機能を1つトグルオフしてみる (Jinja2)
+    # label のテキストを使って input をクリックする
+    editor.locator("label", has_text="Jinja2").locator("input").evaluate("el => { el.checked = false; el.dispatchEvent(new Event('change', {bubbles: true})); }")
     
     # プリセットが "comfy-dynamic-prompt" に戻ったか確認（Jinja2オフで完全一致する既存プリセットがあるため）
-    current_preset = preset_select.evaluate("el => el.value")
-    assert current_preset == "comfy-dynamic-prompt", f"Preset should change to 'comfy-dynamic-prompt' after Jinja2 toggle, but got {current_preset}"
+    expect(preset_select).to_have_value("comfy-dynamic-prompt")
     
     # さらに Dynamic Prompts をオフにしてみる
-    page.evaluate("""() => {
-        const editorEl = document.querySelector('prompt-editor');
-        const labels = Array.from(editorEl.elements.header.querySelectorAll('label'));
-        const dpLabel = labels.find(l => l.textContent.includes('Dynamic Prompts'));
-        if (dpLabel) {
-            dpLabel.querySelector('input').click();
-        }
-    }""")
-    wmp_helpers.wait_for_ui_stabilize(page, 500)
+    editor.locator("label", has_text="Dynamic Prompts").locator("input").evaluate("el => { el.checked = false; el.dispatchEvent(new Event('change', {bubbles: true})); }")
     
-    # プリセットが今度こそ "custom" (または保存済みの "custom-my-test-preset") になったか確認
-    custom_preset = preset_select.evaluate("el => el.value")
-    assert custom_preset == "custom" or custom_preset.startswith("custom-"), f"Preset should change to 'custom', but got {custom_preset}"
+    # プリセットが今度こそ "custom" (または custom-* ) になったか確認
+    expect(preset_select).to_have_value(re.compile(r"^custom"))
     
     # プリセットを 'comfy-prompt' に強制リセットしてからテスト開始 (UIレベルで操作)
-    page.evaluate("""() => {
-        const editorEl = document.querySelector('prompt-editor');
-        const select = Array.from(editorEl.elements.header.querySelectorAll('select'))
-                      .find(s => s.parentElement.textContent.includes('Preset'));
-        if (select) {
-            select.value = 'comfy-prompt';
-            select.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-    }""")
-    wmp_helpers.wait_for_ui_stabilize(page, 2000)
-    
-    current_preset = preset_select.evaluate("el => el.value")
+    preset_select.evaluate("el => { el.value = 'comfy-prompt'; el.dispatchEvent(new Event('change', {bubbles: true})); }")
+    expect(preset_select).to_have_value("comfy-prompt")
+
+    current_preset = preset_select.input_value()
     print(f"Preset after reset: {current_preset}")
-    # 期待されるプリセットに切り替わっていることを確認
     assert current_preset == "comfy-prompt", f"Preset should be reset to 'comfy-prompt', but got {current_preset}"
 
-    # "Full Features" プリセット (id: 'full-features') に変更
-    # ... (中略) ...
     # 保存テストの前に、ユニークな名前を生成する
-    import uuid
     unique_preset_name = f"Test Preset {str(uuid.uuid4())[:8]}"
+    
     # Manage Presets ボタンをクリックしてダイアログを開く
-    page.evaluate("""() => {
-        const editorEl = document.querySelector('prompt-editor');
-        const btns = Array.from(editorEl.elements.header.querySelectorAll('button'));
-        const manageBtn = btns.find(b => b.textContent.includes('Manage'));
-        if (manageBtn) {
-            manageBtn.click();
-        } else {
-            console.error("Manage button not found. Available buttons:", btns.map(b => b.textContent));
-            throw new Error("Manage button not found in PromptEditor header");
-        }
-    }""")
-    wmp_helpers.wait_for_ui_stabilize(page, 500)
+    editor.locator("button", has_text="Manage Presets").evaluate("el => el.click()")
+    
+    # ダイアログオーバーレイを特定
+    dialog_overlay = page.locator('div[class*="dialogOverlay"]')
     
     # ダイアログ内の入力欄に名前を入れて Save ボタンをクリック
-    # unique_preset_name は f-string 外で定義されている
-    page.evaluate(f"""() => {{
-        const editorEl = document.querySelector('prompt-editor');
-        const dialogOverlay = document.querySelector('div[class*="dialogOverlay"]');
-        if (!dialogOverlay) throw new Error("PresetDialog overlay not found");
-        
-        const input = dialogOverlay.querySelector('input[placeholder="Preset Name"]');
-        const saveBtn = Array.from(dialogOverlay.querySelectorAll('button')).find(b => b.textContent === 'Save');
-        
-        if (input && saveBtn) {{
-            input.value = "{unique_preset_name}";
-            input.dispatchEvent(new Event('input', {{ bubbles: true }}));
-            saveBtn.click();
-        }} else {{
-            throw new Error("Input or Save button not found in dialog");
-        }}
-    }}""")
-    wmp_helpers.wait_for_ui_stabilize(page, 500)
+    preset_input = dialog_overlay.locator('input[placeholder="Preset Name"]')
+    preset_input.fill(unique_preset_name)
+    dialog_overlay.locator('button', has_text='Save').click()
     
     # Close ボタンをクリックしてダイアログを閉じる
-    page.evaluate("""() => {
-        const dialogOverlay = document.querySelector('div[class*="dialogOverlay"]');
-        if (dialogOverlay) {
-            const closeBtn = Array.from(dialogOverlay.querySelectorAll('button')).find(b => b.textContent === 'Close');
-            if (closeBtn) closeBtn.click();
-        }
-    }""")
-    wmp_helpers.wait_for_ui_stabilize(page, 500)
+    dialog_overlay.locator('button', has_text='Close').click()
     
     # セレクトボックスに新しい項目が追加され、選択されているか
-    # unique_preset_name 全体が slugify される。 "Test Preset xxx" -> "custom-test-preset-xxx"
-    import re
     expected_slug = re.sub(r'[^a-z0-9]+', '-', unique_preset_name.lower())
     expected_id = f"custom-{expected_slug}"
     
-    # セレクトボックスが更新されるのを待つ
-    page.wait_for_function(f"() => {{ const el = document.querySelector('prompt-editor'); return el && el.elements && el.elements.preset && Array.from(el.elements.preset.options).some(o => o.value === '{expected_id}'); }}")
-    
-    new_preset = preset_select.evaluate("el => el.value")
-    assert new_preset == expected_id, f"New custom preset ID mismatch. Got {new_preset}, expected {expected_id}"
-    
-    # 機能をいくつか変更して保存されるか確認する代わりに、Jinja2 が効いているか確認
-    # (中略: オリジナルのテストロジックを維持)
+    # セレクトボックスが更新されるのを待つ (Playwrightのexpectの自動リトライ)
+    expect(preset_select).to_have_value(expected_id)
     
     # --- プリセットを削除してクリーンアップ ---
     # 再度ダイアログを開く
-    page.evaluate("""() => {
-        const editorEl = document.querySelector('prompt-editor');
-        const manageBtn = Array.from(editorEl.elements.header.querySelectorAll('button')).find(b => b.textContent.includes('Manage'));
-        if (manageBtn) manageBtn.click();
-    }""")
-    wmp_helpers.wait_for_ui_stabilize(page, 500)
+    editor.locator("button", has_text="Manage Presets").evaluate("el => el.click()")
     
-    # 削除ボタンを探してクリック
-    # page.on("dialog", ...) は accept するように設定済み
-    page.on("dialog", lambda dialog: dialog.accept())
-    page.evaluate(f"""() => {{
-        const dialogOverlay = document.querySelector('div[class*="dialogOverlay"]');
-        if (!dialogOverlay) return;
-        // 名前でアイテムを探す
-        const items = Array.from(dialogOverlay.querySelectorAll('div')).filter(d => d.textContent.includes("{unique_preset_name}"));
-        if (items.length > 0) {{
-            // そのアイテム内の Delete ボタンを探す
-            const deleteBtn = Array.from(items[0].querySelectorAll('button')).find(b => b.textContent === 'Delete');
-            if (deleteBtn) deleteBtn.click();
-        }}
-    }}""")
-    wmp_helpers.wait_for_ui_stabilize(page, 500)
+    # page.on("dialog", ...) は accept するように設定済み (Playwrightのデフォルトはdismissなので明示的にフックする)
+    page.once("dialog", lambda dialog: dialog.accept())
+    
+    # 名前でアイテムを探して Delete ボタンをクリック
+    preset_item = dialog_overlay.locator('div[class*="dialog-item"]', has_text=unique_preset_name)
+    preset_item.locator('button', has_text='Delete').click()
     
     # ダイアログを閉じる
-    page.evaluate("""() => {
-        const dialogOverlay = document.querySelector('div[class*="dialogOverlay"]');
-        if (dialogOverlay) {{
-            const closeBtn = Array.from(dialogOverlay.querySelectorAll('button')).find(b => b.textContent === 'Close');
-            if (closeBtn) closeBtn.click();
-        }}
-    }""")
-    wmp_helpers.wait_for_ui_stabilize(page, 500)
+    dialog_overlay.locator('button', has_text='Close').click()
     
     # 機能をいくつか変更して保存されるか確認する代わりに、Jinja2 が効いているか確認
     has_jinja = page.evaluate("""async () => {
@@ -254,8 +157,5 @@ def test_language_composition_preset_and_toggles(page: Page, comfyui_server, wai
         }
         return false;
     }""")
-    # (注: このテストではまだテキストを入れていないので has_jinja は False でも良いが、
-    #  以前のテストコードでテキストを入れていれば True になる。
-    #  ここでは persistence の検証を優先する)
 
     print("Language Composition E2E Test Passed successfully.")

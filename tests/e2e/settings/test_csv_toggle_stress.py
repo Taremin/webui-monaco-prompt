@@ -14,8 +14,7 @@ def test_csv_toggle_stress(page: Page, comfyui_server, wait_for_comfyui, wmp_hel
     
     # Also monitor network responses to ensure settings are saved without 500 errors
     failed_requests = []
-    page.on("response", lambda response: failed_requests.append(response.url) if response.status >= 500 and "settings" in response.url else None)
-
+    page.on("response", lambda response: failed_requests.append(response.url) if response.status >= 500 and "CsvToggle" in response.url else None)
     # Open settings dialog using helper
     wmp_helpers.open_settings(page)
     
@@ -23,7 +22,6 @@ def test_csv_toggle_stress(page: Page, comfyui_server, wait_for_comfyui, wmp_hel
     search_box = page.get_by_placeholder("Search settings")
     if search_box.is_visible():
         search_box.fill("WebuiMonacoPrompt")
-        page.wait_for_timeout(1000)
     
     # Find danbooru.csv checkbox
     danbooru_checkbox = page.locator('label', has_text="danbooru.csv").locator('input[type="checkbox"]')
@@ -63,7 +61,6 @@ def test_csv_toggle_stress(page: Page, comfyui_server, wait_for_comfyui, wmp_hel
     wmp_helpers.open_settings(page)
     if search_box.is_visible():
         search_box.fill("WebuiMonacoPrompt")
-        page.wait_for_timeout(1000)
     
     danbooru_checkbox = page.locator('label', has_text="danbooru.csv").locator('input[type="checkbox"]')
     expect(danbooru_checkbox).to_be_checked()

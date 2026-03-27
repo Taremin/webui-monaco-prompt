@@ -93,6 +93,17 @@ const rebuildTags = () => {
     }
 }
 
+let rebuildTimeout: any = null
+const debouncedRebuildTags = () => {
+    if (rebuildTimeout) {
+        clearTimeout(rebuildTimeout)
+    }
+    rebuildTimeout = setTimeout(() => {
+        rebuildTags()
+        rebuildTimeout = null
+    }, 100)
+}
+
 const addLoadedCSV = (files: string[]) => {
     const diff = compareArray(state.enabledCSV, files)
 
@@ -101,7 +112,8 @@ const addLoadedCSV = (files: string[]) => {
     }
 
     state.enabledCSV = files
-    rebuildTags()
+    // Use debounced version to avoid redundant parsing during mass initialization
+    debouncedRebuildTags()
 }
 
 const compareArray = (array1: any[], array2: any[]) => {

@@ -148,7 +148,7 @@ def wmp_helpers():
                 if (app && app.ui && app.ui.settings) {{
                     app.ui.settings.setSettingValue(k, v);
                     if (app.ui.settings.values) app.ui.settings.values[k] = v;
-                    if (typeof app.ui.settings.save === 'function') app.ui.settings.save();
+                    // save() を手動で呼ぶと多重リクエストになりサーバーエラーを引き起こすため削除
                 }}
                 
                 // 通知イベント

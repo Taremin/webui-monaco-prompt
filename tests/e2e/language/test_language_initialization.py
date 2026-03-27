@@ -130,6 +130,14 @@ def test_language_initialization_after_reload(page: Page, comfyui_server, wait_f
     wait_for_comfyui(page)
     wmp_helpers.wait_for_editor(page)
 
+    # loadSetting()は非同期のため、エディタ出現後もlanguage設定がまだ適用されていない場合がある
+    # languageがplaintext以外になるまで待機する
+    page.wait_for_function("""() => {
+        const editorEl = document.querySelector('prompt-editor');
+        if (!editorEl || !editorEl.monaco || !editorEl.monaco.getModel()) return false;
+        return editorEl.monaco.getModel().getLanguageId() !== 'plaintext';
+    }""", timeout=10000)
+
     actual_language = page.evaluate("""() => {
         const editorEl = document.querySelector('prompt-editor');
         if (editorEl && editorEl.monaco && editorEl.monaco.getModel()) {

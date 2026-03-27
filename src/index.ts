@@ -88,6 +88,45 @@ const settings: PromptEditorGlobal = {
 let id = 0
 let currentFocusInstance: number | null = null
 
+// language rebuild management (Singleton)
+let lastAppliedFeaturesKey: string = ""
+
+/**
+ * Rebuild global language definition based on the current standard settings.
+ * Synchronous and efficient singleton. Does NOT iterate over instances.
+ */
+function rebuildGlobalLanguage() {
+    const instances = Object.values(settings.instances)
+    if (instances.length === 0) {
+        return
+    }
+
+    // 最初のインスタンスのフィーチャー設定をグローバルの基準とする
+    const representative = instances[0]
+    const enabledFeatures = allFeatures.filter(f => representative.languageFeatures[f.id])
+    const featuresKey = enabledFeatures.map(f => f.id).sort().join(',')
+
+    const langId = 'composed-prompt'
+
+    if (lastAppliedFeaturesKey !== featuresKey) {
+        const { conf, language } = composeLanguage(baseConf, baseLanguage, enabledFeatures)
+        monaco.languages.setMonarchTokensProvider(langId, language)
+        monaco.languages.setLanguageConfiguration(langId, conf)
+        
+        lastAppliedFeaturesKey = featuresKey
+        console.log(`[WebuiMonacoPrompt] Global language definition updated: ${featuresKey || 'base'}`)
+    }
+
+    // 全インスタンスのモデル言語を composed-prompt に切り替える
+    for (const instance of instances) {
+        const model = instance.monaco.getModel()
+        if (model && model.getLanguageId() !== langId) {
+            monaco.editor.setModelLanguage(model, langId)
+            instance.setContext(instance.createContextKey("language"), langId)
+        }
+    }
+}
+
 interface PromptEditorOptions {
     focus: boolean;
     autoLayout: boolean;
@@ -162,6 +201,7 @@ class PromptEditor extends HTMLElement {
     currentPreset: string = 'comfy-dynamic-prompt'
     textareaDescriptor: PropertyDescriptor
     textareaDisplay: string
+    
     onChangeShowHeaderCallbacks: Array<() => void>
     onChangeShowHeaderBeforeSyncCallbacks: Array<() => void>
     onChangeShowLineNumbersCallbacks: Array<() => void>
@@ -246,7 +286,6 @@ class PromptEditor extends HTMLElement {
 
         const editor = this.monaco = monaco.editor.create(monacoElement, {
             value: textarea.value,
-            //language: languageId,
             bracketPairColorization: {
                 enabled: true,
             },
@@ -254,6 +293,7 @@ class PromptEditor extends HTMLElement {
             wordWrap: 'on',
             //fixedOverflowWidgets: true,
         } as any) as CodeEditor
+
         this.polyfillMonacoEditorConfiguration()
 
         this.showHeader = false
@@ -627,7 +667,6 @@ class PromptEditor extends HTMLElement {
                 commandOptions: {
                     toggled: {
                         condition: ContextKeyExpr.equals(contextKey, true)
-                        //condition: ContextKeyExpr.deserialize(`${contextKey}`)
                     }
                 }
             }
@@ -1167,26 +1206,10 @@ class PromptEditor extends HTMLElement {
     }
 
     rebuildLanguage() {
-        const enabledFeatures = allFeatures.filter(f => this.languageFeatures[f.id])
-        const { conf, language } = composeLanguage(baseConf, baseLanguage, enabledFeatures)
-        
-        const langId = 'composed-prompt'
-        // Tokens provider and configuration can be updated even if already registered
-        monaco.languages.setMonarchTokensProvider(langId, language)
-        monaco.languages.setLanguageConfiguration(langId, conf)
-        
-        const model = this.monaco.getModel()
-        if (model) {
-            // Ensure the language ID is set to composed-prompt
-            if (model.getLanguageId() !== langId) {
-                monaco.editor.setModelLanguage(model, langId)
-            }
-            this.setContext(this.createContextKey("language"), langId)
-            console.error(`[WebuiMonacoPrompt] [${performance.now().toFixed(2)}ms] rebuildLanguage complete for`, langId, "with features:", enabledFeatures.map(f => f.id), "raw features:", JSON.stringify(this.languageFeatures))
-        }
+        rebuildGlobalLanguage()
     }
 
-    changeLanguageFeature(featureId: string, enabled: boolean, options?: { skipPresetUpdate?: boolean }) {
+    changeLanguageFeature(featureId: string, enabled: boolean, options?: { skipPresetUpdate?: boolean, skipRebuild?: boolean }) {
         this.languageFeatures[featureId] = enabled
         if (this.elements.featureToggles && this.elements.featureToggles[featureId]) {
             this.elements.featureToggles[featureId].checked = enabled
@@ -1194,7 +1217,9 @@ class PromptEditor extends HTMLElement {
         if (!options?.skipPresetUpdate) {
             this.updatePresetSelection()
         }
-        this.rebuildLanguage()
+        if (!options?.skipRebuild) {
+            this.rebuildLanguage()
+        }
     }
 
     showPresetDialog() {
@@ -1610,7 +1635,7 @@ class PromptEditor extends HTMLElement {
         } as PromptEditorSettings
     }
 
-    setSettings(settings: Partial<PromptEditorSettings>, force=false) {
+    setSettings(settings: Partial<PromptEditorSettings>, force=false, options?: { skipRebuild?: boolean }) {
         const currentSettings = this.getSettings()
 
         if (
@@ -1659,19 +1684,40 @@ class PromptEditor extends HTMLElement {
         }
 
         const freezePreset = settings.languagePreset !== void 0 && settings.languagePreset !== "custom"
+        let languageChanged = false
 
         if (settings.languagePreset !== void 0 && (
             force || settings.languagePreset !== currentSettings.languagePreset
         )) {
-            this.applyPreset(settings.languagePreset)
+            // Apply preset but skip rebuild since we'll do it once at the end
+            const preset = getPreset(settings.languagePreset)
+            if (preset && settings.languagePreset !== 'custom') {
+                this.currentPreset = settings.languagePreset
+                if (this.elements.preset) {
+                    this.elements.preset.value = settings.languagePreset
+                }
+                this.setContext(this.createContextKey("languagePreset"), settings.languagePreset)
+                for (const [featureId, enabled] of Object.entries(preset.features)) {
+                    this.languageFeatures[featureId] = enabled
+                    if (this.elements.featureToggles && this.elements.featureToggles[featureId]) {
+                        this.elements.featureToggles[featureId].checked = enabled
+                    }
+                }
+                languageChanged = true
+            }
         }
 
         if (settings.languageFeatures !== void 0 && (
             force || !deepEqual(settings.languageFeatures, currentSettings.languageFeatures)
         )) {
             for (const [featureId, enabled] of Object.entries(settings.languageFeatures)) {
-                this.changeLanguageFeature(featureId, enabled, { skipPresetUpdate: freezePreset })
+                this.changeLanguageFeature(featureId, enabled, { skipPresetUpdate: freezePreset, skipRebuild: true })
             }
+            languageChanged = true
+        }
+
+        if (languageChanged && !options?.skipRebuild) {
+            this.rebuildLanguage()
         }
 
         if (freezePreset) {
@@ -2047,19 +2093,19 @@ const updateAutoComplete = () => {
 } 
 
 const _loadCSV = (filename: string, csv: string) => {
-    const retval = loadCSV.call(this, filename, csv)
+    const retval = loadCSV(filename, csv)
     updateAutoComplete()
     return retval
 }
 
 const _addCSV = (filename: string, csv: string) => {
-    const retval = addCSV.call(this, filename, csv)
+    const retval = addCSV(filename, csv)
     updateAutoComplete()
     return retval
 }
 
 const _clearCSV = () => {
-    const retval = clearCSV.call(this)
+    const retval = clearCSV()
     updateAutoComplete()
     return retval
 }
