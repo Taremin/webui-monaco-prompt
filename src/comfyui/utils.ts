@@ -190,6 +190,8 @@ function findInstance(instance: PromptEditor, searchString: string, isRegex: boo
             mainExtraModel = instance.extraModels.find(extra => extra.model === mainModel)
         }
 
+        if (mainModel.isDisposed()) return allMatches;
+
         const matches = mainModel.findMatches(
             searchString,
             false,
@@ -227,6 +229,8 @@ function findInstance(instance: PromptEditor, searchString: string, isRegex: boo
         for (const extra of instance.extraModels) {
             // メインモデルと同じモデルはスキップ（既に検索済み）
             if (extra.model === mainModel) continue
+
+            if (extra.model.isDisposed()) continue;
 
             const matches = extra.model.findMatches(
                 searchString,

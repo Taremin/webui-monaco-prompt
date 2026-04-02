@@ -12,7 +12,8 @@
     "watch:editor": "webpack watch --config webpack.editor.js",
     "watch:comfy": "webpack watch --config webpack.comfy.dev.js",
     "checkupdate": "npm-check-updates --target minor",
-    "update-deps": "npm-check-updates --target minor -u && npm install"
+    "update-deps": "npm-check-updates --target minor -u && npm install",
+    "test": "pytest tests/"
   },
   "author": "Taremin",
   "license": "MIT",

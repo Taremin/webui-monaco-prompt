@@ -143,36 +143,16 @@ const compareArray = (array1: any[], array2: any[]) => {
 }
 
 const _addCSV = (csv: string, sourceName?: string) => {
-    for (const row of parse(csv, {columns: ["tag", "category", "count", "alias"], relax_column_count: true})) {
-        const countString = isNaN(row.count) ? row.count : (+row.count).toLocaleString()
-        const description = sourceName ?
-            [`(${sourceName})`, countString].join(" ") :
-            countString
-        const item: Partial<CompletionItem> = {
-            label: {
-                label: row.tag,
-                description: description,
-            },
-            kind: languages.CompletionItemKind.Value,
-            insertText: escape(row.tag),
-            count: row.count,
-        }
-        tags.push(item)
-
-        // filtered
-        if (checkThreshold(item as CompletionItem)) {
-            state.filteredTags.push(item)
-        }
-
-        const aliases = row.alias ? row.alias.split(",") : []
-        for (const alias of aliases) {
-            if (alias.length === 0) {
-                continue
-            }
+    try {
+        const rows = parse(csv, {columns: ["tag", "category", "count", "alias"], relax_column_count: true})
+        for (const row of rows) {
+            const countString = isNaN(row.count) ? row.count : (+row.count).toLocaleString()
+            const description = sourceName ?
+                [`(${sourceName})`, countString].join(" ") :
+                countString
             const item: Partial<CompletionItem> = {
                 label: {
-                    label: alias,
-                    detail: ` -> ${row.tag}`,
+                    label: row.tag,
                     description: description,
                 },
                 kind: languages.CompletionItemKind.Value,
@@ -185,7 +165,32 @@ const _addCSV = (csv: string, sourceName?: string) => {
             if (checkThreshold(item as CompletionItem)) {
                 state.filteredTags.push(item)
             }
+
+            const aliases = row.alias ? row.alias.split(",") : []
+            for (const alias of aliases) {
+                if (alias.length === 0) {
+                    continue
+                }
+                const item: Partial<CompletionItem> = {
+                    label: {
+                        label: alias,
+                        detail: ` -> ${row.tag}`,
+                        description: description,
+                    },
+                    kind: languages.CompletionItemKind.Value,
+                    insertText: escape(row.tag),
+                    count: row.count,
+                }
+                tags.push(item)
+
+                // filtered
+                if (checkThreshold(item as CompletionItem)) {
+                    state.filteredTags.push(item)
+                }
+            }
         }
+    } catch (e) {
+        console.error(`[WebuiMonacoPrompt] Failed to parse CSV ${sourceName}:`, e)
     }
 }
 

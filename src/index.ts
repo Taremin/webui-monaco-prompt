@@ -6,11 +6,11 @@ import { allFeatures, getFeature, LanguageFeatureToggle } from './languages/feat
 import { composeLanguage } from './languages/composer'
 import { builtinPresets, getAllPresets, getPreset, addUserPreset, removeUserPreset, loadUserPresets, getUserPresets, LanguagePreset } from './languages/presets'
 import { PresetDialog } from './preset_dialog'
-export { PresetDialog }
 import { provider, createDynamicSuggest, addCSV, loadCSV, getCount, addData, clearCSV, getReplaceUnderscore, updateReplaceUnderscore, getLoadedCSV, addLoadedCSV, getEnabledCSV } from './completion'
 import { addActionWithCommandOption, addActionWithSubMenu, ActionsPartialDescripter, getMenuId, updateSubMenu, removeSubMenu } from './monaco_utils'
 import { MultipleSelectInstance, multipleSelect} from 'multiple-select-vanilla'
 import * as utils from './utils'
+import { PromptEditorManager } from './PromptEditorManager'
 // @ts-ignore
 import { ContextKeyExpr } from 'monaco-editor/esm/vs/platform/contextkey/common/contextkey'
 // @ts-ignore
@@ -88,51 +88,21 @@ const settings: PromptEditorGlobal = {
 let id = 0
 let currentFocusInstance: number | null = null
 
-// language rebuild management (Singleton)
-let lastAppliedFeaturesKey: string = ""
-
 /**
- * Rebuild global language definition based on the current standard settings.
- * Synchronous and efficient singleton. Does NOT iterate over instances.
+ * Rebuild global language definition.
+ * (Deprecated: Use PromptEditorManager.getGroup().rebuildLanguage() instead)
  */
 function rebuildGlobalLanguage() {
-    const instances = Object.values(settings.instances)
-    if (instances.length === 0) {
-        return
-    }
-
-    // 最初のインスタンスのフィーチャー設定をグローバルの基準とする
-    const representative = instances[0]
-    const enabledFeatures = allFeatures.filter(f => representative.languageFeatures[f.id])
-    const featuresKey = enabledFeatures.map(f => f.id).sort().join(',')
-
-    const langId = 'composed-prompt'
-
-    if (lastAppliedFeaturesKey !== featuresKey) {
-        const { conf, language } = composeLanguage(baseConf, baseLanguage, enabledFeatures)
-        monaco.languages.setMonarchTokensProvider(langId, language)
-        monaco.languages.setLanguageConfiguration(langId, conf)
-        
-        lastAppliedFeaturesKey = featuresKey
-        console.log(`[WebuiMonacoPrompt] Global language definition updated: ${featuresKey || 'base'}`)
-    }
-
-    // 全インスタンスのモデル言語を composed-prompt に切り替える
-    for (const instance of instances) {
-        const model = instance.monaco.getModel()
-        if (model && model.getLanguageId() !== langId) {
-            monaco.editor.setModelLanguage(model, langId)
-            instance.setContext(instance.createContextKey("language"), langId)
-        }
-    }
+    PromptEditorManager.getGroup().rebuildLanguage()
 }
 
 interface PromptEditorOptions {
-    focus: boolean;
-    autoLayout: boolean;
-    handleTextAreaValue: boolean;
-    overlayZIndex: number;
-    mode?: PromptEditorMode;
+    focus?: boolean
+    mode?: PromptEditorMode
+    autoLayout?: boolean
+    handleTextAreaValue?: boolean
+    groupId?: string
+    overlayZIndex?: number
 }
 
 interface PromptEditorSettings {
@@ -150,6 +120,7 @@ interface PromptEditorSettings {
     csvToggle: {
         [key: string]: boolean
     },
+    userPresets: LanguagePreset[],
 }
 
 interface PromptEditorElements {
@@ -190,52 +161,67 @@ const PromptEditorMode = {
 }
 type PromptEditorMode = typeof PromptEditorMode[keyof typeof PromptEditorMode]
 class PromptEditor extends HTMLElement {
-    textarea: HTMLTextAreaElement
+    textarea!: HTMLTextAreaElement
     elements: Partial<PromptEditorElements> = {}
     mode: PromptEditorMode = PromptEditorMode.NORMAL
-    monaco: CodeEditor
-    theme: string
-    showHeader: boolean
+    monaco!: CodeEditor
+    theme!: string
+    showHeader: boolean = false
     vim: any // monaco-vim instance
     languageFeatures: LanguageFeatureToggle = {}
     currentPreset: string = 'comfy-dynamic-prompt'
-    textareaDescriptor: PropertyDescriptor
-    textareaDisplay: string
+    textareaDescriptor!: PropertyDescriptor
+    textareaDisplay!: string
+    options!: Partial<PromptEditorOptions>
+    private _initialized: boolean = false
     
-    onChangeShowHeaderCallbacks: Array<() => void>
-    onChangeShowHeaderBeforeSyncCallbacks: Array<() => void>
-    onChangeShowLineNumbersCallbacks: Array<() => void>
-    onChangeShowLineNumbersBeforeSyncCallbacks: Array<() => void>
-    onChangeShowMinimapCallbacks: Array<() => void>
-    onChangeShowMinimapBeforeSyncCallbacks: Array<() => void>
-    onChangeReplaceUnderscoreCallbacks: Array<() => void>
-    onChangeReplaceUnderscoreBeforeSyncCallbacks: Array<() => void>
-    onChangeThemeCallbacks: Array<() => void>
-    onChangeThemeBeforeSyncCallbacks: Array<() => void>
-    onChangeModeCallbacks: Array<() => void>
-    onChangeModeBeforeSyncCallbacks: Array<() => void>
-    onChangeLanguageCallbacks: Array<() => void>
-    onChangeLanguageBeforeSyncCallbacks: Array<() => void>
-    onChangeLanguagePresetCallbacks: Array<() => void>
-    onChangeLanguagePresetBeforeSyncCallbacks: Array<() => void>
-    onChangeLanguageFeaturesCallbacks: Array<() => void>
-    onChangeLanguageFeaturesBeforeSyncCallbacks: Array<() => void>
-    onChangeFontSizeCallbacks: Array<() => void>
-    onChangeFontSizeBeforeSyncCallbacks: Array<() => void>
-    onChangeFontFamilyCallbacks: Array<() => void>
-    onChangeFontFamilyBeforeSyncCallbacks: Array<() => void>
-    onChangeAutoCompleteToggleCallbacks: Array<() => void>
-    onChangeAutoCompleteToggleBeforeSyncCallbacks: Array<() => void>
+    onChangeShowHeaderCallbacks!: Array<() => void>
+    onChangeShowHeaderBeforeSyncCallbacks!: Array<() => void>
+    onChangeShowLineNumbersCallbacks!: Array<() => void>
+    onChangeShowLineNumbersBeforeSyncCallbacks!: Array<() => void>
+    onChangeShowMinimapCallbacks!: Array<() => void>
+    onChangeShowMinimapBeforeSyncCallbacks!: Array<() => void>
+    onChangeReplaceUnderscoreCallbacks!: Array<() => void>
+    onChangeReplaceUnderscoreBeforeSyncCallbacks!: Array<() => void>
+    onChangeThemeCallbacks!: Array<() => void>
+    onChangeThemeBeforeSyncCallbacks!: Array<() => void>
+    onChangeModeCallbacks!: Array<() => void>
+    onChangeModeBeforeSyncCallbacks!: Array<() => void>
+    onChangeLanguageCallbacks!: Array<() => void>
+    onChangeLanguageBeforeSyncCallbacks!: Array<() => void>
+    onChangeLanguagePresetCallbacks!: Array<() => void>
+    onChangeLanguagePresetBeforeSyncCallbacks!: Array<() => void>
+    onChangeLanguageFeaturesCallbacks!: Array<() => void>
+    onChangeLanguageFeaturesBeforeSyncCallbacks!: Array<() => void>
+    onChangeFontSizeCallbacks!: Array<() => void>
+    onChangeFontSizeBeforeSyncCallbacks!: Array<() => void>
+    onChangeFontFamilyCallbacks!: Array<() => void>
+    onChangeFontFamilyBeforeSyncCallbacks!: Array<() => void>
+    onChangeLanguageUserPresetsCallbacks!: Array<() => void>
+    onChangeLanguageUserPresetsBeforeSyncCallbacks!: Array<() => void>
+    onChangeAutoCompleteToggleCallbacks!: Array<() => void>
+    onChangeAutoCompleteToggleBeforeSyncCallbacks!: Array<() => void>
+    
     onOpenPresetDialog?: (instance: PromptEditor) => void
+    onSettingChange?: (settings: Partial<PromptEditorSettings>) => void
     _id: number
+    groupId: string = "default"
     
-    constructor(textarea: HTMLTextAreaElement, options: Partial<PromptEditorOptions>={}) {
+    constructor(textarea?: HTMLTextAreaElement, options: Partial<PromptEditorOptions>={}) {
         super()
-        this.textarea = textarea
         this._id = id++
-        this.textareaDescriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(textarea), 'value')!
+        this.options = options
+        this.groupId = options.groupId || "default"
 
         const container = this.elements.container = this.attachShadow({mode: 'open'})
+
+        // 基本スタイルの注入
+        const styleElement = document.createElement('style')
+        styleElement.textContent = `
+            :host { display: block; width: 100%; height: 100%; position: relative; min-height: 50px; }
+            main { flex-grow: 1; display: block; position: relative; width: 100%; height: 100%; }
+        `
+        container.appendChild(styleElement)
         const headerElement = this.elements.header = document.createElement('header')
         const mainElement= this.elements.main = document.createElement('main')
         const footerElement = this.elements.footer = document.createElement('footer')
@@ -259,6 +245,108 @@ class PromptEditor extends HTMLElement {
         monacoElement.classList.add(style.monaco)
         statusElement.classList.add(style.status)
 
+        this.initCallbacks()
+
+        this.monaco = monaco.editor.create(monacoElement, {
+            value: textarea ? textarea.value : "",
+            bracketPairColorization: {
+                enabled: true,
+            },
+            automaticLayout: true,
+            wordWrap: 'on',
+        } as any) as CodeEditor
+
+        this.monaco.onDidFocusEditorWidget(() => {
+            currentFocusInstance = this.getInstanceId()
+        })
+
+        if (options.focus) {
+            this.monaco.focus()
+        }
+
+        this.initHeader()
+        this.copyStyleToShadow()
+        this.polyfillMonacoEditorConfiguration()
+        this.showHeader = false
+        this.theme = this.getThemeId()
+
+        settings.instances[this._id] = this
+        PromptEditorManager.getGroup(this.groupId).register(this)
+
+        // 初回設定の適用
+        const managerSettings = PromptEditorManager.getGroup(this.groupId).getSettings()
+        const initialCsvToggle = Object.fromEntries(getEnabledCSV().map(csvName => [this.createContextKey("csv", csvName), true]))
+        const combinedSettings = Object.assign({}, managerSettings, {
+            csvToggle: Object.assign({}, initialCsvToggle, managerSettings.csvToggle || {})
+        })
+        this.applySettings(combinedSettings)
+
+        if (textarea) {
+            this.init(textarea)
+        }
+
+        // DOM に付随する初期化ワークアラウンド（非同期）
+        setTimeout(() => {
+            this.initializeLayoutWorkarounds(options)
+            this.updateAutoComplete()
+            this.setContextMenu()
+            this.setEventHandler()
+        }, 0)
+    }
+
+    init(textarea: HTMLTextAreaElement) {
+        this.textarea = textarea
+        this.textareaDescriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(textarea), 'value')!
+        this.textareaDisplay = textarea.style.display
+        textarea.style.display = 'none'
+
+        if (this.options.handleTextAreaValue) {
+            this.hookTextAreaElement(textarea)
+        }
+
+        this.monaco.getModel()?.onDidChangeContent((e) => {
+            this.textareaDescriptor.set?.call(this.textarea, this.monaco.getValue())
+            const input = new InputEvent('input')
+            Object.defineProperty(input, 'target', {writable: false, value: this.textarea})
+            this.textarea.dispatchEvent(input)
+        })
+
+        if (this.monaco.getValue() !== textarea.value) {
+            this.monaco.setValue(textarea.value)
+        }
+    }
+
+    private initializeLayoutWorkarounds(options: Partial<PromptEditorOptions>) {
+        if (options.autoLayout) {
+            this.handleResize()
+        }
+        // Monaco の DOM 構造に依存する処理は、防御的に実行
+        try {
+            const overflowGuard = this.elements.main!.querySelector('.overflow-guard') as HTMLDivElement
+            if (overflowGuard) {
+                this.elements.overflowGuard = overflowGuard
+                const overflowContent = this.elements.main!.querySelector('.overflowingContentWidgets') as HTMLDivElement
+                if (overflowContent) {
+                    this.elements.overflowContent = overflowContent
+                }
+                const overflowOverlay = this.elements.main!.querySelector('.overflowingOverlayWidgets') as HTMLDivElement
+                if (overflowOverlay) {
+                    this.elements.overflowOverlay = overflowOverlay
+                }
+                if (this.elements.overflowContent && this.elements.overflowOverlay) {
+                    this.fixedOverflowWidgetWorkaround([this.elements.overflowContent, this.elements.overflowOverlay], options)
+                }
+            }
+        } catch (e) {
+            console.warn("Failed to apply layout workarounds:", e)
+        }
+    }
+
+    connectedCallback() {
+        // HTMLElement のインターフェースとして残すが、初期化は constructor 内の非同期処理で完結
+    }
+
+    private initCallbacks() {
         this.onChangeShowHeaderCallbacks = []
         this.onChangeShowHeaderBeforeSyncCallbacks = []
         this.onChangeShowLineNumbersCallbacks = []
@@ -281,79 +369,10 @@ class PromptEditor extends HTMLElement {
         this.onChangeFontSizeBeforeSyncCallbacks = []
         this.onChangeFontFamilyCallbacks = []
         this.onChangeFontFamilyBeforeSyncCallbacks = []
+        this.onChangeLanguageUserPresetsCallbacks = []
+        this.onChangeLanguageUserPresetsBeforeSyncCallbacks = []
         this.onChangeAutoCompleteToggleCallbacks = []
         this.onChangeAutoCompleteToggleBeforeSyncCallbacks = []
-
-        const editor = this.monaco = monaco.editor.create(monacoElement, {
-            value: textarea.value,
-            bracketPairColorization: {
-                enabled: true,
-            },
-            automaticLayout: true,
-            wordWrap: 'on',
-            //fixedOverflowWidgets: true,
-        } as any) as CodeEditor
-
-        this.polyfillMonacoEditorConfiguration()
-
-        this.showHeader = false
-        this.theme = this.getThemeId()
-
-        this.changeMode(options.mode || PromptEditorMode.VIM)
-
-        editor.onDidFocusEditorWidget(() => {
-            currentFocusInstance = this.getInstanceId()
-        })
-
-        if (options.focus) {
-            editor.focus()
-        }
-
-        editor.getModel()?.onDidChangeContent((e) => {
-            this.textareaDescriptor.set?.call(textarea, this.monaco.getValue())
-
-            // fire fake input event
-            const input = new InputEvent('input')
-            Object.defineProperty(input, 'target', {writable: false, value: textarea})
-            textarea.dispatchEvent(input)
-        })
-    
-        if (options.handleTextAreaValue) {
-            this.hookTextAreaElement(textarea)
-        }
-
-        this.initHeader()
-        if (options.autoLayout) {
-            this.handleResize()
-        }
-        this.copyStyleToShadow()
-
-        this.textareaDisplay = textarea.style.display
-        textarea.style.display = 'none'
-
-        const overflowGuard = this.elements.main!.querySelector('.overflow-guard')! as HTMLDivElement
-        this.elements.overflowGuard = overflowGuard
-        const overflowContent = this.elements.main!.querySelector('.overflowingContentWidgets')! as HTMLDivElement
-        this.elements.overflowContent = overflowContent
-        const overflowOverlay = this.elements.main!.querySelector('.overflowingOverlayWidgets')! as HTMLDivElement
-        this.elements.overflowOverlay = overflowOverlay
-        this.fixedOverflowWidgetWorkaround([overflowContent, overflowOverlay], options)
-
-        this.updateAutoComplete()
-        this.setContextMenu()
-
-        // init context
-        this.setSettings(Object.assign({}, this.getSettings(), {
-            csvToggle: Object.fromEntries(getEnabledCSV().map(csvName => [this.createContextKey("csv", csvName), true])),
-        }), true)
-
-        this.setEventHandler()
-
-        this.polyfillMonacoEditorConfiguration()
-
-        this.showHeader = false
-
-        settings.instances[this._id] = this
     }
 
     getCurrentFocus() {
@@ -392,6 +411,12 @@ class PromptEditor extends HTMLElement {
             this.monaco.dispose()
         }
         delete settings.instances[this._id]
+        // マネージャーからも登録解除
+        PromptEditorManager.getGroup(this.groupId).unregister(this);
+    }
+
+    disconnectedCallback() {
+        this.dispose()
     }
 
     // fixedOverflowWidget相当のworkaroundを行う
@@ -452,7 +477,7 @@ class PromptEditor extends HTMLElement {
             groupId: "monaco-prompt-editor",
             run: () => {
                 this.changeShowHeader(!this.getContext(this.createContextKey("showHeader")))
-                this.syncShowHeader()
+                this.onSettingChange?.({ showHeader: this.showHeader })
             },
             commandOptions: {
                 toggled: {
@@ -467,7 +492,7 @@ class PromptEditor extends HTMLElement {
             groupId: "monaco-prompt-editor",
             run: () => {
                 this.changeShowMinimap(!this.getContext(this.createContextKey("minimap")))
-                this.syncMinimap()
+                this.onSettingChange?.({ minimap: this.getContext(this.createContextKey("minimap")) })
             },
             commandOptions: {
                 toggled: {
@@ -482,7 +507,7 @@ class PromptEditor extends HTMLElement {
             groupId: "monaco-prompt-editor",
             run: () => {
                 this.changeShowLineNumbers(!this.getContext(this.createContextKey("lineNumbers")))
-                this.syncLineNumbers()
+                this.onSettingChange?.({ lineNumbers: this.getContext(this.createContextKey("lineNumbers")) })
             },
             commandOptions: {
                 toggled: {
@@ -497,7 +522,7 @@ class PromptEditor extends HTMLElement {
             groupId: "monaco-prompt-editor",
             run: () => {
                 this.changeReplaceUnderscore(!this.getContext(this.createContextKey("replaceUnderscore")))
-                this.syncReplaceUnderscore()
+                this.onSettingChange?.({ replaceUnderscore: this.getContext(this.createContextKey("replaceUnderscore")) })
             },
             commandOptions: {
                 toggled: {
@@ -516,7 +541,7 @@ class PromptEditor extends HTMLElement {
                     label: ""+size,
                     run: () => {
                         this.changeFontSize(size)
-                        this.syncFontSize()
+                        this.onSettingChange?.({ fontSize: size })
                     },
                     commandOptions: {
                         toggled: {
@@ -538,7 +563,7 @@ class PromptEditor extends HTMLElement {
                     inputBox.value = this.monaco.getOption(monaco.editor.EditorOption.fontFamily)
                     inputBox.onDidAccept(() => {
                         this.changeFontFamily(inputBox.value)
-                        this.syncFontFamily()
+                        this.onSettingChange?.({ fontFamily: inputBox.value })
                         inputBox.dispose()
                     })
 
@@ -561,7 +586,8 @@ class PromptEditor extends HTMLElement {
                     label: value,
                     run: () => {
                         this.changeMode(value)
-                        this.syncKeyBindings()
+                        this.onSettingChange?.({ mode: value })
+                        this.monaco.focus()
                     },
                     commandOptions: {
                         toggled: {
@@ -582,7 +608,7 @@ class PromptEditor extends HTMLElement {
                     label: value,
                     run: () => {
                         this.changeTheme(value)
-                        this.syncTheme()
+                        this.onSettingChange?.({ theme: value })
                     },
                     commandOptions: {
                         toggled: {
@@ -604,7 +630,7 @@ class PromptEditor extends HTMLElement {
                     label: preset.label,
                     run: () => {
                         this.applyPreset(preset.id)
-                        this.syncLanguageFeatures()
+                        this.onSettingChange?.({ languagePreset: preset.id, languageFeatures: this.languageFeatures })
                     },
                     commandOptions: {
                         toggled: {
@@ -662,7 +688,7 @@ class PromptEditor extends HTMLElement {
                 run: () => {
                     const current = this.getContext(contextKey)
                     this.changeAutoCompleteToggle(contextKey, !current, true)
-                    this.syncAutoCompleteToggle()
+                    this.onSettingChange?.({ csvToggle: { ...this.getLocalContextValues<boolean>("csv") } })
                 },
                 commandOptions: {
                     toggled: {
@@ -787,7 +813,9 @@ class PromptEditor extends HTMLElement {
     updateContext() {
         const model = this.monaco.getModel()
         if (model) {
-            this.setContext(this.createContextKey("language"), model.getLanguageId())
+            if (model.getLanguageId() !== this.getContext(this.createContextKey("language"))) {
+                this.setContext(this.createContextKey("language"), model.getLanguageId())
+            }
         }
         this.setContext(this.createContextKey("theme"), this.theme)
         this.setContext(this.createContextKey("fontSize"), this.monaco.getOption(monaco.editor.EditorOption.fontSize))
@@ -871,7 +899,9 @@ class PromptEditor extends HTMLElement {
         }
 
         const model = this.monaco.getModel()
-        monaco.editor.setModelLanguage(model!, languageId)
+        if (model) {
+            monaco.editor.setModelLanguage(model, languageId)
+        }
         this.setContext(this.createContextKey("language"), languageId)
 
         for (const callback of this.onChangeLanguageCallbacks) {
@@ -1049,7 +1079,9 @@ class PromptEditor extends HTMLElement {
                 },
                 isEnabledCallback: () => this.monaco.getOption(monaco.editor.EditorOption.minimap).enabled,
                 toggleCallback: (ev: Event) => {
-                    this.syncMinimap()
+                    const show = (ev.target as HTMLInputElement).checked
+                    this.changeShowMinimap(show)
+                    this.onSettingChange?.({ minimap: show })
                 }
             },
             {
@@ -1061,7 +1093,9 @@ class PromptEditor extends HTMLElement {
                     return this.monaco.getOption(monaco.editor.EditorOption.lineNumbers).renderType !== monaco.editor.RenderLineNumbersType.Off
                 },
                 toggleCallback: (ev: Event) => {
-                    this.syncLineNumbers()
+                    const show = (ev.target as HTMLInputElement).checked
+                    this.changeShowLineNumbers(show)
+                    this.onSettingChange?.({ lineNumbers: show })
                 }
             },
             {
@@ -1074,7 +1108,9 @@ class PromptEditor extends HTMLElement {
                     return getReplaceUnderscore()
                 },
                 toggleCallback: (ev: Event) => {
-                    this.syncReplaceUnderscore()
+                    const isReplace = (ev.target as HTMLInputElement).checked
+                    this.changeReplaceUnderscore(isReplace)
+                    this.onSettingChange?.({ replaceUnderscore: isReplace })
                 }
             },
             ...allFeatures.map(feature => ({
@@ -1085,8 +1121,9 @@ class PromptEditor extends HTMLElement {
                 },
                 isEnabledCallback: () => !!this.languageFeatures[feature.id],
                 toggleCallback: (ev: Event) => {
-                    this.changeLanguageFeature(feature.id, !this.languageFeatures[feature.id])
-                    this.syncLanguageFeatures()
+                    const enabled = !this.languageFeatures[feature.id]
+                    this.changeLanguageFeature(feature.id, enabled)
+                    this.onSettingChange?.({ languageFeatures: this.languageFeatures })
                 }
             }))
         ] as PromptEditorCheckboxParam[]) {
@@ -1106,7 +1143,7 @@ class PromptEditor extends HTMLElement {
                 changeCallback: (ev: Event) => {
                     const value = +(ev.target as HTMLSelectElement).value
                     this.changeFontSize(value)
-                    this.syncFontSize()
+                    this.onSettingChange?.({ fontSize: value })
                 }
             },
             {
@@ -1127,7 +1164,7 @@ class PromptEditor extends HTMLElement {
                 changeCallback: (ev: Event) => {
                     const value = (ev.target as HTMLSelectElement).value
                     this.applyPreset(value)
-                    this.syncLanguageFeatures()
+                    this.onSettingChange?.({ languagePreset: value, languageFeatures: this.languageFeatures })
                 }
             },
             {
@@ -1141,7 +1178,9 @@ class PromptEditor extends HTMLElement {
                 },
                 changeCallback: (ev: Event) => {
                     const value = (ev.target as HTMLSelectElement).value as PromptEditorMode
-                    this.syncKeyBindings()
+                    this.changeMode(value)
+                    this.onSettingChange?.({ mode: value })
+                    this.monaco.focus()
                 }
             },
             {
@@ -1154,9 +1193,10 @@ class PromptEditor extends HTMLElement {
                     return dataValue.id === this.theme
                 },
                 changeCallback: (ev: Event) => {
-                    const value = (ev.target as HTMLSelectElement).value as PromptEditorMode
+                    const value = (ev.target as HTMLSelectElement).value
                     if (this.getThemeId() !== value) {
-                        this.syncTheme()
+                        this.changeTheme(value)
+                        this.onSettingChange?.({ theme: value })
                     }
                 },
                 getValue: (value: any) => {
@@ -1206,7 +1246,7 @@ class PromptEditor extends HTMLElement {
     }
 
     rebuildLanguage() {
-        rebuildGlobalLanguage()
+        PromptEditorManager.getGroup(this.groupId).rebuildLanguage()
     }
 
     changeLanguageFeature(featureId: string, enabled: boolean, options?: { skipPresetUpdate?: boolean, skipRebuild?: boolean }) {
@@ -1256,7 +1296,7 @@ class PromptEditor extends HTMLElement {
         })
         this.updatePresetOptions()
         this.applyPreset(id)
-        this.syncLanguageFeatures()
+        this.onSettingChange?.({ languagePreset: id, languageFeatures: this.languageFeatures })
     }
 
     updatePresetOptions() {
@@ -1452,22 +1492,7 @@ class PromptEditor extends HTMLElement {
     }
 
     syncAutoCompleteToggle() {
-        const values = this.getLocalContextValues<boolean>("csv")
-
         this.updateAutoCompleteToggle()
-
-        for (const callback of this.onChangeAutoCompleteToggleBeforeSyncCallbacks) {
-            callback()
-        }
-
-        const app = (window as any).app;
-        if (!app || !app.ui || !app.ui.settings) {
-            runAllInstances((instance) => {
-                for (const [contextKey, value] of Object.entries(values)) {
-                    instance.changeAutoCompleteToggle(contextKey, value, true)
-                }
-            })
-        }
     }
 
     getEnabledFeatures() {
@@ -1618,12 +1643,13 @@ class PromptEditor extends HTMLElement {
     }
 
     getSettings() {
+        const model = this.monaco.getModel()
         return {
             minimap: this.elements.minimap?.checked,
             showHeader: this.showHeader,
             lineNumbers: this.elements.lineNumbers?.checked,
             replaceUnderscore: getReplaceUnderscore(),
-            language: this.monaco.getModel()!.getLanguageId(),
+            language: model ? model.getLanguageId() : "plaintext",
             languageFeatures: { ...this.languageFeatures },
             languagePreset: this.currentPreset,
             theme: this.theme,
@@ -1635,8 +1661,15 @@ class PromptEditor extends HTMLElement {
         } as PromptEditorSettings
     }
 
-    setSettings(settings: Partial<PromptEditorSettings>, force=false, options?: { skipRebuild?: boolean }) {
+
+    /**
+     * 変更を実際に適用する（マネージャーまたは自身からの決定事項を受け取る）
+     * このメソッドからは onSettingChange は発火させない
+     */
+    applySettings(settings: Partial<PromptEditorSettings>, force=false, options?: { skipRebuild?: boolean }) {
         const currentSettings = this.getSettings()
+        let hasChanged = false
+        let languageChanged = false
 
         if (
             settings.minimap !== void 0 && (
@@ -1645,6 +1678,8 @@ class PromptEditor extends HTMLElement {
             )
         ) {
             this.changeShowMinimap(settings.minimap)
+            this.onChangeShowMinimapBeforeSyncCallbacks.forEach(c => c())
+            hasChanged = true
         }
         if (
             settings.showHeader !== void 0 && (
@@ -1653,6 +1688,8 @@ class PromptEditor extends HTMLElement {
             )
         ) {
             this.changeShowHeader(settings.showHeader)
+            this.onChangeShowHeaderBeforeSyncCallbacks.forEach(c => c())
+            hasChanged = true
         }
         if (
             settings.lineNumbers !== void 0 && (
@@ -1661,6 +1698,8 @@ class PromptEditor extends HTMLElement {
             )
         ) {
             this.changeShowLineNumbers(settings.lineNumbers)
+            this.onChangeShowLineNumbersBeforeSyncCallbacks.forEach(c => c())
+            hasChanged = true
         }
         if (
             settings.replaceUnderscore !== void 0 && (
@@ -1669,6 +1708,8 @@ class PromptEditor extends HTMLElement {
             )
         ) {
             this.changeReplaceUnderscore(settings.replaceUnderscore)
+            this.onChangeReplaceUnderscoreBeforeSyncCallbacks.forEach(c => c())
+            hasChanged = true
         }
 
         if (
@@ -1677,19 +1718,19 @@ class PromptEditor extends HTMLElement {
                 settings.language !== currentSettings.language
             )
         ) {
-            // languageFeatures が設定されている場合は優先されるため、初期マイグレーションとして機能
             if (settings.languageFeatures === void 0) {
                 this.changeLanguage(settings.language)
+                this.onChangeLanguageBeforeSyncCallbacks.forEach(c => c())
+                hasChanged = true
             }
         }
 
         const freezePreset = settings.languagePreset !== void 0 && settings.languagePreset !== "custom"
-        let languageChanged = false
+        languageChanged = false
 
         if (settings.languagePreset !== void 0 && (
             force || settings.languagePreset !== currentSettings.languagePreset
         )) {
-            // Apply preset but skip rebuild since we'll do it once at the end
             const preset = getPreset(settings.languagePreset)
             if (preset && settings.languagePreset !== 'custom') {
                 this.currentPreset = settings.languagePreset
@@ -1703,7 +1744,9 @@ class PromptEditor extends HTMLElement {
                         this.elements.featureToggles[featureId].checked = enabled
                     }
                 }
+                this.onChangeLanguagePresetBeforeSyncCallbacks.forEach(c => c())
                 languageChanged = true
+                hasChanged = true
             }
         }
 
@@ -1713,7 +1756,9 @@ class PromptEditor extends HTMLElement {
             for (const [featureId, enabled] of Object.entries(settings.languageFeatures)) {
                 this.changeLanguageFeature(featureId, enabled, { skipPresetUpdate: freezePreset, skipRebuild: true })
             }
+            this.onChangeLanguageFeaturesBeforeSyncCallbacks.forEach(c => c())
             languageChanged = true
+            hasChanged = true
         }
 
         if (languageChanged && !options?.skipRebuild) {
@@ -1736,6 +1781,8 @@ class PromptEditor extends HTMLElement {
             )
         ) {
             this.changeTheme(settings.theme)
+            this.onChangeThemeBeforeSyncCallbacks.forEach(c => c())
+            hasChanged = true
         }
         if (
             settings.mode !== void 0 && (
@@ -1744,6 +1791,8 @@ class PromptEditor extends HTMLElement {
             )
         ) {
             this.changeMode(settings.mode)
+            this.onChangeModeBeforeSyncCallbacks.forEach(c => c())
+            hasChanged = true
         }
 
         if (
@@ -1753,6 +1802,8 @@ class PromptEditor extends HTMLElement {
             )
         ) {
             this.changeFontSize(settings.fontSize)
+            this.onChangeFontSizeBeforeSyncCallbacks.forEach(c => c())
+            hasChanged = true
         }
 
         if (
@@ -1762,25 +1813,49 @@ class PromptEditor extends HTMLElement {
             )
         ) {
             this.changeFontFamily(settings.fontFamily)
+            this.onChangeFontFamilyBeforeSyncCallbacks.forEach(c => c())
+            hasChanged = true
         }
 
-        if (
-            settings.csvToggle !== void 0 && (
-                force ||
-                !deepEqual(settings.csvToggle, currentSettings.csvToggle)
-            )
-        ) {
-            const normalized: Record<string, boolean> = {}
-            for (const [rawKey, enabled] of Object.entries(settings.csvToggle)) {
-                const contextKey = this.toContextKeyFromCsvToggleKey(rawKey)
-                normalized[contextKey] = enabled
-            }
-            for (const [contextKey, enabled] of Object.entries(normalized)) {
-                if (currentSettings.csvToggle[contextKey] !== enabled) {
-                    this.changeAutoCompleteToggle(contextKey, enabled, true)
+        if (settings.csvToggle !== void 0 && (force || !deepEqual(settings.csvToggle, currentSettings.csvToggle))) {
+            if (typeof settings.csvToggle === 'object' && settings.csvToggle !== null && !Array.isArray(settings.csvToggle)) {
+                for (const [key, enabled] of Object.entries(settings.csvToggle)) {
+                    this.setContext(this.createContextKey(key), enabled)
                 }
+            } else {
+                console.warn("[WebuiMonacoPrompt] applySettings: csvToggle is not an object", settings.csvToggle)
             }
             this.updateAutoCompleteToggle()
+            this.onChangeAutoCompleteToggleBeforeSyncCallbacks.forEach(c => c())
+            hasChanged = true
+        }
+
+        if (settings.userPresets !== void 0) {
+            if (Array.isArray(settings.userPresets)) {
+                loadUserPresets(settings.userPresets)
+            } else {
+                console.warn("[WebuiMonacoPrompt] applySettings: userPresets is not an array", settings.userPresets)
+            }
+            this.onChangeLanguageUserPresetsBeforeSyncCallbacks.forEach(c => c())
+            hasChanged = true
+        }
+
+        // UI（セレクトボックス等）を最新のレジストリと同期させる
+        this.updatePresetOptions()
+
+        return hasChanged
+    }
+
+    /**
+     * 変更を依頼する、または直接適用する（エントリポイント）
+     */
+    setSettings(settings: Partial<PromptEditorSettings>, force=false, options?: { skipRebuild?: boolean }) {
+        if (this.onSettingChange) {
+            // マネージャが登録されている場合は依頼を出すのみ
+            this.onSettingChange(settings);
+        } else {
+            // スタンドアロンの場合は直接適用する
+            this.applySettings(settings, force, options);
         }
     }
 
@@ -1944,7 +2019,7 @@ class PromptEditor extends HTMLElement {
             lineNumberContainer.classList.add(style["find-line-number"])
             lineContentContainer.classList.add(style["find-line-content"])
 
-            // monaco.editor.colorize* は Decoration の処理をしないため ViewLine を元に自力でHTMLを生成する必要がある
+            // monaco.editor.colorize* は Decoration の処理をしないため View Line を元に自力でHTMLを生成する必要がある
             const lineDecorations = targetModel.getLineDecorations(currentLineNum)
 
             const inlineDecorations = lineDecorations.map(lineDecoration => new InlineDecoration(
@@ -2062,11 +2137,8 @@ class PromptEditor extends HTMLElement {
 window.customElements.define('prompt-editor', PromptEditor);
 
 const runAllInstances = <T extends PromptEditor = PromptEditor>(callback: (instance: T) => boolean|void) => {
-    for (const instanceId of (Object.keys(settings.instances) as unknown as number[]).sort()) {
-        if (callback(settings.instances[instanceId] as T)) {
-            break
-        }
-    }
+    // マネージャー経由で全てのグループのインスタンスを走査するように変更
+    PromptEditorManager.runAllInstances(callback as (instance: PromptEditor) => boolean|void);
 }
 
 const customSuggestContext: {[key: string]: {
@@ -2124,6 +2196,7 @@ const showPresetManager = () => {
                 isBuiltin: false
             })
             if (instance) {
+                instance.setSettings({ userPresets: getUserPresets() })
                 instance.syncLanguageFeatures()
             }
         },
@@ -2136,6 +2209,7 @@ const showPresetManager = () => {
         onDelete: (presetId) => {
             removeUserPreset(presetId)
             if (instance) {
+                instance.setSettings({ userPresets: getUserPresets() })
                 instance.syncLanguageFeatures()
             }
         },
@@ -2154,6 +2228,9 @@ const CompletionItemInsertTextRule = monaco.languages.CompletionItemInsertTextRu
 
 export {
     PromptEditor,
+    PromptEditorManager,
+    PromptEditorMode,
+    PromptEditorOptions,
     getCount,
     _loadCSV as loadCSV,
     _addCSV as addCSV,
@@ -2182,4 +2259,5 @@ export {
     LanguagePreset,
     getAllFeatures,
     showPresetManager,
+    PresetDialog,
 }

@@ -156,7 +156,7 @@ async function loadCSVContent (files: string[]) {
         const path = [dir, filename].join('/')
         const filenameParts = filename.split('.')
         const basename = filenameParts[0]
-        const value = await fetch(path).then(res => res.text())
+        const value = await fetch(path + '?t=' + Date.now()).then(res => res.text())
         MonacoPrompt.addCSV(basename, value)
     }
 }
@@ -240,6 +240,7 @@ function onCreateTextarea(textarea: HTMLTextAreaElement, node: any, force = fals
         editor = new WebuiMonacoPrompt.PromptEditor(textarea, {
             autoLayout: true,
             handleTextAreaValue: true,
+            groupId: "comfyui",
         })
     } catch (e) {
         console.error("[WebuiMonacoPrompt] Failed to create PromptEditor", e)
@@ -330,6 +331,7 @@ function onRemoveTextarea(textarea: HTMLTextAreaElement) {
     if (editor.parentElement) {
         editor.parentElement.removeChild(ctx.monaco)
     }
+    MonacoPrompt.PromptEditorManager.getGroup("comfyui").unregister(editor)
     delete link[id]
 }
 
@@ -350,36 +352,33 @@ function getPresetDialog() {
                     features: features || {},
                     isBuiltin: false
                 })
-                MonacoPrompt.runAllInstances((instance: any) => {
-                    instance.updatePresetOptions()
-                    instance.applyPreset(id)
-                    instance.syncLanguageFeatures()
-                    return true
+                MonacoPrompt.PromptEditorManager.getGroup("comfyui").updateSettings({
+                    languagePreset: id,
+                    languageFeatures: features || {}
                 })
                 return true
             },
             onApply: (id) => {
-                MonacoPrompt.runAllInstances((instance: any) => {
-                    instance.applyPreset(id)
-                    instance.syncLanguageFeatures()
-                    return true
+                MonacoPrompt.PromptEditorManager.getGroup("comfyui").updateSettings({
+                    languagePreset: id
                 })
             },
             onDelete: (id) => {
                 MonacoPrompt.removeUserPreset(id)
-                MonacoPrompt.runAllInstances((instance: any) => {
+                MonacoPrompt.PromptEditorManager.getGroup("comfyui").rebuildLanguage()
+                // 全インスタンスのUI（セレクトボックス）を更新
+                MonacoPrompt.PromptEditorManager.runAllInstances((instance) => {
                     instance.updatePresetOptions()
-                    instance.syncLanguageFeatures()
-                    return true
+                    // trigger save manually
+                    saveSettings(instance as any)
+                })
+                // Trigger updateSettings to force saving userPresets
+                MonacoPrompt.PromptEditorManager.getGroup("comfyui").updateSettings({
+                    userPresets: MonacoPrompt.getUserPresets()
                 })
             },
             getCurrentFeatures: () => {
-                let features = {}
-                MonacoPrompt.runAllInstances((instance: any) => {
-                    features = { ...instance.languageFeatures }
-                    return true
-                })
-                return features
+                return MonacoPrompt.PromptEditorManager.getGroup("comfyui").getSettings().languageFeatures || {}
             }
         })
     }
@@ -543,14 +542,13 @@ const register = (app: any) => {
                         }
                         const key = map[id]
                         if (key) {
-                            WebuiMonacoPrompt.runAllInstances((instance) => {
-                                instance.setSettings({ [key]: value }, true)
-                            })
+                            WebuiMonacoPrompt.PromptEditorManager.getGroup("comfyui").updateSettings({ [key]: value })
                         } else if (id.startsWith("WebuiMonacoPrompt.LanguageFeature.")) {
                             const featureId = id.replace("WebuiMonacoPrompt.LanguageFeature.", "")
                             const boolValue = value === true || value === "true" || value === 1;
-                            WebuiMonacoPrompt.runAllInstances((instance) => {
-                                instance.changeLanguageFeature(featureId, boolValue)
+                            const currentFeatures = WebuiMonacoPrompt.PromptEditorManager.getGroup("comfyui").getSettings().languageFeatures || {}
+                            WebuiMonacoPrompt.PromptEditorManager.getGroup("comfyui").updateSettings({
+                                languageFeatures: { ...currentFeatures, [featureId]: boolValue }
                             })
                         }
 
@@ -568,12 +566,9 @@ const register = (app: any) => {
                                 })()
                             }
                         } else if (id.startsWith("WebuiMonacoPrompt.LanguageFeature.")) {
-                            WebuiMonacoPrompt.runAllInstances((instance) => {
-                                isInternalSyncing = true
-                                app.ui.settings.setSettingValue("WebuiMonacoPrompt.LanguagePreset", instance.currentPreset)
-                                isInternalSyncing = false
-                                return true
-                            })
+                            isInternalSyncing = true
+                            app.ui.settings.setSettingValue("WebuiMonacoPrompt.LanguagePreset", WebuiMonacoPrompt.PromptEditorManager.getGroup("comfyui").getSettings().languagePreset || "custom")
+                            isInternalSyncing = false
                         }
                     }
                 }
@@ -601,7 +596,7 @@ const register = (app: any) => {
             addSetting("WebuiMonacoPrompt.FontSize", "Font Size", "slider", 12, "", { attrs: { min: 8, max: 48, step: 1 } })
             addSetting("WebuiMonacoPrompt.FontFamily", "Font Family", "text", "")
             addSetting("WebuiMonacoPrompt.LanguagePreset", "Language Preset", "combo", "comfy-dynamic-prompt", "", { options: [...WebuiMonacoPrompt.getAllPresets().map(p => p.id), "custom"] })
-            addSetting("WebuiMonacoPrompt.KeyBindings", "Key Bindings", "combo", "VIM", "", { options: ["NORMAL", "VIM"] })
+            addSetting("WebuiMonacoPrompt.KeyBindings", "Key Bindings", "combo", "NORMAL", "", { options: ["NORMAL", "VIM"] })
             addSetting("WebuiMonacoPrompt.Theme", "Theme", "combo", "vsc-dark", "", { options: ["vs", "vs-dark", "hc-black", "hc-light"] })
             addSetting("WebuiMonacoPrompt.CsvToggle", "CSV Toggle", "hidden", {})
             addSetting("WebuiMonacoPrompt.LanguageUserPresets", "User Presets", "hidden", [])
@@ -670,15 +665,20 @@ const register = (app: any) => {
                             row.style.cursor = "pointer";
                             const cb = document.createElement("input");
                             cb.type = "checkbox";
-                            const key = `csv.${csv}`;
+                            
+                            // 拡張子を除いたベース名をキーにする
+                            const basename = csv.split('.')[0];
+                            const key = `csv.${basename}`;
+                            
                             cb.checked = csvToggle[key] !== false;
                             cb.onchange = () => {
                                 const current = { ...(app.ui.settings.getSettingValue("WebuiMonacoPrompt.CsvToggle") || {}) };
                                 current[key] = cb.checked;
-                                WebuiMonacoPrompt.runAllInstances((instance) => {
-                                    instance.setSettings({ csvToggle: current }, true);
+                                WebuiMonacoPrompt.PromptEditorManager.getGroup("comfyui").updateSettings({ csvToggle: current });
+                                const instances = (WebuiMonacoPrompt.PromptEditorManager.getGroup("comfyui") as any).editors;
+                                for (const instance of instances) {
                                     saveSettings(instance);
-                                });
+                                }
                             };
                             row.appendChild(cb);
                             row.appendChild(document.createTextNode(csv));
@@ -700,17 +700,22 @@ const register = (app: any) => {
                 }
             });
 
-            await refreshCSV()
-            await loadSetting()
+            try {
+                await refreshCSV()
+                await loadSetting()
+            } catch (e) {
+                console.error("[WebuiMonacoPrompt] Error during initial CSV/Settings load:", e)
+            }
 
             // Settings Sync Listener
             const onSettingsChanged = (e: any) => {
                 if (isInternalSyncing || (window as any).WebuiMonacoPrompt_isSaving) return;
                 const id = e.detail?.id || e.detail;
                 if (id && id.startsWith("WebuiMonacoPrompt.")) {
-                    WebuiMonacoPrompt.runAllInstances((instance) => {
+                    const instances = (WebuiMonacoPrompt.PromptEditorManager.getGroup("comfyui") as any).editors;
+                    for (const instance of instances) {
                         try { updateInstanceSettings(instance); } catch(err) {}
-                    });
+                    }
                 }
             };
             (window as any).addEventListener("comfy-settings-changed", onSettingsChanged);
@@ -731,8 +736,14 @@ const register = (app: any) => {
             // Replace existing textareas
             for (const node of app.graph._nodes) {
                 hookNodeWidgets(node)
-                WebuiMonacoPrompt.runAllInstances((instance) => registerPromptEditor(instance))
-                if (node.comfyClass === "WebuiMonacoPromptMultiText") {
+                // hookNodeWidgets 内部で register されているはずだが、念のため
+                const instances = (WebuiMonacoPrompt.PromptEditorManager.getGroup("comfyui") as any).editors;
+                for (const instance of instances) {
+                    registerPromptEditor(instance);
+                }
+
+                const nodeType = node.type || node.comfyClass;
+                if (nodeType === "WebuiMonacoPromptMultiText") {
                     multiTextNodes.add(node);
                     const originalOnRemoved = node.onRemoved;
                     node.onRemoved = function() {
@@ -740,12 +751,15 @@ const register = (app: any) => {
                         multiTextNodes.delete(node);
                     }
                 }
-                const customNode = CustomNodeFromNodeType[node.comfyClass]
+                const customNode = CustomNodeFromNodeType[nodeType]
                 if (customNode) customNode.widget.fromNode(app, node)
             }
 
             // Initial delay apply
-            WebuiMonacoPrompt.runAllInstances((instance) => updateInstanceSettings(instance));
+            const initialInstances = (WebuiMonacoPrompt.PromptEditorManager.getGroup("comfyui") as any).editors;
+            for (const instance of initialInstances) {
+                updateInstanceSettings(instance);
+            }
             isInternalSyncing = false;
         },
         nodeCreated(node:any) {

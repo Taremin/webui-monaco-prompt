@@ -461,7 +461,7 @@ class MultiTextWidget {
                     }
                 } else {
                     this.data = parsed;
-                    if (!this.data.openedFileIds) {
+                    if (!Array.isArray(this.data.openedFileIds)) {
                         this.data.openedFileIds = this.data.activeFileId ? [this.data.activeFileId] : [];
                     }
                     setupParentRefs(this.data.tree);
@@ -696,7 +696,9 @@ class MultiTextWidget {
                 return false;
             };
             
-            const newOpenedFileIds = this.data.openedFileIds.filter(fid => findFile(this.data.tree, fid));
+            const newOpenedFileIds = Array.isArray(this.data.openedFileIds) 
+                ? this.data.openedFileIds.filter(fid => findFile(this.data.tree, fid))
+                : [];
             
             if (this.data.openedFileIds.length !== newOpenedFileIds.length) {
                 this.data.openedFileIds = newOpenedFileIds;
@@ -752,7 +754,8 @@ class MultiTextWidget {
 
             this.editor = new WebuiMonacoPrompt.PromptEditor(dummyTextArea, {
                 autoLayout: true,
-                handleTextAreaValue: false
+                handleTextAreaValue: false,
+                groupId: "comfyui",
             });
             this.editor.style.height = "100%";
             this.editor.style.width = "100%";

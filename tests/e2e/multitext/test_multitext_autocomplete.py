@@ -150,10 +150,10 @@ def test_multitext_csv_autocomplete_toggle(page: Page, comfyui_server, wait_for_
         page.wait_for_timeout(500)
         
         # 設定ダイアログ内の対応するチェックボックスをクリックしてオンにする
-        checkbox = page.locator(f"input[type='checkbox'][value='{basename}']").first
+        checkbox = page.locator('label', has_text=f"{basename}.csv").locator('input[type="checkbox"]').first
         checkbox.wait_for(state="attached", timeout=5000)
         if not checkbox.is_checked():
-            checkbox.evaluate("node => node.click()")
+            checkbox.click()
             
         # 設定ダイアログを閉じる
         page.keyboard.press("Escape")

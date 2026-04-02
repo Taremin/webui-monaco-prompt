@@ -96,6 +96,10 @@ export function removeUserPreset(id: string) {
 }
 
 export function loadUserPresets(presets: LanguagePreset[]) {
+    if (!Array.isArray(presets)) {
+        userPresets = []
+        return
+    }
     userPresets = presets.filter(p => !p.isBuiltin)
 }
 

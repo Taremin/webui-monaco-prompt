@@ -165,7 +165,7 @@ function getSettings(forceReload = false) {
     if (!app?.ui?.settings) return settings;
 
     for (const [key, comfyId] of Object.entries(SETTING_MAP)) {
-        if (key === "csvToggle" || key === "languagePreset") continue
+        if (key === "csvToggle" || key === "languagePreset" || key === "userPresets") continue
         const val = app.ui.settings.getSettingValue(comfyId)
         if (val !== undefined) {
             settings[key] = val
@@ -179,6 +179,7 @@ function getSettings(forceReload = false) {
             const presets = typeof userPresetsRaw === 'string' ? JSON.parse(userPresetsRaw) : userPresetsRaw
             if (Array.isArray(presets)) {
                 WebuiMonacoPrompt.loadUserPresets(presets)
+                settings.userPresets = presets
             }
         } catch (e) {
             console.error("[WebuiMonacoPrompt] Failed to parse user presets", e)

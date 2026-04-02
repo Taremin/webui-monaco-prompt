@@ -1,7 +1,8 @@
 import * as MonacoPrompt from './index'
 import { escapeHTML } from "./utils"
 import { deepEqual } from 'fast-equals'
-import { EndPoint, GetEmbeddings, GetSnippets, CSV } from '../extension.json'
+import extensionConfig from '../extension.json'
+const { EndPoint, GetEmbeddings, GetSnippets, CSV } = extensionConfig
 declare const gradio_config: any;
 
 const me = "webui-monaco-prompt";
@@ -215,31 +216,33 @@ const me = "webui-monaco-prompt";
             const getPresetDialog = () => {
                 if (!presetDialog) {
                     presetDialog = new MonacoPrompt.PresetDialog({
-                        onSave: (name, features) => {
-                            MonacoPrompt.runAllInstances((instance: any) => {
+                        onSave: (name: string, features: MonacoPrompt.LanguageFeatureToggle) => {
+                            MonacoPrompt.PromptEditorManager.getGroup("a1111").updateSettings({
+                                languagePreset: 'custom', // Temporary, will be updated by saveCustomPreset logic if needed, but here we just want to trigger it
+                                languageFeatures: features || {}
+                            })
+                            // saveCustomPreset は内部で onSettingChange を呼ぶので、
+                            // マネージャー経由で呼ぶのが望ましい
+                            const instances = (MonacoPrompt.PromptEditorManager.getGroup("a1111") as any).editors;
+                            for (const instance of instances) {
                                 instance.saveCustomPreset(name, features)
-                                return true
+                            }
+                        },
+                        onApply: (id: string) => {
+                            MonacoPrompt.PromptEditorManager.getGroup("a1111").updateSettings({
+                                languagePreset: id
                             })
                         },
-                        onApply: (id) => {
-                            MonacoPrompt.runAllInstances((instance: any) => {
-                                instance.applyPreset(id)
-                            })
-                        },
-                        onDelete: (id) => {
+                        onDelete: (id: string) => {
                             MonacoPrompt.removeUserPreset(id)
-                            MonacoPrompt.runAllInstances((instance: any) => {
-                                instance.syncLanguageFeatures()
+                            MonacoPrompt.PromptEditorManager.getGroup("a1111").rebuildLanguage()
+                            const instances = (MonacoPrompt.PromptEditorManager.getGroup("a1111") as any).editors;
+                            for (const instance of instances) {
                                 instance.updatePresetOptions()
-                            })
+                            }
                         },
                         getCurrentFeatures: () => {
-                            let features = {}
-                            MonacoPrompt.runAllInstances((instance: any) => {
-                                features = { ...instance.languageFeatures }
-                                return true
-                            })
-                            return features
+                            return MonacoPrompt.PromptEditorManager.getGroup("a1111").getSettings().languageFeatures || {}
                         }
                     })
                 }
@@ -301,6 +304,9 @@ const me = "webui-monaco-prompt";
                 }
 
                 editor.setSettings(settings)
+
+                // PromptEditorManager に登録
+                MonacoPrompt.PromptEditorManager.getGroup("a1111").register(editor)
 
                 const saveSettings = async () => {
                     const currentSettings = editor.getSettings()
