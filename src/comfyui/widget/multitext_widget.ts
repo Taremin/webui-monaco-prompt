@@ -972,6 +972,19 @@ class MultiTextWidget {
                 itemEl.appendChild(indent)
             }
 
+            // 矢印（整列のために常に作成、16px固定）
+            const arrowContainer = document.createElement("span")
+            arrowContainer.className = getStyle("webui-monaco-prompt-multitext-tree-arrow")
+            arrowContainer.style.width = "16px"
+            arrowContainer.style.display = "flex"
+            arrowContainer.style.flexShrink = "0"
+            if (item.type === 'folder') {
+                arrowContainer.innerHTML = item.expanded ? MultiTextWidget.ICONS.arrowDown : MultiTextWidget.ICONS.arrowRight
+            } else {
+                arrowContainer.innerHTML = ""
+            }
+            itemEl.appendChild(arrowContainer)
+
             // Selection Mode の場合のチェックボックス
             if (this.data.selectionMode) {
                 const checkbox = document.createElement("input");
@@ -988,19 +1001,6 @@ class MultiTextWidget {
                 });
                 itemEl.appendChild(checkbox);
             }
-
-            // 矢印（整列のために常に作成、16px固定）
-            const arrowContainer = document.createElement("span")
-            arrowContainer.className = getStyle("webui-monaco-prompt-multitext-tree-arrow")
-            arrowContainer.style.width = "16px"
-            arrowContainer.style.display = "flex"
-            arrowContainer.style.flexShrink = "0"
-            if (item.type === 'folder') {
-                arrowContainer.innerHTML = item.expanded ? MultiTextWidget.ICONS.arrowDown : MultiTextWidget.ICONS.arrowRight
-            } else {
-                arrowContainer.innerHTML = ""
-            }
-            itemEl.appendChild(arrowContainer)
 
             // アイコン
             const iconEl = document.createElement("span")
