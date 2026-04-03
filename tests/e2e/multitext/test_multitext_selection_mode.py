@@ -43,13 +43,15 @@ def test_multitext_selection_mode(page: Page, comfyui_server, wait_for_comfyui, 
     add_folder_btn.click()
     wmp_helpers.wait_for_ui_stabilize(page, 500)
 
-    # SubFolder を選択してその中に "sub_file.txt" を作成
-    sub_folder_item = page.locator("div").filter(has_text=re.compile(r"^SubFolder$")).first
-    sub_folder_item.click()
-    wmp_helpers.wait_for_ui_stabilize(page, 200)
-
-    dialog_text = "sub_file.txt"
-    add_file_btn.click()
+    # SubFolder の ID を取得し、その中に "sub_file.txt" を作成する
+    page.evaluate("""() => {
+        const node = app.graph._nodes.find(n => n.type === 'WebuiMonacoPromptMultiText');
+        const tree = node.multitext_widget.data.tree;
+        const subFolder = tree.find(i => i.name === 'SubFolder');
+        if (subFolder) {
+            node.multitext_widget.addItemWithName('file', 'sub_file.txt', subFolder.id);
+        }
+    }""")
     wmp_helpers.wait_for_ui_stabilize(page, 500)
 
     # 1. Selection Mode を有効化し、チェックボックスが表示されることを確認
@@ -66,9 +68,25 @@ def test_multitext_selection_mode(page: Page, comfyui_server, wait_for_comfyui, 
     default_checkbox.click(force=True)
     expect(default_checkbox).not_to_be_checked()
 
-    # SubFolder のチェックボックス
+    # SubFolder のチェックボックスと sub_file.txt のチェックボックスを取得
+    sub_folder_item = page.locator("div").filter(has_text=re.compile(r"^SubFolder$")).first
     sub_folder_checkbox = sub_folder_item.locator("xpath=..").locator("input[type='checkbox']").first
+    sub_file_item = page.locator("div").filter(has_text=re.compile(r"^sub_file.txt$")).first
+    sub_file_checkbox = sub_file_item.locator("xpath=..").locator("input[type='checkbox']").first
+
+    # (A) 親(SubFolder)をOFFにすると、子(sub_file.txt)もOFFになることの確認
     sub_folder_checkbox.click(force=True)
+    expect(sub_folder_checkbox).not_to_be_checked()
+    expect(sub_file_checkbox).not_to_be_checked()
+
+    # (B) 子をONにすると、親もON(出力ルート確保のため)になることの確認
+    sub_file_checkbox.click(force=True)
+    expect(sub_file_checkbox).to_be_checked()
+    expect(sub_folder_checkbox).to_be_checked() # 子が全てONなので親も完全なONになる
+
+    # (C) 再度子をOFFにすると、子要素がすべてOFFになるため親もOFFになることの確認
+    sub_file_checkbox.click(force=True)
+    expect(sub_file_checkbox).not_to_be_checked()
     expect(sub_folder_checkbox).not_to_be_checked()
 
     # データへの反映を確実にする
@@ -129,12 +147,14 @@ def test_multitext_selection_mode(page: Page, comfyui_server, wait_for_comfyui, 
 
         const defaultTxt = data.tree.find(i => i.name === 'default.txt');
         const subFolder = data.tree.find(i => i.name === 'SubFolder');
+        const subFile = subFolder && subFolder.children ? subFolder.children.find(i => i.name === 'sub_file.txt') : null;
 
-        // どちらも output が false もしくは "false" となっていることを確認
+        // 全て output が false もしくは "false" となっていることを確認
         const isDefaultTxtUnchecked = defaultTxt && (defaultTxt.output === false || defaultTxt.output === "false");
         const isSubFolderUnchecked = subFolder && (subFolder.output === false || subFolder.output === "false");
+        const isSubFileUnchecked = subFile && (subFile.output === false || subFile.output === "false");
 
-        return isDefaultTxtUnchecked && isSubFolderUnchecked;
+        return isDefaultTxtUnchecked && isSubFolderUnchecked && isSubFileUnchecked;
     }""")
 
     assert is_persisted, "Selection Mode and uncheck states should be persisted after reload"

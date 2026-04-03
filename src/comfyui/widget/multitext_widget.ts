@@ -990,14 +990,69 @@ class MultiTextWidget {
                 const checkbox = document.createElement("input");
                 checkbox.type = "checkbox";
                 checkbox.className = getStyle("webui-monaco-prompt-multitext-tree-checkbox");
-                checkbox.checked = item.output !== false; // undefined は true 扱い
+
+                const checkStates = (node: TreeItem): { hasOn: boolean, hasOff: boolean } => {
+                    if (node.type !== 'folder' || !node.children || node.children.length === 0) {
+                        return { hasOn: node.output !== false, hasOff: node.output === false };
+                    }
+                    let hasOn = false;
+                    let hasOff = false;
+                    for (const child of node.children) {
+                        const st = checkStates(child);
+                        hasOn = hasOn || st.hasOn;
+                        hasOff = hasOff || st.hasOff;
+                    }
+                    return { hasOn, hasOff };
+                };
+
+                if (item.type === 'folder' && item.children && item.children.length > 0) {
+                    const st = checkStates(item);
+                    if (st.hasOn && !st.hasOff) {
+                        checkbox.checked = true;
+                        checkbox.indeterminate = false;
+                        if (item.output === false) item.output = true; // 自己修復
+                    } else if (!st.hasOn && st.hasOff) {
+                        checkbox.checked = false;
+                        checkbox.indeterminate = false;
+                        if (item.output !== false) item.output = false; // 自己修復
+                    } else if (st.hasOn && st.hasOff) {
+                        checkbox.checked = true; // 親がOFFだと子が出力されないのでON扱いにする
+                        checkbox.indeterminate = true;
+                        if (item.output === false) item.output = true; // 自己修復
+                    }
+                } else {
+                    checkbox.checked = item.output !== false; // undefined は true 扱い
+                }
+
                 checkbox.addEventListener("click", (e) => {
                     e.stopPropagation(); // ツリーアイテムのクリックとして誤検知させない
                 });
                 checkbox.addEventListener("change", (e) => {
                     e.stopPropagation();
-                    item.output = (e.target as HTMLInputElement).checked;
+                    const newValue = (e.target as HTMLInputElement).checked;
+
+                    const updateChildren = (node: TreeItem, val: boolean) => {
+                        node.output = val;
+                        if (node.type === 'folder' && node.children) {
+                            node.children.forEach(child => updateChildren(child, val));
+                        }
+                    };
+
+                    const updateParents = (node: TreeItem) => {
+                        if (!node.parent) return;
+                        const parent = node.parent;
+                        if (parent.type === 'folder' && parent.children) {
+                            const hasOn = parent.children.some(c => c.output !== false);
+                            parent.output = hasOn;
+                            updateParents(parent);
+                        }
+                    };
+
+                    updateChildren(item, newValue);
+                    updateParents(item);
+
                     this.commitData();
+                    this.renderTree();
                 });
                 itemEl.appendChild(checkbox);
             }
