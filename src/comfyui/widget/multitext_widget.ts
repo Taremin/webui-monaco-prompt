@@ -19,6 +19,7 @@ interface TreeItem {
     children?: TreeItem[]; // type === 'folder' の場合のみ
     expanded?: boolean;
     parent?: TreeItem; // 実行時の親参照（非永続）
+    output?: boolean; // 出力対象に含めるか (未定義は true とみなす)
 }
 
 interface MultiTextData {
@@ -26,6 +27,7 @@ interface MultiTextData {
     activeFileId?: string;
     openedFileIds?: string[];
     sidebarWidth?: number;
+    selectionMode?: boolean; // 選択モードが有効かどうか
 }
 
 class MultiTextWidget {
@@ -43,6 +45,7 @@ class MultiTextWidget {
         delete: '<svg width="14" height="14" viewBox="0 0 16 16"><path fill="currentColor" d="M11 1.5V1h-6v.5H2v1h1v11l1 1h8l1-1V2.5h1v-1h-3zm1 12H4v-11h8v11zM5 4h1v8H5V4zm3 0h1v8H8V4z"/></svg>',
         search: '<svg width="16" height="16" viewBox="0 0 16 16"><path fill="currentColor" d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zm-5.442 1.102a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11z"/></svg>',
         close: '<svg width="16" height="16" viewBox="0 0 16 16"><path fill="currentColor" d="M12.7 4.3l-.7-.7-4 4-4-4-.7.7 4 4-4 4 .7.7 4-4 4 4 .7-.7-4-4 4-4z"/></svg>',
+        checklist: '<svg width="16" height="16" viewBox="0 0 16 16"><path fill="currentColor" d="M14 4H5V3h9v1zm0 3H5V6h9v1zm0 3H5V9h9v1zm0 3H5v-1h9v1zM3 4H2V3h1v1zm0 3H2V6h1v1zm0 3H2V9h1v1zm0 3H2v-1h1v1z"/></svg>',
     }
 
     elements: {
@@ -186,9 +189,22 @@ class MultiTextWidget {
         this.elements.addFolderBtn = this.createToolbarButton(MultiTextWidget.ICONS.addFolder, "New Folder", () => this.addItem('folder'));
         this.elements.searchBtn = this.createToolbarButton(MultiTextWidget.ICONS.search, "Search", () => this.toggleSearch());
         
+        const toggleSelectionModeBtn = this.createToolbarButton(MultiTextWidget.ICONS.checklist, "Toggle Selection Mode", () => {
+            this.data.selectionMode = !this.data.selectionMode;
+            if (this.data.selectionMode) {
+                toggleSelectionModeBtn.classList.add(getStyle("active"));
+            } else {
+                toggleSelectionModeBtn.classList.remove(getStyle("active"));
+            }
+            this.renderTree();
+            this.commitData();
+        });
+        if (this.data.selectionMode) toggleSelectionModeBtn.classList.add(getStyle("active"));
+
         toolbar.appendChild(this.elements.addFileBtn);
         toolbar.appendChild(this.elements.addFolderBtn);
         toolbar.appendChild(this.elements.searchBtn);
+        toolbar.appendChild(toggleSelectionModeBtn);
 
         // 検索コンテナ
         const searchContainer = this.elements.searchContainer = document.createElement("div")
@@ -954,6 +970,23 @@ class MultiTextWidget {
                 indent.style.width = "4px"
                 indent.style.flexShrink = "0"
                 itemEl.appendChild(indent)
+            }
+
+            // Selection Mode の場合のチェックボックス
+            if (this.data.selectionMode) {
+                const checkbox = document.createElement("input");
+                checkbox.type = "checkbox";
+                checkbox.className = getStyle("webui-monaco-prompt-multitext-tree-checkbox");
+                checkbox.checked = item.output !== false; // undefined は true 扱い
+                checkbox.addEventListener("click", (e) => {
+                    e.stopPropagation(); // ツリーアイテムのクリックとして誤検知させない
+                });
+                checkbox.addEventListener("change", (e) => {
+                    e.stopPropagation();
+                    item.output = (e.target as HTMLInputElement).checked;
+                    this.commitData();
+                });
+                itemEl.appendChild(checkbox);
             }
 
             // 矢印（整列のために常に作成、16px固定）

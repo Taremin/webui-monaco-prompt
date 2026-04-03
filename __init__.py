@@ -107,9 +107,13 @@ class WebuiMonacoPromptMultiText:
             tree = data.get("tree", [])
             contents = []
             json_list = []
+            selection_mode = data.get("selectionMode", False)
 
             def traverse(items, current_path=""):
                 for item in items:
+                    if selection_mode and not item.get("output", True):
+                        continue
+
                     name = item.get("name", "")
                     path = f"{current_path}/{name}" if current_path else name
                     

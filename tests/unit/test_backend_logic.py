@@ -8,9 +8,13 @@ def multitext_process_logic(text):
         
         contents = []
         json_list = []
+        selection_mode = data.get("selectionMode", False)
 
         def traverse(items, current_path=""):
             for item in items:
+                if selection_mode and not item.get("output", True):
+                    continue
+
                 name = item.get("name", "")
                 # パスの構築 (スラッシュ区切り)
                 path = f"{current_path}/{name}" if current_path else name
@@ -65,6 +69,23 @@ def test_multitext_logic():
     assert len(contents) == 1
     assert contents[0] == "OLD_FORMAT_TEXT"
     assert "OLD_FORMAT_TEXT" in json_list[0]
+
+    # 3. Selection Mode のテスト
+    selection_test_data = {
+        "selectionMode": True,
+        "tree": [
+            {"id": "f1", "name": "test1.txt", "type": "file", "content": "CONTENT1"},
+            {"id": "f2", "name": "test2.txt", "type": "file", "content": "CONTENT2", "output": False},
+            {
+                "id": "dir", "name": "Sub", "type": "folder", "output": False,
+                "children": [{"id": "f3", "name": "sub.txt", "type": "file", "content": "CONTENT3"}]
+            }
+        ]
+    }
+    contents, json_list = multitext_process_logic(json.dumps(selection_test_data))
+    
+    assert len(contents) == 1
+    assert contents[0] == "CONTENT1"
     
     print("Backend Logic (extracted) PASSED!")
 

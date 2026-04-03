@@ -233,6 +233,23 @@
 
 .webui-monaco-prompt-multitext-tree-indent {}
 
+.webui-monaco-prompt-multitext-tree-checkbox {
+    margin: 0 4px 0 0 !important;
+    padding: 0 !important;
+    width: 14px !important;
+    height: 14px !important;
+    cursor: pointer !important;
+    flex-shrink: 0 !important;
+    appearance: auto !important; /* ブラウザ標準のチェックボックスを使用 */
+    -webkit-appearance: checkbox !important;
+    -moz-appearance: checkbox !important;
+}
+
+.webui-monaco-prompt-multitext-toolbar-button.active {
+    background-color: rgba(0, 122, 204, 0.4) !important;
+    color: #ffffff !important;
+}
+
 /* MultiText Search UI */
 .webui-monaco-prompt-multitext-sidebar-search {
     padding: 6px 10px !important;

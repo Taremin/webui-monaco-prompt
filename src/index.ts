@@ -285,7 +285,9 @@ class PromptEditor extends HTMLElement {
             this.init(textarea)
         }
 
-        // DOM に付随する初期化ワークアラウンド（非同期）
+        // 1. 要素がDOMツリーにアタッチ（appendChild等）され、実際のサイズが確定するのを待つため（handleResize用）。
+        // 2. Monaco Editorが内部的に生成するDOM要素（.overflow-guard等）がアクセス可能になるのを待つため。
+        // 3. multiple-select-vanilla等のUIコンポーネントが、正しいレイアウト（親要素のサイズ確定後）で初期化されるようにするため。
         setTimeout(() => {
             this.initializeLayoutWorkarounds(options)
             this.updateAutoComplete()
