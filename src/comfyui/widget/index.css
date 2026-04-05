@@ -260,6 +260,16 @@
     gap: 6px !important;
 }
 
+.webui-monaco-prompt-multitext-sidebar-selection-toolbar {
+    padding: 4px 10px !important;
+    background-color: #252526 !important;
+    border-bottom: 1px solid #333 !important;
+    display: flex;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 6px !important;
+}
+
 .webui-monaco-prompt-multitext-search-input {
     width: 100% !important;
     background-color: #3c3c3c !important;

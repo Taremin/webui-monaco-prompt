@@ -46,6 +46,8 @@ class MultiTextWidget {
         search: '<svg width="16" height="16" viewBox="0 0 16 16"><path fill="currentColor" d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zm-5.442 1.102a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11z"/></svg>',
         close: '<svg width="16" height="16" viewBox="0 0 16 16"><path fill="currentColor" d="M12.7 4.3l-.7-.7-4 4-4-4-.7.7 4 4-4 4 .7.7 4-4 4 4 .7-.7-4-4 4-4z"/></svg>',
         checklist: '<svg width="16" height="16" viewBox="0 0 16 16"><path fill="currentColor" d="M14 4H5V3h9v1zm0 3H5V6h9v1zm0 3H5V9h9v1zm0 3H5v-1h9v1zM3 4H2V3h1v1zm0 3H2V6h1v1zm0 3H2V9h1v1zm0 3H2v-1h1v1z"/></svg>',
+        checkAll: '<svg width="16" height="16" viewBox="0 0 16 16"><path fill="currentColor" d="M14 4.5l-1-1L7.5 9 5.5 7l-1 1 3 3 6.5-6.5zM8.5 12.5l-1-1L2 7l-1 1 5.5 5.5L8.5 12.5z"/></svg>',
+        uncheckAll: '<svg width="16" height="16" viewBox="0 0 16 16"><path fill="currentColor" d="M2.5 2h11l.5.5v11l-.5.5h-11l-.5-.5v-11l.5-.5zM3 3v10h10V3H3z"/></svg>',
     }
 
     elements: {
@@ -61,6 +63,7 @@ class MultiTextWidget {
         searchContainer?: HTMLDivElement;
         searchInput?: HTMLInputElement;
         searchResults?: HTMLDivElement;
+        selectionToolbarContainer?: HTMLDivElement;
     } = {};
 
     public data: MultiTextData = { tree: [], activeFileId: undefined, openedFileIds: [], sidebarWidth: 150 };
@@ -68,6 +71,7 @@ class MultiTextWidget {
     private models: { [id: string]: Monaco.editor.ITextModel } = {};
     private lastSelectedId: string | null = null;
     private _selectedIds: Set<string> = new Set();
+    private checkboxElements: Map<string, HTMLInputElement> = new Map();
     private editingId: string | null = null; // 現在編集中のアイテムID
 
     private syncModels() {
@@ -196,6 +200,9 @@ class MultiTextWidget {
             } else {
                 toggleSelectionModeBtn.classList.remove(getStyle("active"));
             }
+            if (this.elements.selectionToolbarContainer) {
+                this.elements.selectionToolbarContainer.style.display = this.data.selectionMode ? "flex" : "none";
+            }
             this.renderTree();
             this.commitData();
         });
@@ -246,6 +253,18 @@ class MultiTextWidget {
         searchContainer.appendChild(searchInputWrapper)
         sidebarEl.appendChild(searchContainer)
         sidebarEl.appendChild(searchResults)
+
+        // 選択モード用一括操作ツールバー
+        const selectionToolbar = this.elements.selectionToolbarContainer = document.createElement("div")
+        selectionToolbar.className = getStyle("webui-monaco-prompt-multitext-sidebar-selection-toolbar")
+        selectionToolbar.style.display = this.data.selectionMode ? "flex" : "none"
+
+        const checkAllBtn = this.createToolbarButton(MultiTextWidget.ICONS.checkAll, "Check All", () => this.setAllOutput(true));
+        const uncheckAllBtn = this.createToolbarButton(MultiTextWidget.ICONS.uncheckAll, "Uncheck All", () => this.setAllOutput(false));
+        
+        selectionToolbar.appendChild(checkAllBtn)
+        selectionToolbar.appendChild(uncheckAllBtn)
+        sidebarEl.appendChild(selectionToolbar)
 
         const treeContainer = this.elements.treeContainer = document.createElement("div")
         treeContainer.className = getStyle("webui-monaco-prompt-multitext-tree-container")
@@ -919,6 +938,7 @@ class MultiTextWidget {
 
     private renderTree() {
         if (!this.elements.treeContainer) return
+        this.checkboxElements.clear()
         this.elements.treeContainer.innerHTML = ""
         const rootDiv = document.createElement("div")
         rootDiv.className = getStyle("webui-monaco-prompt-multitext-tree")
@@ -990,39 +1010,11 @@ class MultiTextWidget {
                 const checkbox = document.createElement("input");
                 checkbox.type = "checkbox";
                 checkbox.className = getStyle("webui-monaco-prompt-multitext-tree-checkbox");
+                this.checkboxElements.set(item.id, checkbox);
 
-                const checkStates = (node: TreeItem): { hasOn: boolean, hasOff: boolean } => {
-                    if (node.type !== 'folder' || !node.children || node.children.length === 0) {
-                        return { hasOn: node.output !== false, hasOff: node.output === false };
-                    }
-                    let hasOn = false;
-                    let hasOff = false;
-                    for (const child of node.children) {
-                        const st = checkStates(child);
-                        hasOn = hasOn || st.hasOn;
-                        hasOff = hasOff || st.hasOff;
-                    }
-                    return { hasOn, hasOff };
-                };
-
-                if (item.type === 'folder' && item.children && item.children.length > 0) {
-                    const st = checkStates(item);
-                    if (st.hasOn && !st.hasOff) {
-                        checkbox.checked = true;
-                        checkbox.indeterminate = false;
-                        if (item.output === false) item.output = true; // 自己修復
-                    } else if (!st.hasOn && st.hasOff) {
-                        checkbox.checked = false;
-                        checkbox.indeterminate = false;
-                        if (item.output !== false) item.output = false; // 自己修復
-                    } else if (st.hasOn && st.hasOff) {
-                        checkbox.checked = true; // 親がOFFだと子が出力されないのでON扱いにする
-                        checkbox.indeterminate = true;
-                        if (item.output === false) item.output = true; // 自己修復
-                    }
-                } else {
-                    checkbox.checked = item.output !== false; // undefined は true 扱い
-                }
+                const st = this.calculateCheckState(item);
+                checkbox.checked = st.checked;
+                checkbox.indeterminate = st.indeterminate;
 
                 checkbox.addEventListener("click", (e) => {
                     e.stopPropagation(); // ツリーアイテムのクリックとして誤検知させない
@@ -1052,7 +1044,7 @@ class MultiTextWidget {
                     updateParents(item);
 
                     this.commitData();
-                    this.renderTree();
+                    this.syncCheckboxes();
                 });
                 itemEl.appendChild(checkbox);
             }
@@ -1327,6 +1319,72 @@ class MultiTextWidget {
         }
     }
     
+    private setAllOutput(value: boolean) {
+        const updateRecursive = (item: TreeItem, val: boolean) => {
+            item.output = val;
+            if (item.type === 'folder' && item.children) {
+                item.children.forEach(child => updateRecursive(child, val));
+            }
+        };
+        this.data.tree.forEach(item => updateRecursive(item, value));
+        this.commitData();
+        this.syncCheckboxes();
+    }
+
+    private syncCheckboxes() {
+        const updateStates = (items: TreeItem[]) => {
+            for (const item of items) {
+                const checkbox = this.checkboxElements.get(item.id);
+                if (checkbox) {
+                    const st = this.calculateCheckState(item);
+                    checkbox.checked = st.checked;
+                    checkbox.indeterminate = st.indeterminate;
+                }
+                if (item.children) updateStates(item.children);
+            }
+        };
+        updateStates(this.data.tree);
+    }
+
+    private calculateCheckState(node: TreeItem): { checked: boolean, indeterminate: boolean } {
+        if (node.type !== 'folder' || !node.children || node.children.length === 0) {
+            return { checked: node.output !== false, indeterminate: false };
+        }
+        let hasOn = false;
+        let hasOff = false;
+        const checkChildren = (items: TreeItem[]) => {
+            for (const child of items) {
+                if (child.type === 'folder' && child.children && child.children.length > 0) {
+                    checkChildren(child.children);
+                } else {
+                    if (child.output !== false) hasOn = true;
+                    else hasOff = true;
+                }
+            }
+        };
+        
+        // 直近の子供だけでなく末端まで見る必要があるが、現在のロジックに合わせる
+        // renderTreeItemsの元のロジックを流用:
+        const checkDeep = (n: TreeItem): { hasOn: boolean, hasOff: boolean } => {
+            if (n.type !== 'folder' || !n.children || n.children.length === 0) {
+                return { hasOn: n.output !== false, hasOff: n.output === false };
+            }
+            let hOn = false;
+            let hOff = false;
+            for (const child of n.children) {
+                const st = checkDeep(child);
+                hOn = hOn || st.hasOn;
+                hOff = hOff || st.hasOff;
+            }
+            return { hasOn: hOn, hasOff: hOff };
+        };
+
+        const res = checkDeep(node);
+        if (res.hasOn && !res.hasOff) return { checked: true, indeterminate: false };
+        if (!res.hasOn && res.hasOff) return { checked: false, indeterminate: false };
+        return { checked: true, indeterminate: true }; // 親がOFFだと子が出力されないのでON扱いにする
+    }
+
     public getItemPath(id: string): string {
         const parts: string[] = [];
         const findAndTrace = (items: TreeItem[]): TreeItem | undefined => {
