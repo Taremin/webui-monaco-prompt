@@ -6,23 +6,25 @@ import * as WebuiMonacoPrompt from "../../index"
 import { WebuiMonacoPromptAdapter, PromptEditor, ExtraModel } from "../types"
 import { updateInstanceSettings, saveSettings } from "../settings"
 import { default as style } from "./index.css"
+import { render, h } from "preact";
+import { MultiTextUI } from "./components/MultiTextUI";
 
-const getStyle = (name: string) => utils.getStyle(style, name)
+export const getStyle = (name: string) => utils.getStyle(style, name)
 
 // 今回のノードの内部データ構造（WorkflowにJSON化して保存）
 // ツリー構造のアイテム定義
-interface TreeItem {
+export interface TreeItem {
     id: string; // 内部管理用の一意識別子
     name: string;
     type: 'file' | 'folder';
     content?: string; // type === 'file' の場合のみ
-    children?: TreeItem[]; // type === 'folder' の場合のみ
+    children?: TreeItem[]; // type === 'folder' // type === 'folder' の場合のみ
     expanded?: boolean;
     parent?: TreeItem; // 実行時の親参照（非永続）
     output?: boolean; // 出力対象に含めるか (未定義は true とみなす)
 }
 
-interface MultiTextData {
+export interface MultiTextData {
     tree: TreeItem[];
     activeFileId?: string;
     openedFileIds?: string[];
@@ -34,7 +36,7 @@ class MultiTextWidget {
     _app: any
     _onNodeCreatedOriginal?: any
 
-    private static ICONS = {
+    public static ICONS = {
         arrowRight: '<svg width="16" height="16" viewBox="0 0 16 16"><path fill="currentColor" d="M6 12.7l.7.7 4.4-4.4L6.7 4.6l-.7.7 3.7 3.7L6 12.7z"/></svg>',
         arrowDown: '<svg width="16" height="16" viewBox="0 0 16 16"><path fill="currentColor" d="M4.6 6.7l.7-.7 3.7 3.7 3.7-3.7.7.7-4.4 4.4L4.6 6.7z"/></svg>',
         folder: '<svg width="16" height="16" viewBox="0 0 16 16"><path fill="currentColor" d="M14.5 3H7.71l-2-2H1.5c-.83 0-1.5.67-1.5 1.5v9c0 .83.67 1.5 1.5 1.5h13c.83 0 1.5-.67 1.5-1.5v-7c0-.83-.67-1.5-1.5-1.5zm.5 8.5c0 .28-.22.5-.5.5h-13c-.28 0-.5-.22-.5-.5v-9c0-.28.22-.5.5-.5h4.21l2 2H14.5c.28 0 .5.22.5.5v7z"/></svg>',
@@ -73,6 +75,21 @@ class MultiTextWidget {
     private _selectedIds: Set<string> = new Set();
     private checkboxElements: Map<string, HTMLInputElement> = new Map();
     private editingId: string | null = null; // 現在編集中のアイテムID
+
+    private _listeners: ((data: MultiTextData) => void)[] = [];
+
+    public subscribe(listener: (data: MultiTextData) => void): () => void {
+        this._listeners.push(listener);
+        return () => {
+            this._listeners = this._listeners.filter(l => l !== listener);
+        };
+    }
+
+    public notifyListeners() {
+        for (const listener of this._listeners) {
+            listener(this.data);
+        }
+    }
 
     private syncModels() {
         if (!this.editor) return;
@@ -165,7 +182,6 @@ class MultiTextWidget {
             self.onRemoved();
         };
 
-        // コンテナの構築
         const containerEl = this.elements.container = document.createElement("div")
         containerEl.className = getStyle("webui-monaco-prompt-multitext-container")
         containerEl.style.display = "flex"
@@ -178,181 +194,7 @@ class MultiTextWidget {
         containerEl.style.position = "absolute" // 追加
         containerEl.style.top = "0px"           // 追加
 
-        // サイドバー
-        const sidebarEl = this.elements.sidebar = document.createElement("div")
-        sidebarEl.className = getStyle("webui-monaco-prompt-multitext-sidebar")
-        
-        const toolbar = document.createElement("div")
-        toolbar.className = getStyle("webui-monaco-prompt-multitext-sidebar-toolbar")
-
-        const addFileBtn = this.elements.addFileBtn = document.createElement("button")
-        toolbar.className = getStyle("webui-monaco-prompt-multitext-sidebar-toolbar")
-        sidebarEl.appendChild(toolbar)
-
-        this.elements.addFileBtn = this.createToolbarButton(MultiTextWidget.ICONS.addFile, "New File", () => this.addItem('file'));
-        this.elements.addFolderBtn = this.createToolbarButton(MultiTextWidget.ICONS.addFolder, "New Folder", () => this.addItem('folder'));
-        this.elements.searchBtn = this.createToolbarButton(MultiTextWidget.ICONS.search, "Search", () => this.toggleSearch());
-        
-        const toggleSelectionModeBtn = this.createToolbarButton(MultiTextWidget.ICONS.checklist, "Toggle Selection Mode", () => {
-            this.data.selectionMode = !this.data.selectionMode;
-            if (this.data.selectionMode) {
-                toggleSelectionModeBtn.classList.add(getStyle("active"));
-            } else {
-                toggleSelectionModeBtn.classList.remove(getStyle("active"));
-            }
-            if (this.elements.selectionToolbarContainer) {
-                this.elements.selectionToolbarContainer.style.display = this.data.selectionMode ? "flex" : "none";
-            }
-            this.renderTree();
-            this.commitData();
-        });
-        if (this.data.selectionMode) toggleSelectionModeBtn.classList.add(getStyle("active"));
-
-        toolbar.appendChild(this.elements.addFileBtn);
-        toolbar.appendChild(this.elements.addFolderBtn);
-        toolbar.appendChild(this.elements.searchBtn);
-        toolbar.appendChild(toggleSelectionModeBtn);
-
-        // 検索コンテナ
-        const searchContainer = this.elements.searchContainer = document.createElement("div")
-        searchContainer.className = getStyle("webui-monaco-prompt-multitext-sidebar-search")
-        searchContainer.style.display = "none" // 初期状態は非表示
-        
-        const searchInputWrapper = document.createElement("div")
-        searchInputWrapper.className = getStyle("webui-monaco-prompt-multitext-search-input-wrapper")
-
-        const searchInput = this.elements.searchInput = document.createElement("input")
-        searchInput.type = "text"
-        searchInput.placeholder = "Search content..."
-        searchInput.className = getStyle("webui-monaco-prompt-multitext-search-input")
-        searchInput.addEventListener("input", () => this.executeSearch())
-        searchInput.addEventListener("keydown", (e) => {
-            if (e.key === "Enter") this.executeSearch()
-            if (e.key === "Escape") this.toggleSearch()
-        })
-        
-        const clearBtn = document.createElement("button")
-        clearBtn.innerHTML = MultiTextWidget.ICONS.close
-        clearBtn.className = getStyle("webui-monaco-prompt-multitext-search-clear-btn")
-        clearBtn.title = "Clear Search"
-        clearBtn.addEventListener("click", () => {
-            if (this.elements.searchInput) {
-                this.elements.searchInput.value = "";
-                this.executeSearch();
-                this.elements.searchInput.focus();
-            }
-        });
-
-        searchInputWrapper.appendChild(searchInput)
-        searchInputWrapper.appendChild(clearBtn)
-        
-        const searchResults = this.elements.searchResults = document.createElement("div")
-        searchResults.className = getStyle("webui-monaco-prompt-multitext-search-results")
-        searchResults.style.display = "none"
-        
-        searchContainer.appendChild(searchInputWrapper)
-        sidebarEl.appendChild(searchContainer)
-        sidebarEl.appendChild(searchResults)
-
-        // 選択モード用一括操作ツールバー
-        const selectionToolbar = this.elements.selectionToolbarContainer = document.createElement("div")
-        selectionToolbar.className = getStyle("webui-monaco-prompt-multitext-sidebar-selection-toolbar")
-        selectionToolbar.style.display = this.data.selectionMode ? "flex" : "none"
-
-        const checkAllBtn = this.createToolbarButton(MultiTextWidget.ICONS.checkAll, "Check All", () => this.setAllOutput(true));
-        const uncheckAllBtn = this.createToolbarButton(MultiTextWidget.ICONS.uncheckAll, "Uncheck All", () => this.setAllOutput(false));
-        
-        selectionToolbar.appendChild(checkAllBtn)
-        selectionToolbar.appendChild(uncheckAllBtn)
-        sidebarEl.appendChild(selectionToolbar)
-
-        const treeContainer = this.elements.treeContainer = document.createElement("div")
-        treeContainer.className = getStyle("webui-monaco-prompt-multitext-tree-container")
-        treeContainer.style.flex = "1"
-        treeContainer.style.overflowY = "auto"
-        sidebarEl.appendChild(treeContainer)
-
-        // エディタ領域
-        const editorWrapper = document.createElement("div")
-        editorWrapper.className = getStyle("webui-monaco-prompt-multitext-main-area")
-        editorWrapper.style.flex = "1"
-        editorWrapper.style.display = "flex"
-        editorWrapper.style.flexDirection = "column"
-        editorWrapper.style.minWidth = "0"
-        editorWrapper.style.overflow = "visible"
-
-        const tabsContainer = this.elements.tabsContainer = document.createElement("div")
-        tabsContainer.addEventListener('wheel', (e) => {
-            tabsContainer.scrollLeft += e.deltaY;
-            e.preventDefault();
-        });
-        tabsContainer.className = getStyle("webui-monaco-prompt-multitext-tabs-container")
-        tabsContainer.style.height = "35px"
-        tabsContainer.style.background = "#252526"
-        tabsContainer.style.display = "flex"
-        tabsContainer.style.alignItems = "center"
-        tabsContainer.style.overflowX = "hidden"
-        tabsContainer.style.overflowY = "hidden"
-        tabsContainer.style.borderBottom = "1px solid #333"
-        editorWrapper.appendChild(tabsContainer)
-
-        const editorContainer = this.elements.editorContainer = document.createElement("div")
-        editorContainer.className = getStyle("webui-monaco-prompt-multitext-editor-container")
-        editorContainer.style.flex = "1"
-        editorContainer.style.overflow = "visible"
-        editorContainer.style.position = "relative"
-        editorContainer.style.width = "100%"
-        editorContainer.style.minHeight = "50px" // 最小限の高さを確保しつつ、リサイズを妨げない
-        editorContainer.style.display = "block"   // 確実に表示
-        editorWrapper.appendChild(editorContainer)
-
-        // リサイズハンドル
-        const resizer = document.createElement("div")
-        resizer.className = getStyle("webui-monaco-prompt-multitext-resizer")
-        
-        let isResizing = false
-
-        const handleMouseMove = (e: MouseEvent) => {
-            if (!isResizing) return
-            const containerRect = containerEl.getBoundingClientRect()
-            const scale = (window as any).app?.canvas?.ds?.scale || 1.0
-            const newWidth = (e.clientX - containerRect.left) / scale
-            if ((window as any).RESIZE_DEBUG) {
-                (window as any).RESIZE_DEBUG.push(`move: clientX=${e.clientX.toFixed(1)}, containerLeft=${containerRect.left.toFixed(1)}, scale=${scale.toFixed(2)}, newWidth=${newWidth.toFixed(1)}`);
-            }
-            if (newWidth > 50 && newWidth < 600) {
-                sidebarEl.style.setProperty("width", `${newWidth}px`, "important");
-                sidebarEl.style.setProperty("min-width", `${newWidth}px`, "important");
-                this.data.sidebarWidth = newWidth
-                this.commitData() // 状態を即時保存
-                if (this.editorInstance) {
-                    this.editorInstance.monaco.layout()
-                }
-            }
-        }
-
-        const handleMouseUp = () => {
-            isResizing = false
-            resizer.classList.remove(getStyle("resizing"))
-            document.removeEventListener("mousemove", handleMouseMove)
-            document.removeEventListener("mouseup", handleMouseUp)
-        }
-
-        resizer.addEventListener("mousedown", (e) => {
-            if ((window as any).RESIZE_DEBUG) {
-                (window as any).RESIZE_DEBUG.push("mousedown on resizer");
-            }
-            isResizing = true
-            resizer.classList.add(getStyle("resizing"))
-            document.addEventListener("mousemove", handleMouseMove)
-            document.addEventListener("mouseup", handleMouseUp)
-            e.preventDefault()
-            e.stopPropagation() 
-        })
-
-        containerEl.appendChild(sidebarEl)
-        containerEl.appendChild(resizer)
-        containerEl.appendChild(editorWrapper)
+        render(h(MultiTextUI, { widget: this }), containerEl);
 
         const domWidget = node.addDOMWidget("webui-monaco-prompt-multitext", "webui-monaco-prompt-multitext", containerEl, {
             hideOnZoom: true,
@@ -410,8 +252,10 @@ class MultiTextWidget {
                     const maxSidebarWidth = Math.max(50, targetWidth * 0.8);
                     const currentSidebarWidth = self.data.sidebarWidth || 150;
                     const finalSidebarWidth = Math.min(currentSidebarWidth, maxSidebarWidth);
-                    sidebarEl.style.setProperty("width", `${finalSidebarWidth}px`, "important");
-                    sidebarEl.style.setProperty("min-width", `${finalSidebarWidth}px`, "important");
+                    if (self.elements.sidebar) {
+                        self.elements.sidebar.style.setProperty("width", `${finalSidebarWidth}px`, "important");
+                        self.elements.sidebar.style.setProperty("min-width", `${finalSidebarWidth}px`, "important");
+                    }
                 }
                 
                 // LiteGraphの正常なY座標でそのままオリジナルを呼び出す
@@ -533,6 +377,8 @@ class MultiTextWidget {
             }
             setupParentRefs(this.data.tree);
         }
+
+        this.notifyListeners();
     }
 
     private createToolbarButton(icon: string, title: string, onClick: () => void): HTMLButtonElement {
@@ -1317,6 +1163,8 @@ class MultiTextWidget {
                 app.graph.change();
             } catch(e) {}
         }
+
+        this.notifyListeners();
     }
     
     private setAllOutput(value: boolean) {
