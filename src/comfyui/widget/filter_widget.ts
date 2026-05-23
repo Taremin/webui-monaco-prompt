@@ -1,13 +1,11 @@
 import * as utils from "../utils"
-import {default as style} from "./index.css"
+import { default as style } from "./index.css"
+import { render, h } from "preact"
+import { FilterUI } from "./components/FilterUI"
 
-const $el = utils.$el
 const getStyle = (name: string) => utils.getStyle(style, name)
 
-// 並べ替え操作を通常のテキストドラッグから隔離するための専用MIMEタイプ
-const DRAG_TYPE = "application/x-filter-rule-index";
-
-interface FilterRule {
+export interface FilterRule {
     id: string;
     target: 'name' | 'path' | 'content';
     mode: 'regex' | 'include';
@@ -23,6 +21,7 @@ export class FilterWidget {
     rules: FilterRule[] = [];
     private _isConfiguring: boolean = false;
     private _lastLoadedValue: string = "";
+    private _listeners: ((rules: FilterRule[]) => void)[] = [];
 
     constructor(node: any) {
         this._node = node;
@@ -45,14 +44,11 @@ export class FilterWidget {
         };
 
         // capture: true を指定して、LiteGraph のグローバルハンドラよりも先に捕まえる
-        // click は自分自身のハンドラを動かすため、ここでの一括絶縁からは外す
         ["mousedown", "pointerdown", "mouseup", "pointerup", "dblclick", "contextmenu"].forEach(type => {
             this.container.addEventListener(type, isolate, { capture: true });
         });
 
         // 座標系や移動の干渉を避けるため、move も絶縁
-        // 重要: move をキャプチャ層で完全に止めることで、LiteGraph 側のキャンバススクロールや
-        // ノードドラッグロジック（mousemove で preventDefault して選択を殺す挙動）を阻止する。
         this.container.addEventListener("mousemove", isolate, { capture: true });
         this.container.addEventListener("pointermove", isolate, { capture: true });
 
@@ -71,6 +67,8 @@ export class FilterWidget {
                 }
             }
             this.render();
+            this.notifyListeners();
+
             let attempts = 0;
             const retryLoad = () => {
                 const widget = this._node.widgets?.find((w: any) => w.name === "rules");
@@ -79,6 +77,7 @@ export class FilterWidget {
                     if (String(currentVal).includes('"id":')) {
                         this.loadRulesFromValue(currentVal);
                         this.render();
+                        this.notifyListeners();
                         this._isConfiguring = false;
                         return;
                     }
@@ -95,6 +94,19 @@ export class FilterWidget {
         this.setupWidgetCallback();
     }
 
+    public subscribe(listener: (rules: FilterRule[]) => void): () => void {
+        this._listeners.push(listener);
+        return () => {
+            this._listeners = this._listeners.filter(l => l !== listener);
+        };
+    }
+
+    public notifyListeners() {
+        for (const listener of this._listeners) {
+            listener(this.rules);
+        }
+    }
+
     private setupWidgetCallback() {
         const findAndSetup = () => {
             const widget = this._node.widgets?.find((w: any) => w.name === "rules");
@@ -106,6 +118,7 @@ export class FilterWidget {
                     if (oldCallback) oldCallback.apply(widget, [v]);
                     this.loadRulesFromValue(v);
                     this.render();
+                    this.notifyListeners();
                 };
             } else {
                 requestAnimationFrame(findAndSetup);
@@ -144,233 +157,14 @@ export class FilterWidget {
         this._node.setDirtyCanvas(true);
     }
 
-    private setupInput(el: HTMLElement) {
-        el.setAttribute("draggable", "false");
-        
-        // LiteGraph の阻止 (強制的に capture で止める)
-        // これによりノードのドラッグやキャンバスの移動が開始されるのを防ぐ
-        const silence = (e: Event) => {
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-        };
-        el.addEventListener("mousedown", silence, { capture: true });
-        el.addEventListener("mouseup", silence, { capture: true });
-
-        // 文字選択エミュレーション。INPUT 要素のみ対象。
-        if (el.tagName !== "INPUT") return;
-        const input = el as HTMLInputElement;
-
-        let isSelectionDragging = false;
-        let startCharIdx = 0;
-
-        const getCharIdx = (e: MouseEvent) => {
-            const rect = input.getBoundingClientRect();
-            const x = e.clientX - rect.left - 5; // padding分を考慮
-            const style = window.getComputedStyle(input);
-            const fontSize = parseFloat(style.fontSize) || 11;
-            const charWidth = fontSize * 0.55;
-            return Math.max(0, Math.min(input.value.length, Math.round(x / charWidth)));
-        };
-
-        input.addEventListener("mousedown", (e) => {
-            isSelectionDragging = true;
-            startCharIdx = getCharIdx(e);
-            input.focus();
-            input.setSelectionRange(startCharIdx, startCharIdx);
-        });
-
-        const handleMove = (me: MouseEvent) => {
-            if (!isSelectionDragging) return;
-            const curIdx = getCharIdx(me);
-            input.setSelectionRange(Math.min(startCharIdx, curIdx), Math.max(startCharIdx, curIdx));
-            me.stopPropagation();
-        };
-
-        const handleUp = (me: MouseEvent) => {
-            isSelectionDragging = false;
-            window.removeEventListener("mousemove", handleMove, { capture: true });
-            window.removeEventListener("mouseup", handleUp, { capture: true });
-        };
-
-        window.addEventListener("mousemove", handleMove, { capture: true });
-        window.addEventListener("mouseup", handleUp, { capture: true });
-    }
-
     private render() {
         if (!this.container) return;
-        this.container.innerHTML = "";
-        const addBtn = $el("button", {
-            className: getStyle("webui-monaco-prompt-filter-add-btn"),
-            textContent: "+",
-            onclick: () => this.addRule()
-        });
-        this.setupInput(addBtn);
-        const header = $el("div", { 
-            className: getStyle("webui-monaco-prompt-filter-header")
-        }, [
-            $el("span", { textContent: "Filters" }),
-            addBtn
-        ]);
-        this.container.appendChild(header);
-        const rulesList = $el("div", {
-            className: getStyle("webui-monaco-prompt-filter-rules-list")
-        });
-        this.rules.forEach((rule, index) => {
-            const ruleRow = this.createRuleRow(rule, index);
-            rulesList.appendChild(ruleRow);
-        });
-        this.container.appendChild(rulesList);
-        const footer = $el("div", {
-            className: getStyle("webui-monaco-prompt-filter-footer")
-        }, [
-            $el("span", { 
-                className: getStyle("webui-monaco-prompt-filter-status"),
-                textContent: `Rules: ${this.rules.length}` 
-            })
-        ]);
-        this.container.appendChild(footer);
+        render(h(FilterUI, { widget: this }), this.container);
     }
 
-    private createRuleRow(rule: FilterRule, index: number): HTMLElement {
-        const handleClass = getStyle("webui-monaco-prompt-filter-handle");
-        const draggingClass = getStyle("webui-monaco-prompt-dragging");
+    // --- Preact側から呼び出されるAPIメソッド群 ---
 
-        // 行自体は draggable ではない。
-        const row = $el("div", {
-            className: `${getStyle("webui-monaco-prompt-filter-rule-row")} ${rule.disabled ? getStyle("disabled") : ""}`
-        });
-
-        row.ondragover = (e: DragEvent) => {
-            // 専用の DRAG_TYPE が含まれている場合のみドロップを許可
-            if (e.dataTransfer?.types.includes(DRAG_TYPE)) {
-                e.preventDefault();
-            }
-        };
-
-        row.ondrop = (e: DragEvent) => {
-            const fromIndexStr = e.dataTransfer?.getData(DRAG_TYPE);
-            if (fromIndexStr) {
-                const fromIndex = parseInt(fromIndexStr);
-                if (!isNaN(fromIndex) && fromIndex !== index) {
-                    this.moveRule(fromIndex, index);
-                }
-            }
-        };
-
-        // ハンドルだけを draggable にする
-        const handle = $el("span", { 
-            className: handleClass,
-            textContent: "::"
-        });
-        handle.setAttribute("draggable", "true");
-
-        handle.ondragstart = (e: DragEvent) => {
-            e.dataTransfer?.setData(DRAG_TYPE, index.toString());
-            if (e.dataTransfer && (e.dataTransfer as any).setDragImage) {
-                (e.dataTransfer as any).setDragImage(row, 10, 10);
-            }
-            setTimeout(() => row.classList.add(draggingClass), 10);
-        };
-
-        handle.ondragend = () => {
-            row.classList.remove(draggingClass);
-        };
-
-        row.appendChild(handle);
-
-        const disableBtn = $el("button", {
-            className: `${getStyle("webui-monaco-prompt-filter-disable-btn")} ${rule.disabled ? getStyle("active") : ""}`,
-            textContent: "⏻",
-            onclick: () => {
-                rule.disabled = !rule.disabled;
-                this.saveRules();
-                this.render();
-            }
-        });
-        this.setupInput(disableBtn);
-        row.appendChild(disableBtn);
-
-        if (index > 0) {
-            const opSelect = $el("select", {
-                className: getStyle("webui-monaco-prompt-filter-select"),
-                onchange: (e: any) => {
-                    rule.operator = e.target.value;
-                    this.saveRules();
-                }
-            }, [
-                $el("option", { value: "AND", textContent: "AND", selected: rule.operator === "AND" }),
-                $el("option", { value: "OR", textContent: "OR", selected: rule.operator === "OR" })
-            ]);
-            this.setupInput(opSelect);
-            row.appendChild(opSelect);
-        } else {
-            row.appendChild($el("span", { className: getStyle("webui-monaco-prompt-filter-spacer") }));
-        }
-
-        const targetSelect = $el("select", {
-            className: getStyle("webui-monaco-prompt-filter-select"),
-            onchange: (e: any) => {
-                rule.target = e.target.value;
-                this.saveRules();
-            }
-        }, [
-            $el("option", { value: "name", textContent: "Name", selected: rule.target === "name" }),
-            $el("option", { value: "path", textContent: "Path", selected: rule.target === "path" }),
-            $el("option", { value: "content", textContent: "Content", selected: rule.target === "content" })
-        ]);
-        this.setupInput(targetSelect);
-        row.appendChild(targetSelect);
-
-        const modeSelect = $el("select", {
-            className: getStyle("webui-monaco-prompt-filter-select"),
-            onchange: (e: any) => {
-                rule.mode = e.target.value;
-                this.saveRules();
-            }
-        }, [
-            $el("option", { value: "include", textContent: "Include", selected: rule.mode === "include" }),
-            $el("option", { value: "regex", textContent: "Regex", selected: rule.mode === "regex" })
-        ]);
-        this.setupInput(modeSelect);
-        row.appendChild(modeSelect);
-
-        const notBtn = $el("button", {
-            className: `${getStyle("webui-monaco-prompt-filter-not-btn")} ${rule.not ? getStyle("active") : ""}`,
-            textContent: "NOT",
-            onclick: () => {
-                rule.not = !rule.not;
-                this.saveRules();
-                this.render();
-            }
-        });
-        this.setupInput(notBtn);
-        row.appendChild(notBtn);
-
-        const valueInput = $el("input", {
-            className: getStyle("webui-monaco-prompt-filter-input"),
-            type: "text",
-            value: rule.value || "",
-            placeholder: "value...",
-            oninput: (e: any) => {
-                rule.value = e.target.value;
-                this.saveRules();
-            }
-        });
-        this.setupInput(valueInput);
-        row.appendChild(valueInput);
-
-        const delBtn = $el("button", {
-            className: getStyle("webui-monaco-prompt-filter-del-btn"),
-            textContent: "×",
-            onclick: () => this.deleteRule(index)
-        });
-        this.setupInput(delBtn);
-        row.appendChild(delBtn);
-
-        return row;
-    }
-
-    private addRule() {
+    public addRule() {
         const newRule: FilterRule = {
             id: utils.guid(),
             target: 'name',
@@ -382,19 +176,43 @@ export class FilterWidget {
         };
         this.rules.push(newRule);
         this.saveRules();
-        this.render();
+        this.notifyListeners();
     }
 
-    private deleteRule(index: number) {
+    public deleteRule(index: number) {
         this.rules.splice(index, 1);
         this.saveRules();
-        this.render();
+        this.notifyListeners();
     }
 
-    private moveRule(fromIndex: number, toIndex: number) {
+    public moveRule(fromIndex: number, toIndex: number) {
         const item = this.rules.splice(fromIndex, 1)[0];
         this.rules.splice(toIndex, 0, item);
         this.saveRules();
-        this.render();
+        this.notifyListeners();
+    }
+
+    public updateRule(index: number, updates: Partial<FilterRule>) {
+        if (this.rules[index]) {
+            this.rules[index] = { ...this.rules[index], ...updates };
+            this.saveRules();
+            this.notifyListeners();
+        }
+    }
+
+    public toggleRuleDisabled(index: number) {
+        if (this.rules[index]) {
+            this.rules[index].disabled = !this.rules[index].disabled;
+            this.saveRules();
+            this.notifyListeners();
+        }
+    }
+
+    public toggleRuleNot(index: number) {
+        if (this.rules[index]) {
+            this.rules[index].not = !this.rules[index].not;
+            this.saveRules();
+            this.notifyListeners();
+        }
     }
 }

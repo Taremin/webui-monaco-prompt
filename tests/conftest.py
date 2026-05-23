@@ -312,7 +312,7 @@ def comfyui_server(test_settings):
             print("ComfyUI process exited prematurely.")
             break
             
-        if time.time() - start_time > 120:
+        if time.time() - start_time > 300:
             print("Timeout waiting for ComfyUI server.")
             break
         
