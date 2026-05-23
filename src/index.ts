@@ -203,7 +203,7 @@ class PromptEditor extends HTMLElement {
     onChangeAutoCompleteToggleBeforeSyncCallbacks!: Array<() => void>
     
     onOpenPresetDialog?: (instance: PromptEditor) => void
-    onSettingChange?: (settings: Partial<PromptEditorSettings>) => void
+    onSettingChange?: (settings: Partial<PromptEditorSettings>, force?: boolean) => void
     _id: number
     groupId: string = "default"
     
@@ -268,6 +268,7 @@ class PromptEditor extends HTMLElement {
         this.copyStyleToShadow()
         this.polyfillMonacoEditorConfiguration()
         this.showHeader = false
+        this.updateHeaderVisibility()
         this.theme = this.getThemeId()
 
         settings.instances[this._id] = this
@@ -915,7 +916,7 @@ class PromptEditor extends HTMLElement {
         this.showHeader = show
         this.setContext(this.createContextKey("showHeader"), show)
 
-        this.toggleHeader()
+        this.updateHeaderVisibility()
 
         for (const callback of this.onChangeShowHeaderCallbacks) {
             callback()
@@ -1586,18 +1587,24 @@ class PromptEditor extends HTMLElement {
     }
 
     handleResize() {
-        const callback = (mutations: (MutationRecord|IntersectionObserverEntry)[], observer: (MutationObserver|IntersectionObserver)) => {
+        const callback = () => {
             const main = this.elements.main
             if (!main) {
                 return
             }
-            this.toggleHeader()
+            this.updateHeaderVisibility()
             //main.style.maxHeight = this.clientHeight + "px"
             if (this.parentElement) {
                 main.style.height = this.parentElement.clientHeight + "px"
             }
             this.monaco.layout()
         }
+        
+        if (typeof ResizeObserver !== 'undefined') {
+            const resizeObserver = new ResizeObserver(callback)
+            resizeObserver.observe(this)
+        }
+        
         const mutation = new MutationObserver(callback)
         const intersection = new IntersectionObserver(callback, {
             root: document.documentElement
@@ -1606,7 +1613,7 @@ class PromptEditor extends HTMLElement {
         intersection.observe(this)
     }
 
-    toggleHeader() {
+    updateHeaderVisibility() {
         const child = this.elements.header
         const parent = this.elements.inner
 
@@ -1621,17 +1628,15 @@ class PromptEditor extends HTMLElement {
 
         child.style.display = "block"
 
-        const childRect = child.getBoundingClientRect()
-        const parentRect  = parent.getBoundingClientRect()
+        if (!this.isConnected) {
+            return
+        }
 
-        if (
-            childRect.width <= parentRect.width &&
-            childRect.height <= parentRect.height &&
-            childRect.top >= parentRect.top &&
-            childRect.left >= parentRect.left &&
-            childRect.bottom <= parentRect.bottom &&
-            childRect.right <= parentRect.right
-        ) {
+        const parentRect = parent.getBoundingClientRect()
+
+        // エディタの幅や高さが極小（折りたたまれた状態など）の場合はヘッダーを非表示にする
+        // それ以外（通常サイズ）の場合は表示状態（デフォルト）にする
+        if (parentRect.width >= 100 && parentRect.height >= 50) {
             child.style.removeProperty("display")
         } else {
             child.style.display = "none"
@@ -1854,7 +1859,7 @@ class PromptEditor extends HTMLElement {
     setSettings(settings: Partial<PromptEditorSettings>, force=false, options?: { skipRebuild?: boolean }) {
         if (this.onSettingChange) {
             // マネージャが登録されている場合は依頼を出すのみ
-            this.onSettingChange(settings);
+            this.onSettingChange(settings, force);
         } else {
             // スタンドアロンの場合は直接適用する
             this.applySettings(settings, force, options);

@@ -41,8 +41,8 @@ export class PromptEditorManager {
         this.editors.add(editor);
         
         // エディタからのユーザー操作による設定変更を購読
-        editor.onSettingChange = (settings) => {
-            this.updateSettings(settings, editor);
+        editor.onSettingChange = (settings, force) => {
+            this.updateSettings(settings, editor, force);
         };
 
         // 初回登録時にグループの現在設定を適用（無駄な通知を避けるため直接適用）
@@ -66,7 +66,7 @@ export class PromptEditorManager {
      * @param settings 更新する設定の差分
      * @param sourceEditor 変更の起点となったエディタ。指定された場合、それ以外のエディタに配布する
      */
-    public updateSettings(settings: Partial<PromptEditorSettings>, sourceEditor?: PromptEditor): void {
+    public updateSettings(settings: Partial<PromptEditorSettings>, sourceEditor?: PromptEditor, force = false): void {
         this.currentSettings = { ...this.currentSettings, ...settings };
         
         // 全てのエディタに確定した設定を適用する（依頼元のエディタも含むことで一貫性を保証）
@@ -74,7 +74,7 @@ export class PromptEditorManager {
         // 最後に一括リビルドを行う
         const skipRebuild = settings.languageFeatures !== undefined || settings.languagePreset !== undefined;
         for (const editor of this.editors) {
-            editor.applySettings(settings, false, { skipRebuild });
+            editor.applySettings(settings, force, { skipRebuild });
         }
 
         // 言語定義に関わる変更（フィーチャーの切り替え等）があれば再構築を実行
