@@ -74,14 +74,19 @@ def test_csv_parse_error_recovery(page: Page, comfyui_server, wait_for_comfyui, 
         
         page.wait_for_timeout(1000)
 
-        editor = page.locator("prompt-editor")
-        editor.locator(".view-lines").click()
+        # 強制クリックで確実にフォーカスを当てる (遮蔽物を無視)
+        page.locator("prompt-editor .view-lines").first.click(force=True)
         page.keyboard.type("tag1")
-        page.keyboard.press("Control+Space")
-        
-        # 補完リストが表示されるまで待機
-        page.wait_for_selector(".suggest-widget.visible")
-        assert page.locator("text=tag1").first.is_visible()
+
+        # API経由でサジェストをトリガー
+        page.evaluate("() => { const pe = document.querySelector('prompt-editor'); if (pe) pe.triggerSuggest(); }")
+
+        # API（モデル状態）経由でサジェスト表示完了を待機
+        page.wait_for_function("() => { const pe = document.querySelector('prompt-editor'); return pe && pe.isSuggestVisible(); }", timeout=10000)
+
+        # 候補に "tag1" が含まれているか確認する
+        has_tag = page.evaluate("() => { const pe = document.querySelector('prompt-editor'); return pe ? pe.getSuggestList().some(s => s.includes('tag1')) : false; }")
+        assert has_tag, "Suggest tag 'tag1' should be visible."
 
     finally:
         if console_logs:

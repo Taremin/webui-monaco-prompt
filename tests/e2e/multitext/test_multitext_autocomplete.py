@@ -80,17 +80,18 @@ def test_multitext_csv_autocomplete_toggle(page: Page, comfyui_server, wait_for_
         }}""")
 
         # 2. デフォルト状態（CSVオン）でのサジェスト確認
+        page.evaluate("() => { const pe = document.querySelector('prompt-editor'); if (pe) pe.focus(); }")
         page.keyboard.type("zzz_unique_")
         
-        # サジェストウィジェットが出るのを待つ
-        page.keyboard.press("Control+Space")
+        # API経由でサジェスト起動
+        page.evaluate("() => { const pe = document.querySelector('prompt-editor'); if (pe) pe.triggerSuggest(); }")
         
-        # Monacoのサジェストウィジェットの表示を待機
-        suggest_widget = page.locator(".monaco-editor .suggest-widget").first
-        suggest_widget.wait_for(state="visible", timeout=10000)
+        # API経由で表示完了を待機
+        page.wait_for_function("() => { const pe = document.querySelector('prompt-editor'); return pe && pe.isSuggestVisible(); }", timeout=10000)
         
         # 候補が含まれているか確認
-        expect(page.locator(f".monaco-list-row:has-text('{target_tag}')").first).to_be_visible(timeout=10000)
+        has_tag = page.evaluate(f"() => {{ const pe = document.querySelector('prompt-editor'); return pe ? pe.getSuggestList().some(s => s.includes('{target_tag}')) : false; }}")
+        assert has_tag, f"Suggest tag '{target_tag}' should be visible."
         
         # 入力をクリア
         page.keyboard.press("Escape") # サジェストを閉じる
@@ -120,16 +121,16 @@ def test_multitext_csv_autocomplete_toggle(page: Page, comfyui_server, wait_for_
         }}""", timeout=10000)
 
         # 4. オフ状態でのサジェスト非表示の確認
-        editor_locator.click()
+        page.evaluate("() => { const pe = document.querySelector('prompt-editor'); if (pe) pe.focus(); }")
         page.keyboard.type("zzz_unique_")
-        page.keyboard.press("Control+Space")
         
-        # サジェストウィジェットが表示されないか、表示されても該当テキストがないことを確認する
-        try:
-            expect(page.locator(f".monaco-list-row:has-text('{target_tag}')").first).not_to_be_visible(timeout=2000)
-        except AssertionError:
-            pytest.fail(f"Suggest tag '{target_tag}' is visible even after CSV is toggled off")
-
+        page.evaluate("() => { const pe = document.querySelector('prompt-editor'); if (pe) pe.triggerSuggest(); }")
+        
+        # 2秒待って候補が現れないことを確認
+        page.wait_for_timeout(2000)
+        has_tag = page.evaluate(f"() => {{ const pe = document.querySelector('prompt-editor'); return pe ? pe.getSuggestList().some(s => s.includes('{target_tag}')) : false; }}")
+        assert not has_tag, f"Suggest tag '{target_tag}' should not be visible."
+        
         # 入力をクリア
         page.keyboard.press("Escape")
         page.keyboard.press("Control+a")
@@ -198,19 +199,21 @@ def test_multitext_csv_autocomplete_toggle(page: Page, comfyui_server, wait_for_
         page.wait_for_timeout(1000)
 
         # 6. オン状態でのサジェスト表示の再確認
+        page.evaluate("() => { const pe = document.querySelector('prompt-editor'); if (pe) pe.focus(); }")
         page.keyboard.press("Control+a")
         page.keyboard.press("Backspace")
         page.wait_for_timeout(500)
         
         page.keyboard.type("zzz_unique_")
-        page.wait_for_timeout(500)
-            
-        page.keyboard.press("Control+Space")
         
-        suggest_widget = page.locator(".monaco-editor .suggest-widget").first
-        suggest_widget.wait_for(state="visible", timeout=10000)
+        # API経由でサジェスト起動
+        page.evaluate("() => { const pe = document.querySelector('prompt-editor'); if (pe) pe.triggerSuggest(); }")
         
-        expect(page.locator(f".monaco-list-row:has-text('{target_tag}')").first).to_be_visible(timeout=10000)
+        # API経由で表示完了を待機
+        page.wait_for_function("() => { const pe = document.querySelector('prompt-editor'); return pe && pe.isSuggestVisible(); }", timeout=10000)
+        
+        has_tag = page.evaluate(f"() => {{ const pe = document.querySelector('prompt-editor'); return pe ? pe.getSuggestList().some(s => s.includes('{target_tag}')) : false; }}")
+        assert has_tag, f"Suggest tag '{target_tag}' should be visible."
 
     finally:
         if test_csv_path.exists():

@@ -1039,6 +1039,28 @@ class PromptEditor extends HTMLElement {
         this.monaco.focus()
     }
 
+    triggerSuggest() {
+        if (this.monaco) {
+            this.monaco.trigger('test', 'editor.action.triggerSuggest', {})
+        }
+    }
+
+    isSuggestVisible(): boolean {
+        return this.getSuggestList().length > 0
+    }
+
+    getSuggestList(): string[] {
+        const controller = this.monaco.getContribution('editor.contrib.suggestController') as any
+        const model = controller ? (controller.model || controller._model) : null
+        if (model && model._completionModel) {
+            const items = model._completionModel.items
+            if (Array.isArray(items)) {
+                return items.map(item => item.textLabel || "")
+            }
+        }
+        return []
+    }
+
     getValue() {
         return this.monaco.getValue()
     }

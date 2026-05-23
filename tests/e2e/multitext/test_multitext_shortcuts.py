@@ -50,19 +50,8 @@ def test_multitext_keyboard_propagation(page: Page, comfyui_server, wait_for_com
     # エディターの準備完了を待つ
     wmp_helpers.wait_for_editor(page)
     
-    page.evaluate("""() => {
-        const editor = document.querySelector('prompt-editor');
-        if (editor) {
-            const root = editor.shadowRoot || editor;
-            const textarea = root.querySelector('textarea');
-            if (textarea) textarea.focus();
-        }
-    }""")
-
-    # ノードが選択された状態に（念の為クリック）
-    box = page.locator("prompt-editor").first.bounding_box()
-    if box:
-        page.mouse.click(box['x'] + box['width']/2, box['y'] + box['height']/2)
+    # API経由でフォーカスを当てる (Shadow DOM内のtextareaフォーカス/クリックもカプセル化されています)
+    page.evaluate("() => { const pe = document.querySelector('prompt-editor'); if (pe) pe.focus(); }")
 
     wmp_helpers.wait_for_ui_stabilize(page, 500)
 

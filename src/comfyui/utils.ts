@@ -317,13 +317,11 @@ const applyCommonEditorSetup = (app: any, editor: PromptEditor, node: any) => {
     editor.addCustomSuggest("snippet")
 
     // ComfyUI（LiteGraph）のキーボードショートカット（Hキーなど）と衝突しないようイベント伝播を止める
-    editor.addEventListener('keydown', (ev: KeyboardEvent) => {
-        switch (ev.key) {
-            default:
-                ev.stopPropagation()
-                break
-        }
-    })
+    const stopPropagationHandler = (ev: KeyboardEvent) => {
+        ev.stopPropagation()
+    }
+    editor.addEventListener('keydown', stopPropagationHandler)
+    editor.addEventListener('keyup', stopPropagationHandler)
 
     // クリック（フォーカス）時に該当のノードをアクティブにする
     const mouseHandler = () => {
