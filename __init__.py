@@ -251,9 +251,156 @@ class WebuiMonacoPromptJsonFilter:
         return (contents, jsons)
 
 
+def expand_templates(content, file_map, seed, resolving=None, resolving_stack=None, max_depth=10):
+    import re
+    import os
+    import random
+
+    # 入力が文字列でない場合への防御処理
+    if not isinstance(content, str):
+        content = str(content) if content is not None else ""
+
+    if resolving is None:
+        resolving = set()
+    if resolving_stack is None:
+        resolving_stack = []
+        
+    if max_depth <= 0:
+        raise ValueError(f"[PromptTemplateError] In file '{resolving_stack[-1] if resolving_stack else 'entry'}': Template recursion depth limit exceeded")
+        
+    # <include:path> および <random:path> の検出
+    pattern = re.compile(r'<(include|random):([a-zA-Z0-9_\-\/.]+)>')
+    rng = random.Random(seed)
+
+    def replace_match(match):
+        mode = match.group(1) # 'include' or 'random'
+        key = match.group(2)
+        target_content = None
+        target_path = None
+        
+        for path, val in file_map.items():
+            path_no_ext = os.path.splitext(path)[0]
+            basename = os.path.basename(path)
+            basename_no_ext = os.path.splitext(basename)[0]
+            
+            if key in (path, path_no_ext, basename, basename_no_ext):
+                target_content = val
+                target_path = path
+                break
+                
+        if target_path is None:
+            raise ValueError(f"[PromptTemplateError] In file '{resolving_stack[-1] if resolving_stack else 'entry'}': {mode.capitalize()} target not found: '{key}'")
+            
+        if target_path in resolving:
+            raise ValueError(f"[PromptTemplateError] In file '{resolving_stack[-1] if resolving_stack else 'entry'}': Circular reference detected for '{target_path}'")
+            
+        resolving.add(target_path)
+        resolving_stack.append(target_path)
+        
+        if mode == "random":
+            lines = [line.strip() for line in target_content.splitlines() if line.strip()]
+            if not lines:
+                resolved_raw = ""
+            else:
+                resolved_raw = rng.choice(lines)
+        else:
+            resolved_raw = target_content
+
+        expanded = expand_templates(resolved_raw, file_map, seed, resolving, resolving_stack, max_depth - 1)
+        
+        resolving_stack.pop()
+        resolving.remove(target_path)
+        
+        return expanded
+
+    substituted = pattern.sub(replace_match, content)
+    # 置換結果にまだ未展開のタグが残っている場合、再帰的に再度展開する
+    if pattern.search(substituted):
+        return expand_templates(substituted, file_map, seed, resolving, resolving_stack, max_depth - 1)
+    return substituted
+
+
+class WebuiMonacoPromptTemplate:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "source_templates": ("STRING", {"forceInput": True}),
+                "entry_points": ("STRING", {"forceInput": True}),
+                "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
+            }
+        }
+
+    RETURN_TYPES = ("STRING", "STRING")
+    RETURN_NAMES = ("contents", "json")
+    INPUT_IS_LIST = True
+    OUTPUT_IS_LIST = (True, True)
+    FUNCTION = "process"
+    CATEGORY = "WebuiMonacoPrompt"
+
+    def process(self, source_templates=None, entry_points=None, seed=None):
+        import json
+        
+        # 接続されていない（Noneが渡された）場合への安全なフォールバック
+        source_templates = source_templates or []
+        entry_points = entry_points or []
+        seed = seed or [0]
+        
+        # 1. source_templates から file_map を構築
+        file_map = {}
+        for s_json in source_templates:
+            if not s_json:
+                continue
+            try:
+                item = json.loads(s_json)
+                if isinstance(item, dict) and item.get("type") == "file":
+                    path = item.get("path", item.get("name", ""))
+                    if path:
+                        file_map[path] = item.get("content", "")
+            except Exception:
+                pass
+
+        # 2. entry_points から処理対象ファイルを抽出
+        entries = []
+        for e_json in entry_points:
+            if not e_json:
+                continue
+            try:
+                item = json.loads(e_json)
+                if isinstance(item, dict) and item.get("type") == "file":
+                    entries.append(item)
+            except Exception:
+                pass
+
+        # 3. 乱数のシード（リストで渡されるため、最初の要素を取得）
+        seed_val = seed[0] if isinstance(seed, list) and len(seed) > 0 else (seed if isinstance(seed, int) else 0)
+
+        # 4. 各エントリポイントを展開
+        contents = []
+        json_list = []
+        
+        for entry in entries:
+            raw_content = entry.get("content", "")
+            path = entry.get("path", entry.get("name", ""))
+            
+            # 各ファイルのルートとして現在ファイルをスタックに積んで開始
+            resolving = {path} if path else set()
+            resolving_stack = [path] if path else []
+            
+            expanded_content = expand_templates(raw_content, file_map, seed_val, resolving, resolving_stack)
+            contents.append(expanded_content)
+            
+            entry_copy = entry.copy()
+            entry_copy["content"] = expanded_content
+            json_list.append(json.dumps(entry_copy))
+
+        return (contents, json_list)
+
+
 NODE_CLASS_MAPPINGS = {
     "WebuiMonacoPromptFind": WebuiMonacoPromptFind,
     "WebuiMonacoPromptReplace": WebuiMonacoPromptReplace,
     "WebuiMonacoPromptMultiText": WebuiMonacoPromptMultiText,
     "WebuiMonacoPromptJsonFilter": WebuiMonacoPromptJsonFilter,
+    "WebuiMonacoPromptTemplate": WebuiMonacoPromptTemplate,
 }

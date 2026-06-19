@@ -206,6 +206,7 @@ class PromptEditor extends HTMLElement {
     onSettingChange?: (settings: Partial<PromptEditorSettings>, force?: boolean) => void
     _id: number
     groupId: string = "default"
+    getTemplateFiles?: () => string[]
     
     constructor(textarea?: HTMLTextAreaElement, options: Partial<PromptEditorOptions>={}) {
         super()

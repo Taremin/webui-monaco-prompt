@@ -330,7 +330,9 @@ class MultiTextWidget {
                 // `targetWidget.value` が単純な文字列や予期せぬ形式の場合への対応
                 if (typeof parsed !== "object" || parsed === null || !Array.isArray(parsed.tree)) {
                     // 古いバージョンの単純な文字列保存とみなし、文字列を新規ファイルに格納する
-                    const content = typeof parsed === "string" ? parsed : (typeof targetWidget.value === "string" ? targetWidget.value : "");
+                    // ただし、初期デフォルト値の "{}" の場合は空文字列として扱う
+                    const isInitialEmpty = targetWidget.value === "{}" || targetWidget.value === "";
+                    const content = isInitialEmpty ? "" : (typeof parsed === "string" ? parsed : (typeof targetWidget.value === "string" ? targetWidget.value : ""));
                     this.data = { tree: [], activeFileId: undefined, openedFileIds: [] };
                     this.addItemWithName('file', 'default.txt');
                     const firstFile = this.data.tree.find(i => i.type === 'file');
@@ -638,6 +640,20 @@ class MultiTextWidget {
                 handleTextAreaValue: false,
                 groupId: "comfyui",
             });
+            this.editor.getTemplateFiles = () => {
+                const files: string[] = [];
+                const collect = (items: TreeItem[]) => {
+                    for (const item of items) {
+                        if (item.type === 'file') {
+                            files.push(this.getItemPath(item.id));
+                        } else if (item.children) {
+                            collect(item.children);
+                        }
+                    }
+                };
+                collect(this.data.tree);
+                return files;
+            };
             this.editor.style.height = "100%";
             this.editor.style.width = "100%";
             this.editor.style.display = "block";
@@ -1305,6 +1321,72 @@ class MultiTextWidget {
             }
         }
         this.models = {};
+    }
+
+    public handleTemplateError(targetFilename: string, errorMessage: string) {
+        const findFile = (items: TreeItem[]): TreeItem | undefined => {
+            for (const item of items) {
+                if (item.type === 'file') {
+                    const path = this.getItemPath(item.id);
+                    const pathNoExt = path.slice(0, path.lastIndexOf('.'));
+                    const basename = item.name;
+                    const basenameNoExt = basename.slice(0, basename.lastIndexOf('.'));
+                    
+                    if (path === targetFilename || pathNoExt === targetFilename || 
+                        basename === targetFilename || basenameNoExt === targetFilename) {
+                        return item;
+                    }
+                } else if (item.children) {
+                    const result = findFile(item.children);
+                    if (result) return result;
+                }
+            }
+        };
+
+        const fileItem = findFile(this.data.tree);
+        if (!fileItem) return;
+
+        this.openFile(fileItem.id);
+
+        setTimeout(() => {
+            if (!this.editor || !this.editor.monaco) return;
+            const model = this.models[fileItem.id];
+            if (!model) return;
+
+            let targetKeyword = "";
+            const notFoundMatch = errorMessage.match(/target not found: '([^']+)'/);
+            const circularMatch = errorMessage.match(/Circular reference detected for '([^']+)'/);
+            if (notFoundMatch) targetKeyword = notFoundMatch[1];
+            else if (circularMatch) targetKeyword = circularMatch[1];
+
+            let errorLine = 1;
+            const lines = model.getLinesContent();
+            for (let i = 0; i < lines.length; i++) {
+                if (targetKeyword && lines[i].includes(targetKeyword)) {
+                    errorLine = i + 1;
+                    break;
+                }
+            }
+
+            const monacoAPI = (window as any).monaco || Monaco;
+            if (monacoAPI && monacoAPI.editor) {
+                monacoAPI.editor.setModelMarkers(model, "template-error", [
+                    {
+                        startLineNumber: errorLine,
+                        startColumn: 1,
+                        endLineNumber: errorLine,
+                        endColumn: model.getLineMaxColumn(errorLine),
+                        message: errorMessage,
+                        severity: monacoAPI.MarkerSeverity.Error,
+                    }
+                ]);
+
+                const disposable = model.onDidChangeContent(() => {
+                    monacoAPI.editor.setModelMarkers(model, "template-error", []);
+                    disposable.dispose();
+                });
+            }
+        }, 100);
     }
 }
 

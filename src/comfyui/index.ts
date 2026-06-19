@@ -2,6 +2,7 @@ import * as utils from "./utils"
 import * as WebuiMonacoPrompt from "../index" // for typing
 import { link } from "./link"
 import { FindWidget, ReplaceWidget, MultiTextWidget, FilterWidget } from "./widget"
+import * as Monaco from 'monaco-editor/esm/vs/editor/editor.api'
 import { app, api } from "./api"
 import { loadSetting, saveSettings, updateInstanceSettings } from "./settings"
 import { comfyPrompt, comfyDynamicPrompt } from "./languages"
@@ -518,6 +519,79 @@ const CustomNodeFromNodeType = Object.fromEntries(
     Object.entries(CustomNode).map(([key, value]) => [value.nodeType, value])
 )
 
+function findEditorByModel(model: any) {
+    let found: any = null;
+    MonacoPrompt.PromptEditorManager.runAllInstances((instance: any) => {
+        if (instance.monaco && instance.monaco.getModel() === model) {
+            found = instance;
+            return true;
+        }
+    });
+    return found;
+}
+
+const templateCompletionProvider = {
+    triggerCharacters: ["<"],
+    provideCompletionItems: function(model: any, position: any, context: any) {
+        const editorInstance = findEditorByModel(model);
+        if (!editorInstance || typeof editorInstance.getTemplateFiles !== 'function') {
+            return { suggestions: [] };
+        }
+
+        const prevChar = model.getValueInRange({
+            startLineNumber: position.lineNumber,
+            startColumn: position.column - 1,
+            endLineNumber: position.lineNumber,
+            endColumn: position.column,
+        });
+        const triggerCharacter = context.triggerCharacter || prevChar;
+
+        if (triggerCharacter !== "<") {
+            return { suggestions: [] };
+        }
+
+        const files = editorInstance.getTemplateFiles() as string[];
+        const suggestions: any[] = [];
+
+        const range = {
+            startLineNumber: position.lineNumber,
+            startColumn: position.column - 1,
+            endLineNumber: position.lineNumber,
+            endColumn: position.column,
+        };
+
+        for (const file of files) {
+            const paths = [file];
+            const extIndex = file.lastIndexOf('.');
+            if (extIndex !== -1) {
+                paths.push(file.slice(0, extIndex));
+            }
+
+            for (const p of paths) {
+                for (const mode of ["include", "random"]) {
+                    const detail = mode === "include" ? "Template Include" : "Template Random";
+                    const value = `${mode}:${p}`;
+                    const insertText = `<${value}>`;
+
+                    suggestions.push({
+                        label: {
+                            label: `${mode}:${p}`,
+                            description: detail
+                        },
+                        filterText: `<${value}`,
+                        kind: MonacoPrompt.CompletionItemKind.Folder,
+                        insertText: insertText,
+                        detail: detail,
+                        range: range
+                    });
+                }
+            }
+        }
+
+        return { suggestions };
+    }
+};
+
 const register = (app: any) => {
     const multiTextNodes = new Set<any>()
     app.registerExtension({
@@ -790,6 +864,185 @@ const register = (app: any) => {
             for (const instance of initialInstances) {
                 updateInstanceSettings(instance);
             }
+
+            // Monaco にテンプレートファイル用の補完プロバイダを登録
+            const monacoAPI = (window as any).monaco || Monaco;
+            if (monacoAPI && monacoAPI.languages) {
+                for (const lang of ["comfy-prompt", "comfy-dynamic-prompt", "composed-prompt"]) {
+                    monacoAPI.languages.registerCompletionItemProvider(lang, templateCompletionProvider);
+                }
+            }
+
+            // ComfyUI の標準エラーダイアログの表示をフック
+            const originalShow = app.ui.dialog.show;
+            app.ui.dialog.show = function(content: any) {
+                const res = originalShow.apply(this, arguments);
+
+                // 表示文字列から [PromptTemplateError] の存在を検出
+                let errorText = "";
+                if (typeof content === "string") {
+                    errorText = content;
+                } else if (content && typeof content.textContent === "string") {
+                    errorText = content.textContent;
+                } else if (content && typeof content.innerHTML === "string") {
+                    errorText = content.innerHTML;
+                }
+
+                if (errorText && errorText.includes("[PromptTemplateError]")) {
+                    const match = errorText.match(/\[PromptTemplateError\] In file '([^']+)': (.*)/);
+                    if (match) {
+                        const filename = match[1];
+                        const errorMessage = match[2];
+
+                        setTimeout(() => {
+                            const dialogEl = app.ui.dialog.element;
+                            if (!dialogEl) return;
+
+                            // エラー元のファイル名をリンクに置き換える
+                            const targetText = `In file '${filename}'`;
+                            
+                            const findAndReplaceText = (node: Node) => {
+                                if (node.nodeType === Node.TEXT_NODE) {
+                                    const text = node.nodeValue || "";
+                                    if (text.includes(targetText)) {
+                                        const parent = node.parentNode as HTMLElement;
+                                        if (parent && parent.tagName !== "A" && !parent.dataset.templated) {
+                                            parent.dataset.templated = "true";
+                                            const linkHTML = `In file '<a href="#" class="monaco-template-error-link" style="color: #58a6ff; text-decoration: underline; cursor: pointer;">${filename}</a>'`;
+                                            parent.innerHTML = parent.innerHTML.replace(targetText, linkHTML);
+                                        }
+                                    }
+                                } else {
+                                    for (let child of Array.from(node.childNodes)) {
+                                        findAndReplaceText(child);
+                                    }
+                                }
+                            };
+                            findAndReplaceText(dialogEl);
+
+                            // リンクがクリックされたときのアクションをバインド
+                            const links = dialogEl.querySelectorAll(".monaco-template-error-link");
+                            links.forEach((link: any) => {
+                                link.onclick = (e: MouseEvent) => {
+                                    e.preventDefault();
+                                    app.ui.dialog.close();
+
+                                    // ワークフロー上のすべての WebuiMonacoPromptMultiText ノードを走査し、
+                                    // 該当ファイルを持っているノードの multitext_widget を探して handleTemplateError を呼ぶ
+                                    const nodes = app.graph._nodes || [];
+                                    for (const node of nodes) {
+                                        const nodeType = node.type || node.comfyClass;
+                                        if (nodeType === "WebuiMonacoPromptMultiText" && node.multitext_widget) {
+                                            const widget = node.multitext_widget;
+                                            const hasFile = (items: any[]): boolean => {
+                                                for (const item of items) {
+                                                    if (item.type === 'file') {
+                                                        const path = widget.getItemPath(item.id);
+                                                        const pathNoExt = path.slice(0, path.lastIndexOf('.'));
+                                                        if (path === filename || pathNoExt === filename || item.name === filename) {
+                                                            return true;
+                                                        }
+                                                    } else if (item.children) {
+                                                        if (hasFile(item.children)) return true;
+                                                    }
+                                                }
+                                                return false;
+                                            };
+
+                                            if (hasFile(widget.data.tree)) {
+                                                widget.handleTemplateError(filename, errorMessage);
+                                                break;
+                                            }
+                                        }
+                                    }
+                                };
+                            });
+                        }, 10);
+                    }
+                }
+
+                return res;
+            };
+
+            // MutationObserver を使ってあらゆる場所でのエラーダイアログの表示を監視 (二重の安全策)
+            const errorDialogObserver = new MutationObserver((mutations) => {
+                for (const mutation of mutations) {
+                    for (const node of Array.from(mutation.addedNodes)) {
+                        if (node instanceof HTMLElement) {
+                            const findAndReplaceText = (targetNode: Node) => {
+                                if (targetNode.nodeType === Node.TEXT_NODE) {
+                                    const text = targetNode.nodeValue || "";
+                                    if (text.includes("[PromptTemplateError]")) {
+                                        const match = text.match(/\[PromptTemplateError\] In file '([^']+)': (.*)/);
+                                        if (match) {
+                                            const filename = match[1];
+                                            const errorMessage = match[2];
+                                            const parent = targetNode.parentNode as HTMLElement;
+                                            if (parent && parent.tagName !== "A" && !parent.dataset.templated) {
+                                                parent.dataset.templated = "true";
+                                                const targetText = `In file '${filename}'`;
+                                                const linkHTML = `In file '<a href="#" class="monaco-template-error-link" style="color: #58a6ff; text-decoration: underline; cursor: pointer;">${filename}</a>'`;
+                                                parent.innerHTML = parent.innerHTML.replace(targetText, linkHTML);
+
+                                                const links = parent.querySelectorAll(".monaco-template-error-link");
+                                                links.forEach((link: any) => {
+                                                    link.onclick = (e: MouseEvent) => {
+                                                        e.preventDefault();
+                                                        try { app.ui.dialog.close(); } catch (err) {}
+                                                        
+                                                        // V2 UIでの閉じるボタンをシミュレート
+                                                        const closeBtn = document.querySelector(".p-dialog-header-close, .comfy-modal-close") as HTMLElement;
+                                                        if (closeBtn) {
+                                                            closeBtn.click();
+                                                        } else {
+                                                            const dialogs = document.querySelectorAll(".p-dialog, .comfy-modal");
+                                                            dialogs.forEach((d: any) => d.style.display = "none");
+                                                        }
+
+                                                        const nodes = app.graph._nodes || [];
+                                                        for (const node of nodes) {
+                                                            const nodeType = node.type || node.comfyClass;
+                                                            if (nodeType === "WebuiMonacoPromptMultiText" && node.multitext_widget) {
+                                                                const widget = node.multitext_widget;
+                                                                const hasFile = (items: any[]): boolean => {
+                                                                    for (const item of items) {
+                                                                        if (item.type === 'file') {
+                                                                            const path = widget.getItemPath(item.id);
+                                                                            const pathNoExt = path.slice(0, path.lastIndexOf('.'));
+                                                                            if (path === filename || pathNoExt === filename || item.name === filename) {
+                                                                                return true;
+                                                                            }
+                                                                        } else if (item.children) {
+                                                                            if (hasFile(item.children)) return true;
+                                                                        }
+                                                                    }
+                                                                    return false;
+                                                                };
+
+                                                                if (hasFile(widget.data.tree)) {
+                                                                    widget.handleTemplateError(filename, errorMessage);
+                                                                    break;
+                                                                }
+                                                            }
+                                                        }
+                                                    };
+                                                });
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    for (let child of Array.from(targetNode.childNodes)) {
+                                        findAndReplaceText(child);
+                                    }
+                                }
+                            };
+                            findAndReplaceText(node);
+                        }
+                    }
+                }
+            });
+            errorDialogObserver.observe(document.body, { childList: true, subtree: true });
+
             isInternalSyncing = false;
         },
         nodeCreated(node:any) {
