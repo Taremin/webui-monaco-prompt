@@ -247,11 +247,24 @@ function onCreateTextarea(textarea: HTMLTextAreaElement, node: any, force = fals
         return
     }
 
+    // 対象のウィジェットオブジェクトを特定する
+    const widget = node.widgets?.find((w: any) => w.element === textarea)
+    // エディタの表示状態を更新するヘルパー関数
+    const updateEditorVisibility = () => {
+        if (widget && widget.type === "hidden") {
+            editor.style.display = "none"
+        } else {
+            editor.style.display = ""
+        }
+    }
+
     const observer = new MutationObserver((mutations) => {
         for (const mutation of mutations) {
             if (mutation.target !== textarea) continue
             // Never mirror textarea display:none onto the editor
             editor.style.cssText = styleToString((mutation.target as HTMLTextAreaElement).style, ["display"])
+            // 非表示状態を最優先で適用する
+            updateEditorVisibility()
         }
     })
     editor.style.zIndex = "" + (graphDialogZIndex - 1)
@@ -260,6 +273,23 @@ function onCreateTextarea(textarea: HTMLTextAreaElement, node: any, force = fals
         attributeFilter: ["style"]
     })
     editor.style.cssText = styleToString(textarea.style, ["display"])
+
+    // ウィジェットの type プロパティを動的にフックする
+    if (widget) {
+        let widgetType = widget.type
+        Object.defineProperty(widget, "type", {
+            get() {
+                return widgetType
+            },
+            set(val) {
+                widgetType = val
+                updateEditorVisibility()
+            },
+            configurable: true
+        })
+        // 初期状態の反映
+        updateEditorVisibility()
+    }
 
     Object.assign(editor.elements.header!.style, { backgroundColor: "#444", fontSize: "small" })
     Object.assign(editor.elements.footer!.style, { backgroundColor: "#444", fontSize: "small" })

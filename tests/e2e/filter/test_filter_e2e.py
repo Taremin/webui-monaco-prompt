@@ -164,3 +164,53 @@ def test_json_filter_persistence(page: Page, comfyui_server, wait_for_comfyui, w
     except Exception as e:
         page.screenshot(path=os.path.join(screenshot_dir, "03_persistence_failed.png"))
         raise e
+
+def test_json_filter_no_leaked_editor(page: Page, comfyui_server, wait_for_comfyui, wmp_helpers):
+    """JsonFilterノードが作成されたとき、非表示ウィジェットである rules が Monaco Editor に置換されて
+    画面上にはみ出して表示されていないか（リークしていないか）を検証する"""
+    page.on("console", lambda msg: print(f"BROWSER CONSOLE: {msg.text}"))
+    wmp_helpers.load_comfyui(page, comfyui_server, wait_for_comfyui)
+    
+    # 1. JsonFilterノードを作成
+    wmp_helpers.wait_for_graph_clear(page)
+    page.evaluate("""() => {
+        const filter = LiteGraph.createNode("WebuiMonacoPromptJsonFilter");
+        filter.pos = [200, 200];
+        app.graph.add(filter);
+        app.graph.change();
+    }""")
+    
+    # UIの安定化を待つ
+    wmp_helpers.wait_for_ui_stabilize(page, timeout=3000)
+    
+    # 2. rulesウィジェットに対するMonacoEditorが非表示（または存在しない）になっていることを検証する
+    is_editor_visible = page.evaluate("""() => {
+        const filter = app.graph._nodes.find(n => n.type === "WebuiMonacoPromptJsonFilter");
+        if (!filter) return false;
+        
+        const rulesWidget = filter.widgets.find(w => w.name === 'rules');
+        if (!rulesWidget) return false;
+        
+        // rulesWidget の要素 (textarea) のIDを取得
+        const ta = rulesWidget.element;
+        if (!ta) return false;
+        
+        const id = ta.dataset.webuiMonacoPromptTextareaId;
+        if (!id) {
+            // IDがない（＝そもそもMonacoEditorに置換されていない）ならOK
+            return false;
+        }
+        
+        // MonacoEditorのDOM要素を取得
+        const editors = document.querySelectorAll(`[data-webui-monaco-prompt-textarea-id="${id}"]`);
+        // textarea自身を除外したエディタ側の要素を探す
+        const editorEl = Array.from(editors).find(el => el.tagName !== 'TEXTAREA');
+        if (!editorEl) return false;
+        
+        // エディタが存在し、かつ display が none ではない（＝はみ出して表示されている）状態かを判定
+        const style = window.getComputedStyle(editorEl);
+        return style.display !== 'none';
+    }""")
+    
+    assert not is_editor_visible, "rulesウィジェットのMonacoEditorが画面上にはみ出して表示されています。"
+
