@@ -153,38 +153,27 @@ def wmp_helpers():
         @staticmethod
         def open_settings(page):
             """ComfyUIの設定ダイアログを開く"""
-            # Close any existing legacy modals first
-            page.evaluate("""() => {
-                const modals = document.querySelectorAll(".comfy-modal");
-                for (const m of modals) {
-                    if (m.style.display !== 'none') {
-                        const btn = m.querySelector("button");
-                        if (btn) btn.click();
-                    }
-                }
-            }""")
-
-            # Try sidebar button click (V2)
+            # サイドバーの Settings ボタンをクリック
             try:
                 # Wait for sidebar button to be present and click it
                 btn = page.locator('button[aria-label^="Settings"]').first
                 btn.wait_for(state="visible", timeout=2000)
                 btn.click()
             except:
-                # Try keyboard shortcut (Ctrl + ,)
+                # キーボードショートカット (Ctrl + ,) を試行
                 page.keyboard.press("Control+,")
             
-            # Wait for settings dialog or search input specifically
+            # 設定ダイアログまたは検索入力ボックスが表示されるのを待機
             try:
                 page.wait_for_selector(".p-dialog:visible, dialog:visible, [role='dialog']:visible, input[placeholder*='Search' i]:visible, input[placeholder*='検索' i]:visible", timeout=10000)
             except:
-                # Last resort fallback to API but try to force V2
+                # API経由で設定ダイアログを表示
                 page.evaluate("""() => {
                     const getApp = () => window.app || (window.comfyAPI && window.comfyAPI.app) || window.ComfyApp;
                     const app = getApp();
                     if (app && app.ui && app.ui.settings) app.ui.settings.show();
                 }""")
-                page.wait_for_selector(".p-dialog:visible, .comfy-modal:visible, dialog:visible, [role='dialog']:visible, input[placeholder*='Search' i]:visible, input[placeholder*='検索' i]:visible", timeout=UI_RENDER_TIMEOUT)
+                page.wait_for_selector(".p-dialog:visible, dialog:visible, [role='dialog']:visible, input[placeholder*='Search' i]:visible, input[placeholder*='検索' i]:visible", timeout=UI_RENDER_TIMEOUT)
 
         @staticmethod
         def switch_settings_category(page, category_name="WebuiMonacoPrompt"):
@@ -254,11 +243,7 @@ def wmp_helpers():
         def open_preset_dialog(page):
             """Manage Presets ダイアログを開く"""
             clicked = page.evaluate("""() => {
-                // V1 style
-                let btn = document.querySelector("#webui-monaco-manage-btn button");
-                if (btn) { btn.click(); return true; }
-                
-                // V2 style (Search by button text)
+                // ボタンのテキストで検索してクリック
                 const allBtns = Array.from(document.querySelectorAll('button'));
                 const openBtn = allBtns.find(b => b.textContent === "Open Dialog" || b.textContent.includes("Manage Language Presets"));
                 if (openBtn) { openBtn.click(); return true; }

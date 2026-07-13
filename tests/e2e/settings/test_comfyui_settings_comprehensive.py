@@ -73,68 +73,29 @@ def test_comfyui_settings_ui_elements(page: Page, comfyui_server, wait_for_comfy
     
 
     # 設定ダイアログまたは検索ボックスが DOM にマウントされるのを安全に待機
-    page.wait_for_selector(".comfy-modal, dialog, [role='dialog'], input[placeholder*='Search' i], input[placeholder*='検索' i]", state="attached", timeout=10000)
+    page.wait_for_selector(".p-dialog, dialog, [role='dialog'], input[placeholder*='Search' i], input[placeholder*='検索' i]", state="attached", timeout=10000)
     
-    # 検索入力ボックスの存在チェックで V2 UI であるかを 100% 正確に判定
-    is_v2 = page.locator("input[placeholder*='Search' i], input[placeholder*='search' i], input[placeholder*='検索' i]").count() > 0
-    
-    # V2の場合のみ: 検索ボックスを使用して項目を絞り込む、またはカテゴリを切り替える
-    if is_v2:
-        search_box = page.locator("input[placeholder*='Search' i], input[placeholder*='search' i], .p-inputtext[placeholder]").first
-        if search_box.is_visible():
-            search_box.fill("WebuiMonacoPrompt")
-            page.wait_for_timeout(1000) # 検索結果の反映を待機
-        else:
-            try:
-                wmp_helpers.switch_settings_category(page, "WebuiMonacoPrompt")
-            except Exception as e:
-                print(f"Skipping category switch: {e}")
+    # 検索ボックスを使用して項目を絞り込む、またはカテゴリを切り替える
+    search_box = page.locator("input[placeholder*='Search' i], input[placeholder*='search' i], .p-inputtext[placeholder]").first
+    if search_box.is_visible():
+        search_box.fill("WebuiMonacoPrompt")
+        page.wait_for_timeout(1000) # 検索結果の反映を待機
+    else:
+        try:
+            wmp_helpers.switch_settings_category(page, "WebuiMonacoPrompt")
+        except Exception as e:
+            print(f"Skipping category switch: {e}")
 
-    # 1. Manage Language Presets ボタンの検証
-    # Manage Language Presets ボタンの存在確認 (V1/V2 両対応)
-    manage_btn_present = page.evaluate("""() => {
-        // V1 style
-        if (document.querySelector("#webui-monaco-manage-btn")) return true;
-        
-        // V2 style (check text in current view)
-        const text = document.body.textContent;
-        return text.includes('Manage Language Presets') || text.includes('Open Dialog');
-    }""")
-    
-    if not manage_btn_present:
-        import warnings
-        warnings.warn("Manage Language Presets button not found in current view")
-    
-    # カテゴリ切り替えの描画を待機
+    # カテゴリ切り替えまたは検索反映後の描画を待機
     try:
         page.wait_for_function("""() => {
-            return document.body.textContent.includes('CSV Enabled Files') || 
-                    document.body.textContent.includes('Font Size') ||
+            return document.body.textContent.includes('Font Size') ||
                     document.body.textContent.includes('Replace Textarea');
         }""", timeout=5000)
     except Exception:
         pass
     
-    # 2. CSV 項目の検証（V2 UI はカスタム設定の DOM レンダリングをサポートしていないため V1 のみ実行）
-    if is_v2:
-        print("V2 UI detected: skipping custom CSV render DOM check as custom renderers are not supported inside V2 settings panel")
-    else:
-        # 非同期での CSV リストのロード・描画を最大10秒待機する
-        try:
-            page.wait_for_function("""() => {
-                return document.body.textContent.includes('danbooru.csv');
-            }""", timeout=10000)
-        except Exception as e:
-            print(f"Warning: danbooru.csv wait timed out: {e}")
-
-        csv_present = page.evaluate("""() => {
-            // Refactored: CSV settings are now under "CSV Enabled Files"
-            const text = document.body.textContent;
-            return text.includes('CSV Enabled Files') && text.includes('danbooru.csv');
-        }""")
-        assert csv_present, "CSV: danbooru.csv setting not found in Settings dialog under 'CSV Enabled Files'"
-    
-    # 3. データ整合性の検証 (配列化の修復)
+    # データ整合性の検証 (配列化の修復)
     wmp_helpers.set_comfy_setting(page, "WebuiMonacoPrompt.LanguagePreset", "sd-prompt")
     
     page.reload()
@@ -154,13 +115,13 @@ def test_comfyui_manage_presets_button_click(page: Page, comfyui_server, wait_fo
     # Settings を開く
     wmp_helpers.open_settings(page)
     
-    # V2の場合: 検索ボックスを使用して項目を絞り込む
+    # 検索ボックスを使用して項目を絞り込む
     search_box = page.locator("input[placeholder*='Search' i], input[placeholder*='search' i], .p-inputtext[placeholder]").first
     if search_box.is_visible():
         search_box.fill("WebuiMonacoPrompt")
         page.wait_for_timeout(1000)
     else:
-        # V1や検索ボックスがない場合はカテゴリ切り替えを試みる（タイムアウトエラーを回避するため保護）
+        # 検索ボックスがない場合はカテゴリ切り替えを試みる（タイムアウトエラーを回避するため保護）
         try:
             wmp_helpers.switch_settings_category(page, "WebuiMonacoPrompt")
         except Exception as e:

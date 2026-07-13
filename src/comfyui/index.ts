@@ -690,7 +690,7 @@ const register = (app: any) => {
                 return app.ui.settings.addSetting(settingDefinition)
             }
 
-            // V2 UI の初期化完了を待つために少し遅延させる
+            // ComfyUI 設定画面の初期化完了を待つために少し遅延させる
             await new Promise(resolve => setTimeout(resolve, 500));
 
             addSetting("WebuiMonacoPrompt.ShowHeader", "Show Header", "boolean", false)      
@@ -729,7 +729,7 @@ const register = (app: any) => {
                 }
             })
 
-            // ManagePresets Button for V2
+            // プリセット管理設定ボタン（ComfyUI用）
             addSetting("WebuiMonacoPrompt.ManagePresets", "Manage Language Presets", "custom", null, "", {
                 type: (name: string) => {
                     const row = document.createElement("tr");
@@ -750,7 +750,7 @@ const register = (app: any) => {
                 }
             });
 
-            // CSV Toggle List for V2
+            // CSVファイル一覧の設定（ComfyUI用）
             addSetting("WebuiMonacoPrompt.CSVSettings", "CSV Enabled Files", "custom", null, "", {
                 type: (name: string) => {
                     const container = document.createElement("div");
@@ -991,7 +991,7 @@ const register = (app: any) => {
                                                         e.preventDefault();
                                                         try { app.ui.dialog.close(); } catch (err) {}
                                                         
-                                                        // V2 UIでの閉じるボタンをシミュレート
+                                                        // ダイアログの閉じるボタンをシミュレート
                                                         const closeBtn = document.querySelector(".p-dialog-header-close, .comfy-modal-close") as HTMLElement;
                                                         if (closeBtn) {
                                                             closeBtn.click();
