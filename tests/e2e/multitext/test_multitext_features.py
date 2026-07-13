@@ -19,6 +19,7 @@ def test_multitext_layout_and_features(page: Page, comfyui_server, wait_for_comf
     
     # MultiTextノードを作成
     wmp_helpers.create_node(page, "WebuiMonacoPromptMultiText", [100, 100])
+    wmp_helpers.wait_for_editor(page)
 
     page.evaluate("""() => {
         const node = window.app.graph._nodes[0];

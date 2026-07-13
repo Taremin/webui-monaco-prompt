@@ -53,8 +53,11 @@ def test_settings_reload_maintains_jinja2(page: Page, comfyui_server, wait_for_c
     page.on("pageerror", lambda err: logs.append(f"[JS_ERROR] {err.message}\n{err.stack}"))
 
     try:
-        log_event("Navigating to ComfyUI")
-        wmp_helpers.load_comfyui(page, comfyui_server, wait_for_comfyui)
+        log_event("Navigating to ComfyUI and clearing localStorage")
+        page.goto(comfyui_server)
+        page.evaluate("localStorage.clear();")
+        page.reload()
+        wait_for_comfyui(page)
 
         log_event("Enabling Jinja2 via API")
         wmp_helpers.set_comfy_setting(page, "WebuiMonacoPrompt.LanguageFeature.jinja2", True)
@@ -145,8 +148,11 @@ def test_header_ui_preset_reload_persistence(page: Page, comfyui_server, wait_fo
     logs = []
     page.on("console", lambda msg: logs.append(f"[{msg.type}] {msg.text}"))
     try:
-        log_event("Navigating to ComfyUI")
-        wmp_helpers.load_comfyui(page, comfyui_server, wait_for_comfyui)
+        log_event("Navigating to ComfyUI and clearing localStorage")
+        page.goto(comfyui_server)
+        page.evaluate("localStorage.clear();")
+        page.reload()
+        wait_for_comfyui(page)
 
         log_event("Changing preset via API")
         # 直接プリセットを変更

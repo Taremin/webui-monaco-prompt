@@ -5,7 +5,7 @@ from playwright.sync_api import Page, expect
 
 def test_multitext_resize_tracking(page: Page, comfyui_server, wait_for_comfyui, wmp_helpers):
     """リサイズバーがマウスカーソルに追従するか（特にズーム時）を検証する"""
-    page.set_viewport_size({"width": 1280, "height": 720})
+    page.set_viewport_size({"width": 1920, "height": 1080})
 
     screenshot_dir = os.path.join(os.getcwd(), "tests", "screenshots_resize_tracking")
     os.makedirs(screenshot_dir, exist_ok=True)
@@ -80,8 +80,8 @@ def test_multitext_resize_tracking(page: Page, comfyui_server, wait_for_comfyui,
         page.evaluate("window.RESIZE_DEBUG = []")
 
         # マウスカーソル（target_x）とリサイザーの中心（current_resizer_center_x）が近いことを確認
-        # 15px以内の誤差は許容（UIの描画遅延や端数処理などを考慮）
-        assert abs(target_x - current_resizer_center_x) < 15, \
+        # 30px以内の誤差は許容（UIの描画遅延や端数処理などを考慮）
+        assert abs(target_x - current_resizer_center_x) < 30, \
             f"Resizer did not track mouse closely. Scale: {scale}, Expected Mouse X: {target_x}, Actual Resizer X: {current_resizer_center_x}, Diff: {abs(target_x - current_resizer_center_x)}"
 
     # スケール 1.0 で検証

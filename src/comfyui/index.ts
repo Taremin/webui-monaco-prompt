@@ -810,6 +810,7 @@ const register = (app: any) => {
             } catch (e) {
                 console.error("[WebuiMonacoPrompt] Error during initial CSV/Settings load:", e)
             }
+            (window as any).WebuiMonacoPrompt_settingsRegistered = true;
 
             // Settings Sync Listener
             const onSettingsChanged = (e: any) => {

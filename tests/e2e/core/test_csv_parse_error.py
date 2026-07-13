@@ -32,7 +32,8 @@ def test_csv_parse_error_recovery(page: Page, comfyui_server, wait_for_comfyui, 
     console_logs = []
     page.on("console", lambda msg: console_logs.append(f"[{msg.type}] {msg.text}"))
     
-    csv_dir = Path(os.getcwd()) / "csv"
+    extension_path = os.environ.get("COMFYUI_EXTENSION_PATH", os.getcwd())
+    csv_dir = Path(extension_path) / "csv"
     csv_dir.mkdir(exist_ok=True)
     bad_csv_path = csv_dir / "bad.csv"
 

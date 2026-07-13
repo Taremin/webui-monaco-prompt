@@ -18,27 +18,28 @@ custom_nodes_path = folder_paths.get_folder_paths("custom_nodes")[0]
 
 @server.PromptServer.instance.routes.get("/webui-monaco-prompt/csv")
 async def get_csv_fils(request):
-    comfy_dir = os.path.join(extension_root_path, "comfy")
-    os.makedirs(comfy_dir, exist_ok=True)
+    from pathlib import Path
+    ext_root = Path(extension_root_path).resolve()
+    comfy_dir = ext_root / "comfy"
+    comfy_dir.mkdir(parents=True, exist_ok=True)
     
-    for path in glob.glob(os.path.join(extension_root_path, "csv", "*.csv"), recursive=True):
-        basename = os.path.basename(path)
-        comfy_path = os.path.join(comfy_dir, basename)
+    csv_dir = ext_root / "csv"
+    if csv_dir.exists():
+        for csv_path in csv_dir.glob("*.csv"):
+            comfy_path = comfy_dir / csv_path.name
+            needs_copy = False
+            if not comfy_path.exists():
+                needs_copy = True
+            elif csv_path.stat().st_mtime > comfy_path.stat().st_mtime:
+                needs_copy = True
+                
+            if needs_copy:
+                try:
+                    shutil.copy2(str(csv_path), str(comfy_path))
+                except Exception as e:
+                    print(f"[WebuiMonacoPrompt] Failed to copy CSV: {e}")
 
-        needs_copy = False
-        if not os.path.isfile(comfy_path):
-            needs_copy = True
-        elif os.path.getmtime(path) > os.path.getmtime(comfy_path):
-            needs_copy = True
-            
-        if needs_copy:
-            shutil.copy2(path, comfy_path)
-
-    files = list(map(
-        lambda x: os.path.basename(x),
-        glob.glob(os.path.join(comfy_dir, "*.csv"), recursive=True)
-    ))
-
+    files = [p.name for p in comfy_dir.glob("*.csv")]
     return web.Response(text=json.dumps(files), content_type='application/json')
 
 

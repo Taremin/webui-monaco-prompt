@@ -126,12 +126,12 @@ def test_language_composition_preset_and_toggles(page: Page, comfyui_server, wai
     # 再度ダイアログを開く
     editor.locator("button", has_text="Manage Presets").evaluate("el => el.click()")
     
-    # page.on("dialog", ...) は accept するように設定済み (Playwrightのデフォルトはdismissなので明示的にフックする)
-    page.once("dialog", lambda dialog: dialog.accept())
+    # confirmを自動承認 (Playwright同期APIスレッドのデッドロックを防ぐため、ブラウザ側で confirm を直接モック化)
+    page.evaluate("window.confirm = () => true;")
     
-    # 名前でアイテムを探して Delete ボタンをクリック
+    # 名前でアイテムを探して Delete ボタンをクリック (隠れた要素対策に force=True を適用)
     preset_item = dialog_overlay.locator('div[class*="dialog-item"]', has_text=unique_preset_name)
-    preset_item.locator('button', has_text='Delete').click()
+    preset_item.locator('button', has_text='Delete').click(force=True)
     
     # ダイアログを閉じる
     dialog_overlay.locator('button', has_text='Close').click()

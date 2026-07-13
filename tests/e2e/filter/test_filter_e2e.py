@@ -53,13 +53,13 @@ def test_json_filter_full_workflow(page: Page, comfyui_server, wait_for_comfyui,
     }""")
 
     # 3. フィルタールールの設定 (appleを含まないものに絞る)
-    page.click("[class*='filter-add-btn']")
+    page.evaluate("() => document.querySelector(\"[class*='filter-add-btn']\").click()")
     page.wait_for_selector("[class*='filter-rule-row']")
     page.fill("[class*='filter-input']", "apple")
     
     # NOT条件を有効化
+    page.evaluate("() => document.querySelector(\"[class*='filter-not-btn']\").click()")
     not_btn = page.locator("[class*='filter-not-btn']").first
-    not_btn.click()
     expect(not_btn).to_have_class(re.compile(r"active"))
     
     # 4. 実行

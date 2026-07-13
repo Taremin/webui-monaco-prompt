@@ -24,13 +24,6 @@ def test_multitext_selection_mode(page: Page, comfyui_server, wait_for_comfyui, 
     wmp_helpers.create_node(page, "WebuiMonacoPromptMultiText", [100, 100])
     wmp_helpers.wait_for_ui_stabilize(page, 1000)
 
-    # ダイアログのイベントハンドラを単一にまとめる
-    dialog_text = ""
-    def handle_dialog(dialog):
-        print(f"DEBUG: Handling dialog, text={dialog_text}")
-        dialog.accept(dialog_text)
-    page.on("dialog", handle_dialog)
-
     # ツールバーとボタンの取得
     selection_btn = page.locator("button[title='Toggle Selection Mode']").first
     add_file_btn = page.locator("button[title='New File']").first
@@ -38,9 +31,9 @@ def test_multitext_selection_mode(page: Page, comfyui_server, wait_for_comfyui, 
 
     # フォルダ1つ、ファイル2つを作成する (default.txtが既に存在している前提)
 
-    # フォルダ "SubFolder" を作成
-    dialog_text = "SubFolder"
-    add_folder_btn.click()
+    # フォルダ "SubFolder" を作成 (Playwright同期APIスレッドのデッドロックを防ぐため、ブラウザ側で prompt を直接モック化)
+    page.evaluate("window.prompt = () => 'SubFolder';")
+    add_folder_btn.click(force=True, timeout=5000)
     wmp_helpers.wait_for_ui_stabilize(page, 500)
 
     # SubFolder の ID を取得し、その中に "sub_file.txt" を作成する
@@ -110,8 +103,6 @@ def test_multitext_selection_mode(page: Page, comfyui_server, wait_for_comfyui, 
     wmp_helpers.wait_for_ui_stabilize(page, 2000)
 
     # リロードしてグラフを復元
-    # on('dialog') がリロード後にエラーになるのを防ぐため、解除しておく
-    page.remove_listener("dialog", handle_dialog)
 
     # localstorageに保存されていることを明示的に保証するため少し待機
     page.wait_for_timeout(1000)

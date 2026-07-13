@@ -84,7 +84,8 @@ def test_dynamic_csv_toggle_sync(page: Page, comfyui_server, wait_for_comfyui, w
     
     wmp_helpers.wait_for_editor(page)
 
-    csv_dir = Path(os.getcwd()) / "csv"
+    extension_path = os.environ.get("COMFYUI_EXTENSION_PATH", os.getcwd())
+    csv_dir = Path(extension_path) / "csv"
     csv_dir.mkdir(exist_ok=True)
     test_csv_path = csv_dir / "test_dynamic.csv"
     

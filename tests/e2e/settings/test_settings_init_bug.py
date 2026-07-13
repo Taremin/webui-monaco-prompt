@@ -18,6 +18,16 @@ def test_settings_initialization_bug(page: Page, comfyui_server, wait_for_comfyu
     page.evaluate("localStorage.clear()")
     page.reload()
     wait_for_comfyui(page)
+    
+    # 拡張機能の設定が ComfyUI に登録完了するまで待機（登録遅延対策）
+    page.wait_for_function("""() => {
+        const findApp = () => window.app || (window.comfyAPI && window.comfyAPI.app) || window.ComfyApp;
+        const app = findApp();
+        if (app && app.ui && app.ui.settings) {
+            return app.ui.settings.getSettingValue("WebuiMonacoPrompt.ShowHeader") === true;
+        }
+        return false;
+    }""", timeout=15000)
 
     log_event("Adding Prompt Node")
     page.evaluate("() => { const node = LiteGraph.createNode('WebuiMonacoPromptMultiText'); app.graph.add(node); }")
@@ -40,6 +50,17 @@ def test_settings_initialization_bug(page: Page, comfyui_server, wait_for_comfyu
     log_event("Reloading page")
     page.reload()
     wait_for_comfyui(page)
+    
+    # リロード後に拡張機能の設定が ComfyUI に再マウントされるまで待機
+    page.wait_for_function("""() => {
+        const findApp = () => window.app || (window.comfyAPI && window.comfyAPI.app) || window.ComfyApp;
+        const app = findApp();
+        if (app && app.ui && app.ui.settings) {
+            return app.ui.settings.getSettingValue("WebuiMonacoPrompt.ShowHeader") === true;
+        }
+        return false;
+    }""", timeout=15000)
+    
     wmp_helpers.wait_for_ui_stabilize(page, 3000)
 
     page.wait_for_timeout(2000)

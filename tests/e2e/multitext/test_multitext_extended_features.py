@@ -75,6 +75,7 @@ def test_multitext_tab_auto_scroll(page: Page, comfyui_server, wait_for_comfyui,
     page.goto(comfyui_server)
     wait_for_comfyui(page)
     add_node_api_force(page)
+    wmp_helpers.wait_for_editor(page)
     
     # ファイルを25個作成
     items = [("file", f"file_{i:02d}.txt") for i in range(1, 26)]
@@ -104,6 +105,7 @@ def test_multitext_multiple_selection_dnd(page: Page, comfyui_server, wait_for_c
     page.goto(comfyui_server)
     wait_for_comfyui(page)
     add_node_api_force(page)
+    wmp_helpers.wait_for_editor(page)
     
     # フォルダとファイル作成
     items = [("folder", "target_folder"), ("file", "move_me_1.txt"), ("file", "move_me_2.txt"), ("file", "move_me_3.txt")]
@@ -155,6 +157,7 @@ def test_multitext_shift_selection(page: Page, comfyui_server, wait_for_comfyui,
     page.goto(comfyui_server)
     wait_for_comfyui(page)
     add_node_api_force(page)
+    wmp_helpers.wait_for_editor(page)
     
     items = [("file", f"range_{i}.txt") for i in range(1, 6)]
     create_items_api(page, items)
@@ -182,6 +185,7 @@ def test_multitext_search_toggle_and_clear(page: Page, comfyui_server, wait_for_
     page.goto(comfyui_server)
     wait_for_comfyui(page)
     add_node_api_force(page)
+    wmp_helpers.wait_for_editor(page)
     
     # テスト用ファイル作成
     items = [("file", "search_test.txt")]

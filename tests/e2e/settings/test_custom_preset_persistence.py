@@ -72,9 +72,13 @@ def test_custom_preset_persistence(page: Page, comfyui_server, wait_for_comfyui,
     expect(page.locator(f"#webui-monaco-preset-dialog .preset-item:has-text('{preset_name}')")).to_be_visible()
 
     log_event("Deleting custom preset")
-    # 削除テスト
-    page.on("dialog", lambda dialog: dialog.accept()) # confirmを自動承認
-    page.click(f"#webui-monaco-preset-dialog .preset-item:has-text('{preset_name}') button:has-text('Delete')")
+    # 削除テスト (Playwright同期APIスレッドのデッドロックを防ぐため、ブラウザ側で confirm を直接モック化)
+    page.evaluate("window.confirm = () => true;")
+    page.click(
+        f"#webui-monaco-preset-dialog .preset-item:has-text('{preset_name}') button:has-text('Delete')",
+        force=True,
+        timeout=5000
+    )
 
     # 消えたことを確認
     expect(page.locator(f"#webui-monaco-preset-dialog .preset-item:has-text('{preset_name}')")).not_to_be_visible()

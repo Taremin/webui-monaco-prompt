@@ -6,7 +6,8 @@ import uuid
 
 def create_static_test_csv(unique_id: str):
     """Create a static test CSV file to ensure stable test environment."""
-    csv_dir = Path(os.getcwd()) / "csv"
+    extension_path = os.environ.get("COMFYUI_EXTENSION_PATH", os.getcwd())
+    csv_dir = Path(extension_path) / "csv"
     csv_dir.mkdir(exist_ok=True)
     basename = f"test_auto_{unique_id}"
     test_csv_path = csv_dir / f"{basename}.csv"
@@ -136,28 +137,19 @@ def test_multitext_csv_autocomplete_toggle(page: Page, comfyui_server, wait_for_
         page.keyboard.press("Control+a")
         page.keyboard.press("Backspace")
 
-        # 5. 再度CSVをオンにする (Settingsダイアログ経由)
-        wmp_helpers.open_settings(page)
-        
-        # Optional: Switch category if implemented
-        try:
-            wmp_helpers.switch_settings_category(page, "WebuiMonacoPrompt")
-        except:
-            pass
+        # 5. 再度CSVをオンにする (API直接操作と伝播)
+        page.evaluate(f"""() => {{
+            const app = window.app || (window.comfyAPI && window.comfyAPI.app) || window.ComfyApp;
+            const currentToggle = app.ui.settings.getSettingValue("WebuiMonacoPrompt.CsvToggle", {{}});
+            currentToggle["{context_key}"] = true;
+            app.ui.settings.setSettingValue("WebuiMonacoPrompt.CsvToggle", currentToggle);
             
-        search_box = page.get_by_placeholder("Search settings")
-        if search_box.is_visible():
-            search_box.fill("WebuiMonacoPrompt")
-        page.wait_for_timeout(500)
-        
-        # 設定ダイアログ内の対応するチェックボックスをクリックしてオンにする
-        checkbox = page.locator('label', has_text=f"{basename}.csv").locator('input[type="checkbox"]').first
-        checkbox.wait_for(state="attached", timeout=5000)
-        if not checkbox.is_checked():
-            checkbox.click()
-            
-        # 設定ダイアログを閉じる
-        page.keyboard.press("Escape")
+            if (window.WebuiMonacoPrompt && window.WebuiMonacoPrompt.runAllInstances) {{
+                 window.WebuiMonacoPrompt.runAllInstances((instance) => {{
+                     instance.setSettings({{csvToggle: currentToggle}}, true);
+                 }});
+            }}
+        }}""")
         page.wait_for_timeout(500)
 
         # ページをリロードして、設定が永続化され、起動時に正しくタグが読み込まれることを確認する

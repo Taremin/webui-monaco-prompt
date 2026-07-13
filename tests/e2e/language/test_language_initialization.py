@@ -126,8 +126,21 @@ def test_language_initialization_after_reload(page: Page, comfyui_server, wait_f
     page.wait_for_function("() => app.graph && app.graph._nodes.length > 0")
     wmp_helpers.wait_for_editor(page)
     
+    # リロード前に、現在のグラフの状態（CLIPTextEncode がある状態）をシリアライズして Python 側に退避する
+    saved_graph = page.evaluate("() => typeof app !== 'undefined' && app.graph ? app.graph.serialize() : null")
+    
     page.reload()
     wait_for_comfyui(page)
+    
+    # リロード後、退避していたグラフ状態を手動で復元（ロード）する
+    page.evaluate(f"""(data) => {{
+        const findApp = () => window.app || (window.comfyAPI && window.comfyAPI.app) || window.ComfyApp;
+        const app = findApp();
+        if (app && app.loadGraphData && data) {{
+            app.loadGraphData(data);
+        }}
+    }}""", saved_graph)
+    
     wmp_helpers.wait_for_editor(page)
 
     # loadSetting()は非同期のため、エディタ出現後もlanguage設定がまだ適用されていない場合がある

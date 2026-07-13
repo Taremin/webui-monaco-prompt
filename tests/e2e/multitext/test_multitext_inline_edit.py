@@ -48,6 +48,7 @@ def test_multitext_inline_edit(page: Page, comfyui_server, wait_for_comfyui, wmp
     add_node_api_force(page)
     
     # サイドバーのアイテムが表示されるまで待機（default.txt）
+    wmp_helpers.wait_for_editor(page)
     item_selector = "[class*='tree-name']"
     expect(page.locator(item_selector).first).to_be_visible()
     expect(page.locator(item_selector).first).to_have_text("default.txt")

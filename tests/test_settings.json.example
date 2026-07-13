@@ -1,4 +1,6 @@
 {
+    "comfyui_versions": ["v0.2.0", "v0.2.2"],
+    "active_version": "v0.2.2",
     "comfyui_path": "../../..",
     "python_executable": "../../../../python_embeded/python.exe",
     "test_port": 9876

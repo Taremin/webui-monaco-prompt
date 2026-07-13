@@ -28,16 +28,17 @@ def test_reproduce_sidebar_resize_bug(page: Page, comfyui_server, wait_for_comfy
     initial_width = sidebar.bounding_box()["width"]
     print(f"DEBUG - Initial Sidebar Width: {initial_width}")
 
-    resizer = page.locator("[class*='multitext-resizer']")
+    resizer = page.locator("[class*='multitext-resizer']").first
+    resizer.hover()
     resizer_box = resizer.bounding_box()
     
     start_x = resizer_box["x"] + resizer_box["width"] / 2
     start_y = resizer_box["y"] + resizer_box["height"] / 2
 
-    # リサイズ操作: 右へ 150px 移動
+    # リサイズ操作: 右へ 150px 移動 (steps=10 で滑らかなドラッグをシミュレート)
     page.mouse.move(start_x, start_y)
     page.mouse.down()
-    page.mouse.move(start_x + 150, start_y)
+    page.mouse.move(start_x + 150, start_y, steps=10)
     page.mouse.up()
 
     # 直後の幅確認

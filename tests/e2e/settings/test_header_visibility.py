@@ -11,13 +11,33 @@ def test_header_initially_hidden_when_disabled(page: Page, comfyui_server, wait_
     設定でヘッダーが非表示(ShowHeader=False)になっている場合、
     ノード生成直後の最初の段階からヘッダーのdisplayスタイルが'none'になっていることを検証する。
     """
+    # ページロード開始前の段階から LocalStorage を完璧にクリアしておく
+    page.context.add_init_script("""() => {
+        localStorage.clear();
+    }""")
     page.goto(comfyui_server)
     wait_for_comfyui(page)
     
-    log_event("Clearing existing localStorage to ensure a clean state")
-    page.evaluate("localStorage.clear()")
-    page.reload()
-    wait_for_comfyui(page)
+    # 拡張機能の設定が ComfyUI に登録完了するまで待機（登録遅延対策）
+    page.wait_for_function("""() => {
+        const findApp = () => window.app || (window.comfyAPI && window.comfyAPI.app) || window.ComfyApp;
+        const app = findApp();
+        if (!app || !app.ui || !app.ui.settings) return false;
+        
+        // V1 UI 設定登録チェック
+        if (app.ui.settings.settings && app.ui.settings.settings.some(s => s.id === "WebuiMonacoPrompt.ShowHeader")) {
+            return true;
+        }
+        // V2 UI 設定登録チェック (addSetting完了により値が取得可能になる)
+        if (app.ui.settings.getSettingValue && app.ui.settings.getSettingValue("WebuiMonacoPrompt.ShowHeader") !== undefined) {
+            return true;
+        }
+        // 汎用フォールバック: グローバルオブジェクトの準備完了
+        if (window.WebuiMonacoPrompt && window.WebuiMonacoPrompt.PromptEditorManager) {
+            return true;
+        }
+        return false;
+    }""", timeout=15000)
 
     log_event("Ensuring ShowHeader setting is false via API")
     page.evaluate("app.ui.settings.setSettingValue('WebuiMonacoPrompt.ShowHeader', false)")
@@ -42,8 +62,33 @@ def test_header_visible_when_enabled(page: Page, comfyui_server, wait_for_comfyu
     設定でヘッダーが表示(ShowHeader=True)になっている場合、
     ノード生成直後にヘッダーが表示されていることを検証する。
     """
+    # 前のテストケースの設定残留を防ぐため、こちらもページロード開始前に LocalStorage を完璧にクリアしておく
+    page.context.add_init_script("""() => {
+        localStorage.clear();
+    }""")
     page.goto(comfyui_server)
     wait_for_comfyui(page)
+    
+    # 拡張機能の設定が ComfyUI に登録完了するまで待機（登録遅延対策）
+    page.wait_for_function("""() => {
+        const findApp = () => window.app || (window.comfyAPI && window.comfyAPI.app) || window.ComfyApp;
+        const app = findApp();
+        if (!app || !app.ui || !app.ui.settings) return false;
+        
+        // V1 UI 設定登録チェック
+        if (app.ui.settings.settings && app.ui.settings.settings.some(s => s.id === "WebuiMonacoPrompt.ShowHeader")) {
+            return true;
+        }
+        // V2 UI 設定登録チェック (addSetting完了により値が取得可能になる)
+        if (app.ui.settings.getSettingValue && app.ui.settings.getSettingValue("WebuiMonacoPrompt.ShowHeader") !== undefined) {
+            return true;
+        }
+        // 汎用フォールバック: グローバルオブジェクトの準備完了
+        if (window.WebuiMonacoPrompt && window.WebuiMonacoPrompt.PromptEditorManager) {
+            return true;
+        }
+        return false;
+    }""", timeout=15000)
     
     log_event("Ensuring ShowHeader setting is true via API")
     page.evaluate("app.ui.settings.setSettingValue('WebuiMonacoPrompt.ShowHeader', true)")

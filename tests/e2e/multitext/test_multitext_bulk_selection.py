@@ -22,18 +22,24 @@ def test_multitext_bulk_selection(page: Page, comfyui_server, wait_for_comfyui, 
     wmp_helpers.create_node(page, "WebuiMonacoPromptMultiText", [100, 100])
     wmp_helpers.wait_for_ui_stabilize(page, 2000)
     
+    # レイアウト重なりを防止するためにノードをリサイズ
+    page.evaluate("""() => {
+        const node = window.app.graph._nodes[0];
+        node.setSize([800, 600]);
+        if (node.onResize) node.onResize(node.size);
+    }""")
+    wmp_helpers.wait_for_ui_stabilize(page, 1000)
+    
     # ノードが作成されたか確認
     expect(page.locator("button[title='New Folder']").first).to_be_visible(timeout=10000)
+    wmp_helpers.wait_for_editor(page)
 
     # テスト用データの準備（フォルダとファイルを追加）
-    dialog_text = ""
-    def handle_dialog(dialog):
-        dialog.accept(dialog_text)
-    page.on("dialog", handle_dialog)
-
-    add_folder_btn = page.locator("button[title='New Folder']").first
-    dialog_text = "TestFolder"
-    add_folder_btn.click()
+    add_folder_btn = page.locator("[class*='sidebar-toolbar'] button[title='New Folder']").first
+    
+    # フォルダ "TestFolder" を作成 (Playwright同期APIスレッドのデッドロックを防ぐため、ブラウザ側で prompt を直接モック化)
+    page.evaluate("window.prompt = () => 'TestFolder';")
+    add_folder_btn.click(force=True, timeout=5000)
     wmp_helpers.wait_for_ui_stabilize(page, 500)
 
     # フォルダの中にファイルを作成
@@ -46,7 +52,7 @@ def test_multitext_bulk_selection(page: Page, comfyui_server, wait_for_comfyui, 
 
     # 1. 選択モードを有効化し、専用ツールバーが表示されることを確認
     selection_mode_btn = page.locator("button[title='Toggle Selection Mode']").first
-    selection_mode_btn.click()
+    selection_mode_btn.click(force=True)
     wmp_helpers.wait_for_ui_stabilize(page, 500)
 
     bulk_toolbar = page.locator("[class*='selection-toolbar']")
@@ -58,7 +64,7 @@ def test_multitext_bulk_selection(page: Page, comfyui_server, wait_for_comfyui, 
     expect(uncheck_all_btn).to_be_visible()
 
     # 2. 「Check All」を実行し、全アイテムがONになることを確認
-    check_all_btn.click()
+    check_all_btn.click(force=True)
     wmp_helpers.wait_for_ui_stabilize(page, 500)
 
     # データの状態を検証
@@ -77,7 +83,7 @@ def test_multitext_bulk_selection(page: Page, comfyui_server, wait_for_comfyui, 
         expect(checkboxes.nth(i)).to_be_checked()
 
     # 3. 「Uncheck All」を実行し、全アイテムがOFFになることを確認
-    uncheck_all_btn.click()
+    uncheck_all_btn.click(force=True)
     wmp_helpers.wait_for_ui_stabilize(page, 500)
 
     all_unchecked = page.evaluate("""() => {
@@ -103,7 +109,7 @@ def test_multitext_bulk_selection(page: Page, comfyui_server, wait_for_comfyui, 
     
     # フォルダを閉じる
     test_folder_name = page.locator("span").filter(has_text=re.compile(r"^TestFolder$")).first
-    test_folder_name.click() # デフォルトのクリックでフォルダ開閉が発生するはず
+    test_folder_name.click(force=True) # デフォルトのクリックでフォルダ開閉が発生するはず
     
     # Check All を押してもフォルダが閉じたままであることを確認（全面再レンダリングならリセットされて開く可能性があるが、展開状態はデータにあるため、ここでは「要素が入れ替わっていないこと」を重視）
     # 実際には、展開状態(expanded)はデータに保存されているため、renderTreeを呼んでもUIは復元されるが、
