@@ -312,7 +312,7 @@ def wait_for_server(url, timeout=300.0):
                 return False
             time.sleep(1.0)
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="session")
 def comfyui_server(test_settings, comfyui_version):
     """ComfyUIサーバーを起動し、そのベースURLを返すフィクスチャ"""
     port = test_settings["test_port"]
@@ -351,6 +351,7 @@ def comfyui_server(test_settings, comfyui_version):
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         encoding="utf-8",
+        errors="replace",
         env=env,
         bufsize=1,
         universal_newlines=True
@@ -366,7 +367,7 @@ def comfyui_server(test_settings, comfyui_version):
     import threading
     import queue
     
-    log_file = open("comfyui_server.log", "w", encoding="utf-8", buffering=1)
+    log_file = open("comfyui_server.log", "w", encoding="utf-8", errors="replace", buffering=1)
     output_queue = queue.Queue()
     def enqueue_output(out, queue, log):
         for line in iter(out.readline, ''):
