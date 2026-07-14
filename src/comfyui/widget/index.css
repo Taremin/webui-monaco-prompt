@@ -431,8 +431,18 @@
 }
 
 .webui-monaco-prompt-filter-spacer {
-    width: 45px;
+    display: inline-block;
+    width: 50px;
+    height: 22px;
+    flex-shrink: 0;
+    box-sizing: border-box;
     /* operator select width placeholder */
+}
+
+.webui-monaco-prompt-filter-operator-select {
+    width: 50px;
+    flex-shrink: 0;
+    box-sizing: border-box;
 }
 
 .webui-monaco-prompt-filter-select {

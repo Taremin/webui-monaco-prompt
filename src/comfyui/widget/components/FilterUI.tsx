@@ -134,7 +134,7 @@ export function FilterUI({ widget }: FilterUIProps) {
                             {/* 結合演算子 (AND/OR) ※2個目以降のみ表示 */}
                             {index > 0 ? (
                                 <select
-                                    className={getStyle("webui-monaco-prompt-filter-select")}
+                                    className={`${getStyle("webui-monaco-prompt-filter-select")} ${getStyle("webui-monaco-prompt-filter-operator-select")}`}
                                     value={rule.operator || "AND"}
                                     onMouseDownCapture={silence}
                                     onMouseUpCapture={silence}

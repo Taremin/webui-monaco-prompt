@@ -214,3 +214,150 @@ def test_json_filter_no_leaked_editor(page: Page, comfyui_server, wait_for_comfy
     
     assert not is_editor_visible, "rulesウィジェットのMonacoEditorが画面上にはみ出して表示されています。"
 
+
+def test_json_filter_min_size_layout(page: Page, comfyui_server, wait_for_comfyui, wmp_helpers):
+    """JsonFilterノードを最小サイズにリサイズした際のレイアウト崩れ（はみ出し）を検証する"""
+    wmp_helpers.load_comfyui(page, comfyui_server, wait_for_comfyui)
+    wmp_helpers.wait_for_graph_clear(page)
+
+    screenshot_dir = os.path.join(os.getcwd(), "tests", "screenshots_filter")
+    os.makedirs(screenshot_dir, exist_ok=True)
+
+    # 1. JsonFilterノードを作成
+    wmp_helpers.create_node(page, "WebuiMonacoPromptJsonFilter", [100, 100])
+    page.wait_for_selector("[class*='filter-container']", state="visible")
+
+    # 初期サイズ設定とノードIDの取得
+    node_info = page.evaluate("""() => {
+        const app = window.app || window.ComfyApp;
+        const node = app.graph._nodes[0];
+        node.size = [400, 300];
+        return { id: node.id };
+    }""")
+
+    # 2. ノードを小さくリサイズ (高さ 200px)
+    page.evaluate(f"""(id) => {{
+        const app = window.app || window.ComfyApp;
+        const node = app.graph.getNodeById(id);
+        node.size = [350, 200];
+        app.canvas.setDirty(true, true);
+    }}""", node_info['id'])
+    
+    wmp_helpers.wait_for_ui_stabilize(page, 1000)
+    page.screenshot(path=os.path.join(screenshot_dir, "04_min_size_layout.png"))
+
+    # 3. レイアウト情報の取得
+    layout_info = page.evaluate(f"""(id) => {{
+        const app = window.app || window.ComfyApp;
+        const node = app.graph.getNodeById(id);
+        if (!node) return {{ error: "Node not found" }};
+        
+        const widget = node.widgets.find(w => w.name === "webui-monaco-prompt-filter" || w.name === "filter");
+        if (!widget) return {{ error: "Widget not found" }};
+        
+        const container = widget.element;
+
+        if (!container) return {{ error: "Container element not found" }};
+
+        const nodeRect = {{
+            width: node.size[0],
+            height: node.size[1]
+        }};
+        
+        const containerRect = container.getBoundingClientRect();
+        const canvasScale = app.canvas.ds.scale;
+
+        return {{
+            nodeSize: nodeRect,
+            containerSize: {{
+                width: containerRect.width / canvasScale,
+                height: containerRect.height / canvasScale
+            }},
+            outputsCount: node.outputs ? node.outputs.length : 0
+        }};
+    }}""", node_info['id'])
+
+    if "error" in layout_info:
+        pytest.fail(f"JS Error: {layout_info['error']}")
+
+    # 4. 検証: ウィジェットの高さがノードの許容高さ（タイトル 36px + 出力ピン数 * 20px を除いた分）を超えていないか
+    outputs_height = layout_info['outputsCount'] * 20
+    expected_max_height = layout_info['nodeSize']['height'] - 36 - outputs_height
+    
+    # 誤差吸収のため少し余裕(10px)を持たせてアサーション
+    assert layout_info['containerSize']['height'] <= expected_max_height + 10, \
+        f"Widget height {layout_info['containerSize']['height']} exceeds allowed height {expected_max_height}"
+
+    print("JsonFilter min size layout test finished.")
+
+
+def test_json_filter_row_alignment_when_scrolling(page: Page, comfyui_server, wait_for_comfyui, wmp_helpers):
+    """横スクロールが発生するような幅の狭い状態でも、1行目のスペーサーと2行目のAND/ORセレクトボックスの幅および各行のコントロールの位置が揃っていることを検証する"""
+    page.on("console", lambda msg: print(f"BROWSER CONSOLE: {msg.text}"))
+    wmp_helpers.load_comfyui(page, comfyui_server, wait_for_comfyui)
+    wmp_helpers.wait_for_graph_clear(page)
+
+    screenshot_dir = os.path.join(os.getcwd(), "tests", "screenshots_filter")
+    os.makedirs(screenshot_dir, exist_ok=True)
+
+    # 1. JsonFilterノードを作成
+    wmp_helpers.create_node(page, "WebuiMonacoPromptJsonFilter", [100, 100])
+    page.wait_for_selector("[class*='filter-container']", state="visible")
+
+    # 2. ルールを3つ追加 (1行目はスペーサー、2行目以降はAND/ORセレクトボックスが出現)
+    for _ in range(3):
+        page.evaluate("() => document.querySelector(\"[class*='filter-add-btn']\").click()")
+    
+    wmp_helpers.wait_for_ui_stabilize(page, timeout=500)
+
+    # 3. ノードを極端に狭くリサイズして、横スクロールまたは縮小を発生させる (幅 150px)
+    node_info = page.evaluate("""() => {
+        const app = window.app || window.ComfyApp;
+        const node = app.graph._nodes[0];
+        node.size = [150, 300];
+        app.canvas.setDirty(true, true);
+        return { id: node.id };
+    }""")
+
+    wmp_helpers.wait_for_ui_stabilize(page, timeout=1000)
+    page.screenshot(path=os.path.join(screenshot_dir, "05_row_alignment_narrow.png"))
+
+    # 4. 要素のバウンディングボックスを取得して比較
+    rows = page.locator("[class*='filter-rule-row']")
+    row1 = rows.nth(0)
+    row2 = rows.nth(1)
+
+    # 1行目のスペーサー
+    spacer = row1.locator("[class*='filter-spacer']")
+    # 2行目の最初のセレクトボックス (AND/OR select)
+    operator_select = row2.locator("[class*='filter-select']").first
+
+    spacer_box = spacer.bounding_box()
+    operator_box = operator_select.bounding_box()
+
+    print(f"Spacer bounding box: {spacer_box}")
+    print(f"Operator Select bounding box: {operator_box}")
+
+    # 5. 各行の2番目以降の要素（例: Targetセレクトボックス）のX座標も揃っているか確認
+    # 1行目は最初のセレクトボックスが Target
+    target_select_row1 = row1.locator("[class*='filter-select']").first
+    # 2行目は2番目のセレクトボックスが Target (1番目は AND/OR)
+    target_select_row2 = row2.locator("[class*='filter-select']").nth(1)
+
+    target1_box = target_select_row1.bounding_box()
+    target2_box = target_select_row2.bounding_box()
+
+    print(f"Target select row1 bounding box: {target1_box}")
+    print(f"Target select row2 bounding box: {target2_box}")
+
+    # 誤差を考慮し、1px未満の差は許容するアサーション
+    assert abs(spacer_box["width"] - operator_box["width"]) < 1.0, \
+        f"Spacer width ({spacer_box['width']}) and Operator Select width ({operator_box['width']}) do not match!"
+
+    assert abs(target1_box["x"] - target2_box["x"]) < 1.0, \
+        f"Target select columns are not aligned! Row1 X: {target1_box['x']}, Row2 X: {target2_box['x']}"
+
+    print("Alignment verification passed!")
+
+
+
