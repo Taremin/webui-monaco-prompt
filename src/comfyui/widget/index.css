@@ -227,6 +227,15 @@
 
 .webui-monaco-prompt-multitext-tab {}
 
+.webui-monaco-prompt-multitext-tab.dragging {
+    opacity: 0.5 !important;
+}
+
+.webui-monaco-prompt-multitext-tab.drag-over {
+    background-color: #37373d !important;
+    border-left: 2px solid #007fd4 !important;
+}
+
 .webui-monaco-prompt-multitext-tab-close {}
 
 .webui-monaco-prompt-multitext-editor-container {}

@@ -759,6 +759,32 @@ class MultiTextWidget {
                 this.openFile(fileId);
             };
 
+            // タブのドラッグ＆ドロップイベント設定
+            tab.draggable = true;
+            tab.addEventListener('dragstart', (e) => {
+                tab.classList.add(getStyle('dragging'));
+                e.dataTransfer?.setData('text/tab-id', fileId);
+                e.dataTransfer?.setData('text/plain', fileId);
+            });
+            tab.addEventListener('dragend', () => {
+                tab.classList.remove(getStyle('dragging'));
+            });
+            tab.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                tab.classList.add(getStyle('drag-over'));
+            });
+            tab.addEventListener('dragleave', () => {
+                tab.classList.remove(getStyle('drag-over'));
+            });
+            tab.addEventListener('drop', (e) => {
+                e.preventDefault();
+                tab.classList.remove(getStyle('drag-over'));
+                const draggedId = e.dataTransfer?.getData('text/tab-id') || e.dataTransfer?.getData('text/plain');
+                if (draggedId && draggedId !== fileId) {
+                    this.reorderTabs(draggedId, fileId);
+                }
+            });
+
             this.elements.tabsContainer.appendChild(tab);
         }
 
@@ -771,6 +797,19 @@ class MultiTextWidget {
                 activeTab.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
             }
         }, 100); // DOMレンダリング後の実行を確実にするため少し長めに設定
+    }
+
+    public reorderTabs(draggedId: string, targetId: string) {
+        if (!this.data.openedFileIds) return;
+        const draggedIdx = this.data.openedFileIds.indexOf(draggedId);
+        const targetIdx = this.data.openedFileIds.indexOf(targetId);
+        if (draggedIdx === -1 || targetIdx === -1 || draggedIdx === targetIdx) return;
+
+        this.data.openedFileIds.splice(draggedIdx, 1);
+        this.data.openedFileIds.splice(targetIdx, 0, draggedId);
+
+        this.commitData();
+        this.renderTabs();
     }
 
     public closeTab(id: string) {
