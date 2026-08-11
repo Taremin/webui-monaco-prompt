@@ -25,12 +25,16 @@ function isGitClean() {
 
     const lines = status.split('\n').filter(Boolean);
     const criticalChanges = lines.filter(line => {
-        const filepath = line.slice(3).trim();
+        const filepath = line.substring(3).trim().replace(/^"/, '').replace(/"$/, '');
         if (filepath.startsWith('comfy/') || filepath.startsWith('dist/') || filepath.startsWith('tests/') || filepath.endsWith('.log') || filepath.endsWith('.png')) {
             return false;
         }
         return true;
     });
+
+    if (criticalChanges.length > 0) {
+        console.log('Detected critical uncommitted files:', criticalChanges);
+    }
 
     return criticalChanges.length === 0;
 }
