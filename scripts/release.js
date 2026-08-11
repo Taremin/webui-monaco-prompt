@@ -25,7 +25,7 @@ function isGitClean() {
 
     const lines = status.split('\n').filter(Boolean);
     const criticalChanges = lines.filter(line => {
-        const filepath = line.substring(3).trim().replace(/^"/, '').replace(/"$/, '');
+        const filepath = line.replace(/^[\sA-Z?!]+\s+/, '').replace(/^"/, '').replace(/"$/, '').trim();
         if (filepath.startsWith('comfy/') || filepath.startsWith('dist/') || filepath.startsWith('tests/') || filepath.endsWith('.log') || filepath.endsWith('.png')) {
             return false;
         }
