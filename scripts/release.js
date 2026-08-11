@@ -19,13 +19,14 @@ function getCurrentBranch() {
 }
 
 function isGitClean() {
-    const status = getOutput('git status --porcelain');
+    // -uno で Untracked ファイル (tests/ 以下のスクショやログ等) を無視し、追跡中ファイルの変更のみ確認
+    const status = getOutput('git status --porcelain -uno');
     if (!status) return true;
 
-    const lines = status.split('\n').map(l => l.trim()).filter(Boolean);
+    const lines = status.split('\n').filter(Boolean);
     const criticalChanges = lines.filter(line => {
-        const filepath = line.replace(/^[?\sA-Z]+\s+/, '');
-        if (filepath.startsWith('comfy/') || filepath.startsWith('dist/') || filepath.endsWith('.log') || filepath.endsWith('.png')) {
+        const filepath = line.slice(3).trim();
+        if (filepath.startsWith('comfy/') || filepath.startsWith('dist/') || filepath.startsWith('tests/') || filepath.endsWith('.log') || filepath.endsWith('.png')) {
             return false;
         }
         return true;
