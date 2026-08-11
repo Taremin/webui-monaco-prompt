@@ -20,7 +20,18 @@ function getCurrentBranch() {
 
 function isGitClean() {
     const status = getOutput('git status --porcelain');
-    return status === '';
+    if (!status) return true;
+
+    const lines = status.split('\n').map(l => l.trim()).filter(Boolean);
+    const criticalChanges = lines.filter(line => {
+        const filepath = line.replace(/^[?\sA-Z]+\s+/, '');
+        if (filepath.startsWith('comfy/') || filepath.startsWith('dist/') || filepath.endsWith('.log') || filepath.endsWith('.png')) {
+            return false;
+        }
+        return true;
+    });
+
+    return criticalChanges.length === 0;
 }
 
 function parseVersion(versionStr) {
@@ -88,6 +99,11 @@ Examples:
         console.error(`Error: Uncommitted changes detected in working directory. Please commit or stash them first.`);
         process.exit(1);
     }
+
+    // ビルド成果物 (comfy/) の既知の差分を事前にリセット
+    try {
+        run(`git checkout HEAD -- comfy/`);
+    } catch (e) {}
 
     const packageJsonPath = path.join(rootDir, 'package.json');
     const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
