@@ -110,6 +110,43 @@ def test_expand_dir_snippets_path_traversal_prevention(dummy_custom_node):
     assert result == ""
 
 
+def test_expand_dir_snippets_models_alias(monkeypatch, dummy_custom_node):
+    node_dir, _ = dummy_custom_node
+
+    # ComfyUI の folder_paths のモックを作成
+    class MockFolderPaths:
+        folder_names_and_paths = {
+            "loras": (["/fake/path/loras"], {".safetensors"}),
+            "diffusion_models": (["/fake/path/diffusion_models"], {".safetensors"}),
+        }
+
+        @staticmethod
+        def get_filename_list(category):
+            if category == "loras":
+                return ["lora_a.safetensors", "sub/lora_b.safetensors"]
+            elif category == "diffusion_models":
+                return ["flux_dev.safetensors"]
+            return []
+
+    import sys
+    monkeypatch.setitem(sys.modules, "folder_paths", MockFolderPaths)
+
+    # 1. @models/loras の選択肢展開
+    insert_text1 = "<lora:${dir:@models/loras|pattern=\\.[^.]+$|var=1|format=choice}:1.0>"
+    res1 = snippets.expand_dir_snippets(insert_text1, str(node_dir))
+    assert res1 == "<lora:${1|lora_a,lora_b|}:1.0>"
+
+    # 2. @models/diffusion_models の選択肢展開
+    insert_text2 = "${dir:@models/diffusion_models|pattern=\\.[^.]+$|var=2}"
+    res2 = snippets.expand_dir_snippets(insert_text2, str(node_dir))
+    assert res2 == "${2|flux_dev|}"
+
+    # 3. 存在しない無効なモデルカテゴリへの安全拒否
+    insert_text3 = "${dir:@models/invalid_category}"
+    res3 = snippets.expand_dir_snippets(insert_text3, str(node_dir))
+    assert res3 == ""
+
+
 def test_load_snippets_integration(dummy_custom_node):
     node_dir, custom_nodes_dir = dummy_custom_node
     snippet_file = node_dir / "snippets" / "my_snippets.json"
@@ -132,3 +169,4 @@ def test_load_snippets_integration(dummy_custom_node):
     assert loaded[0]["label"] == "My Wildcard Snippet"
     assert loaded[0]["insertText"] == "<include:${1|animal,color,pose|}>"
     assert loaded[0]["detail"] == "Test wildcard choices"
+

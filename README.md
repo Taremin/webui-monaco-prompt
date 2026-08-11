@@ -80,7 +80,8 @@ ${dir:パスパターン|option1=value1|option2=value2|...}
 ```
 
 ##### パラメータ・オプション
-- **`dir` (位置引数 / 必須)**: 対象ディレクトリ・glob パターン（例: `wildcards/*.txt`, `subfolder/*.png`）
+- **`dir` (位置引数 / 必須)**: 対象ディレクトリ・glob パターン（例: `wildcards/*.txt`, `@models/loras`）
+  - パスに **`@models/<category>`**（例: `@models/loras`, `@models/diffusion_models`, `@models/checkpoints`, `@models/embeddings`）を指定すると、ComfyUI に登録されている追加パスを含むすべてのモデルファイル一覧を自動取得します。
 - **`pattern` (任意)**: ファイル名に適用する抽出・置換用の正規表現（例: `pattern=\.[^.]+$`）
 - **`replace` (任意)**: 置換後の文字列。`pattern` 指定時に `replace` を省略した場合はマッチ箇所が削除されます。
 - **`format` (任意)**: 出力形式
@@ -92,8 +93,11 @@ ${dir:パスパターン|option1=value1|option2=value2|...}
 ##### 記述例
 - **ワイルドカードの選択肢挿入（拡張子除去）**:
   `<include:${dir:wildcards/*.txt|pattern=\.[^.]+$|var=1|format=choice}>`
-- **モデル一覧を改行区切りでそのまま挿入**:
-  `${dir:models/*.safetensors|pattern=\.[^.]+$|format=lines}`
+- **LoRA モデル選択肢の挿入**:
+  `<lora:${dir:@models/loras|pattern=\.[^.]+$|var=1}:1.0>`
+- **Diffusion Models 一覧を改行区切りで挿入**:
+  `${dir:@models/diffusion_models|pattern=\.[^.]+$|format=lines}`
+
 
 
 

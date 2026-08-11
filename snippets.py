@@ -38,6 +38,49 @@ def get_node_root_from_snippet_path(snippet_json_path: str, custom_nodes_path: s
     return os.path.dirname(abs_snippet_path)
 
 
+def resolve_models_files(path_pattern: str) -> list:
+    """
+    @models/<category>/<sub_pattern> 形式のパスからモデルファイル一覧を取得します。
+    """
+    if not path_pattern.startswith("@models/"):
+        return None
+
+    clean_path = path_pattern[len("@models/"):].lstrip("/")
+    if not clean_path:
+        return []
+
+    parts = clean_path.split("/", 1)
+    category = parts[0]
+    sub_pattern = parts[1] if len(parts) > 1 else None
+
+    # ComfyUI の folder_paths 連携
+    try:
+        import folder_paths
+        if hasattr(folder_paths, "folder_names_and_paths") and category in folder_paths.folder_names_and_paths:
+            raw_files = folder_paths.get_filename_list(category) or []
+            
+            # 不当な上位階層参照のチェック (Path Traversal 防御)
+            safe_files = []
+            for f in raw_files:
+                norm_f = f.replace("\\", "/")
+                if ".." not in norm_f.split("/"):
+                    safe_files.append(f)
+
+            if sub_pattern:
+                import fnmatch
+                filtered = []
+                for f in safe_files:
+                    norm_f = f.replace("\\", "/")
+                    if fnmatch.fnmatch(norm_f, sub_pattern) or fnmatch.fnmatch(os.path.basename(norm_f), sub_pattern):
+                        filtered.append(f)
+                return filtered
+            return safe_files
+    except (ImportError, Exception):
+        pass
+
+    return None
+
+
 def expand_dir_snippets(insert_text: str, base_dir: str) -> str:
     """
     insert_text 内の ${dir:pattern|options} 形式のタグを解析し、特定ディレクトリのファイル一覧に展開します。
@@ -71,23 +114,28 @@ def expand_dir_snippets(insert_text: str, base_dir: str) -> str:
         if not var_num.isdigit():
             var_num = "1"
 
-        # 安全性検証 (Path Traversal 防御)
-        target_path = os.path.abspath(os.path.join(base_abs, path_pattern))
-        
-        # ワイルドカード文字直前までのパスを取得
-        target_path_clean = target_path.split('*')[0].split('?')[0]
-        search_root = target_path_clean if os.path.isdir(target_path_clean) else os.path.dirname(target_path_clean)
+        # 1. @models/<category> パスの判定とファイル取得
+        found_files = resolve_models_files(path_pattern)
 
-        try:
-            if os.path.commonpath([base_abs, search_root]) != base_abs:
-                print(f"[Webui Monaco Prompt] Access denied outside base dir: {target_path}")
+        # 2. 通常の自カスタムノード配下のファイル走査
+        if found_files is None:
+            target_path = os.path.abspath(os.path.join(base_abs, path_pattern))
+            
+            # ワイルドカード文字直前までのパスを取得
+            target_path_clean = target_path.split('*')[0].split('?')[0]
+            search_root = target_path_clean if os.path.isdir(target_path_clean) else os.path.dirname(target_path_clean)
+
+            try:
+                if os.path.commonpath([base_abs, search_root]) != base_abs:
+                    print(f"[Webui Monaco Prompt] Access denied outside base dir: {target_path}")
+                    return ""
+            except ValueError:
                 return ""
-        except ValueError:
-            return ""
 
-        # ファイル走査
-        found_entries = sorted(glob.glob(target_path, recursive=True))
-        found_files = [f for f in found_entries if os.path.isfile(f)]
+            # ファイル走査
+            found_entries = sorted(glob.glob(target_path, recursive=True))
+            found_files = [f for f in found_entries if os.path.isfile(f)]
+
         if not found_files:
             return ""
 
@@ -111,6 +159,7 @@ def expand_dir_snippets(insert_text: str, base_dir: str) -> str:
             return f"${{{var_num}|{','.join(choices)}|}}"
 
     return DIR_TAG_PATTERN.sub(replace_tag, insert_text)
+
 
 
 
