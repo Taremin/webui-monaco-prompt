@@ -70,6 +70,33 @@ JSONのフォーマットは `{"label": string, "insertText": string, documentat
 スニペット構文は VSCode 互換のものが使用できます。
 https://code.visualstudio.com/docs/editor/userdefinedsnippets#_snippet-syntax
 
+#### ディレクトリ内のファイル一覧の挿入（動的展開機能）
+
+`insertText` 内で `${dir:...}` タグを記述することで、そのスニペットを配置したカスタムノード配下の特定ディレクトリ内のファイル一覧を自動的に検索して選択肢やリストとして展開できます。
+
+##### 構文
+```text
+${dir:パスパターン|option1=value1|option2=value2|...}
+```
+
+##### パラメータ・オプション
+- **`dir` (位置引数 / 必須)**: 対象ディレクトリ・glob パターン（例: `wildcards/*.txt`, `subfolder/*.png`）
+- **`pattern` (任意)**: ファイル名に適用する抽出・置換用の正規表現（例: `pattern=\.[^.]+$`）
+- **`replace` (任意)**: 置換後の文字列。`pattern` 指定時に `replace` を省略した場合はマッチ箇所が削除されます。
+- **`format` (任意)**: 出力形式
+  - `choice` (デフォルト): Monaco Editor 用の選択肢構文 `${1|opt1,opt2|}` に変換
+  - `lines`: 改行区切りテキスト
+  - `comma`: カンマ区切りテキスト
+- **`var` / `index` / `num` (任意)**: `format=choice` の場合の変数番号を指定（デフォルト: `1`）。例: `var=2` → `${2|opt1,opt2|}`
+
+##### 記述例
+- **ワイルドカードの選択肢挿入（拡張子除去）**:
+  `<include:${dir:wildcards/*.txt|pattern=\.[^.]+$|var=1|format=choice}>`
+- **モデル一覧を改行区切りでそのまま挿入**:
+  `${dir:models/*.safetensors|pattern=\.[^.]+$|format=lines}`
+
+
+
 
 ## 注意
 
