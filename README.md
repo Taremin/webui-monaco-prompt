@@ -98,9 +98,116 @@ ${dir:パスパターン|option1=value1|option2=value2|...}
 - **Diffusion Models 一覧を改行区切りで挿入**:
   `${dir:@models/diffusion_models|pattern=\.[^.]+$|format=lines}`
 
+## ComfyUI カスタムノード
 
+ComfyUI 環境において、プロンプトのパーツ化・テンプレート展開・動的フィルタリングを行える複数のカスタムノードを提供しています。
 
+### ノード間の基本データフロー
 
+```
+[ MultiText ]
+   │
+   ├─ contents (テキストリスト)
+   └─ json ───► [ JsonFilter ] ───► json ───► [ Template ] ───► contents (展開済プロンプト)
+```
+
+1. **`MultiText`** でプロンプトやパーツアセットを仮想ファイルツリーとして定義・編集します。
+2. 出力される **`json` メタデータ**（ファイル情報リスト）を **`JsonFilter`** に渡して条件抽出・絞り込みを行います。
+3. 抽出結果を **`Template`** の `entry_points` または `source_templates` に渡し、`<include:...>` や `<random:...>` タグを再帰展開して最終的なプロンプトテキストを出力します。
+
+---
+
+### 各ノードの詳細
+
+#### 1. MultiText (`WebuiMonacoPromptMultiText`)
+
+仮想ファイルシステム形式（ディレクトリ・ファイルツリー）で複数テキストやプロンプトパーツを一括管理できる Monaco エディタノードです。
+
+- **入力**:
+  - `text`: Monaco エディタ内のツリー構造（JSON）
+- **出力**:
+  - `contents`: 有効なファイル本文の文字列リスト (`STRING` List)
+  - `json`: 各ファイルのメタデータ（パス・ファイル名・本文）を含む JSON 文字列リスト (`STRING` List)
+- **特徴**:
+  - UI上のツリー構造でファイルを直感的に整理・編集できます。
+  - チェックボックス (`selectionMode`) を有効にすると、チェックが入っているファイルのみを出力対象として選択できます。
+
+#### 2. JsonFilter (`WebuiMonacoPromptJsonFilter`)
+
+`MultiText` などの出力ポート `json` から渡されたファイルリストに対し、指定した判定ルールに基づいてフィルタリング（抽出）を行うノードです。
+
+- **入力**:
+  - `json_list`: `MultiText` などの `json` 出力ポートから接続するメタデータリスト (`STRING` forceInput)
+  - `rules`: 抽出ルール設定（JSON形式）
+- **出力**:
+  - `contents`: 条件に一致したファイル本文の文字列リスト (`STRING` List)
+  - `json`: 条件に一致したファイルの JSON メタデータリスト (`STRING` List)
+- **フィルタリングルール**:
+  - **判定対象 (`target`)**: ファイル名 (`name`) / ファイルパス (`path`) / 本文 (`content`)
+  - **マッチ方式 (`mode`)**: 部分一致 (`include`) / 正規表現 (`regex`)
+  - **否定 (`not`)**: 反転判定
+  - **結合条件 (`operator`)**: `AND` / `OR`
+
+#### 3. Template (`WebuiMonacoPromptTemplate`)
+
+`MultiText` や `JsonFilter` から受け取った `json` メタデータをもとに、ファイル内のテンプレートタグ（`<include:...>` や `<random:...>`）を再帰的に展開して最終的なプロンプトを構築するノードです。
+
+- **入力**:
+  - `source_templates`: 参照先（挿入元）となるテンプレートファイル群の `json` リスト (`STRING` forceInput)
+  - `entry_points`: 展開の起点となるファイル群の `json` リスト (`STRING` forceInput)
+  - `seed`: `<random:...>` タグのランダム選出に使用するシード値 (`INT`)
+- **出力**:
+  - `contents`: テンプレート展開後のプロンプト文字列リスト (`STRING` List)
+  - `json`: 展開後の各ファイル情報の JSON メタデータリスト (`STRING` List)
+
+##### テンプレート構文
+
+- **`<include:ファイル参照>`** (再帰的ファイル取り込み):
+  指定したファイルの内容をその場に展開・挿入します。
+  - **例**: `A photo of <include:character/master.txt>, <include:bg/fantasy.txt>`
+  - 挿入されたテキスト内にさらに `<include:...>` や `<random:...>` が含まれる場合、自動的に再帰展開されます。
+
+- **`<random:ファイル参照>`** (行単位のランダム選出):
+  指定したファイル内のテキスト行（空行を除く）から、1行をランダムに選出して挿入します。
+  - **例**: `Wearing <random:clothing/costumes.txt> standard outfit`
+  - 選択結果は `seed` ポートの値に依存するため、シード値を固定すれば常に同じ結果を再現できます。
+
+##### ファイル参照の指定方法
+`<include:参照名>` や `<random:参照名>` での参照指定は柔軟に対応しています：
+1. **完全パス指定**: `<include:scenes/fantasy/forest.txt>`
+2. **拡張子省略**: `<include:scenes/fantasy/forest>`
+3. **ファイル名（ベースネーム）指定**: `<include:forest.txt>`
+4. **ファイル名（拡張子なし）指定**: `<include:forest>`
+
+##### 安全機能
+- **循環参照の自動検知**: AファイルがBファイルを呼び出し、BファイルがAファイルを呼び出すような無限ループを検知して安全にエラーを出力します。
+- **再帰深さ上限**: 最大深さ（10階層）を超えた展開をブロックし、スタックオーバーフローを防止します。
+
+#### 4. Find (`WebuiMonacoPromptFind`) [Deprecated]
+
+ワークフロー内のすべての Monaco エディタ（`MultiText` ノード内部の全ファイル含む）を横断してテキストを検索するノードです。
+
+- **ステータス**: **Deprecated (非推奨)**
+- **経緯**: 検索機能が ComfyUI のサイドツールバー（UI拡張機能）へ移行したため、ノードとしては非推奨となっています。
+
+#### 5. Replace (`WebuiMonacoPromptReplace`)
+
+ワークフロー内のすべての Monaco エディタ（`MultiText` ノード内部の全ファイル・タブ含む）を一括して検索・置換するノードです。
+
+- **機能**: 入力した検索文字列と置換文字列に基づき、キャンバス上の Monaco エディタ全体に対して一括置換を実行します。`MultiText` ノード内の非活性なファイルタブに含まれるテキストも置換対象となります。
+- **備考**: 将来的に ComfyUI のサイドツールバー機能への統合が予定されています。
+
+## サンプルワークフロー
+
+`examples/workflows` ディレクトリに ComfyUI 用のサンプルワークフロー JSON を同梱しています。
+ComfyUI の画面に JSON ファイルをドラッグ＆ドロップすることで、設定済みのノード群をそのまま読み込んで動作確認が可能です。
+
+- **[MultiText フル機能連携デモ](./examples/workflows/multitext_filter_demo.json)** (`examples/workflows/multitext_filter_demo.json`)
+  - **使用ノード**: `MultiText` → `JsonFilter` → `Template` → `PreviewAny`
+  - **概要**: 
+    1. **MultiText**: パーツアセット（キャラ/背景/品質タグ）と、それらを `<include:...>` で組み立てた完成形シーン定義（`scenes/`）を一括管理。
+    2. **JsonFilter**: パス条件（`scenes/` かつ `fantasy`）を指定し、対象のシーンテンプレートのみを動的に選択・抽出。
+    3. **Template**: 選択されたシーンテンプレートの `<include:...>` タグを再帰的に展開し、最終プロンプトを構築。
 
 ## 注意
 

@@ -31,26 +31,19 @@ export class FilterWidget {
         if (!node.properties.rules) node.properties.rules = "[]";
 
         this.container.classList.add(getStyle("webui-monaco-prompt-filter-container"));
+        this.container.style.width = "100%";
+        this.container.style.height = "100%";
+        this.container.style.boxSizing = "border-box";
+        this.container.style.overflow = "auto";
         
-        // --- LiteGraph 干渉の徹底排除 (Event Isolation) ---
+        // Prevent LiteGraph dragging when interacting with the widget
         const isolate = (e: Event) => {
-            const target = e.target as HTMLElement;
-            if (target.tagName === "INPUT" || target.tagName === "SELECT" || target.tagName === "BUTTON") {
-                // stopImmediatePropagation() により、同要素に設定された LiteGraph 側のリスナーを黙らせる
-                e.stopImmediatePropagation();
-                // さらに bubbling も止めて document レベルのハンドラに届かせない
-                e.stopPropagation();
-            }
+            e.stopPropagation();
         };
 
-        // capture: true を指定して、LiteGraph のグローバルハンドラよりも先に捕まえる
-        ["mousedown", "pointerdown", "mouseup", "pointerup", "dblclick", "contextmenu"].forEach(type => {
-            this.container.addEventListener(type, isolate, { capture: true });
+        ["mousedown", "pointerdown", "touchstart"].forEach(type => {
+            this.container.addEventListener(type, isolate);
         });
-
-        // 座標系や移動の干渉を避けるため、move も絶縁
-        this.container.addEventListener("mousemove", isolate, { capture: true });
-        this.container.addEventListener("pointermove", isolate, { capture: true });
 
         const oldOnConfigure = node.onConfigure;
         node.onConfigure = (config: any) => {
@@ -108,40 +101,32 @@ export class FilterWidget {
     }
 
     private setupWidgetCallback() {
-        const findAndSetup = () => {
-            const widget = this._node.widgets?.find((w: any) => w.name === "rules");
-            if (widget) {
-                const oldCallback = widget.callback;
-                widget.callback = (v: any) => {
-                    if (v === this._lastLoadedValue) return;
-                    if (!v || v === "") return;
-                    if (oldCallback) oldCallback.apply(widget, [v]);
-                    this.loadRulesFromValue(v);
-                    this.render();
-                    this.notifyListeners();
-                };
-            } else {
-                requestAnimationFrame(findAndSetup);
-            }
-        };
-        findAndSetup();
+        // addDOMWidget の getValue/setValue で全管理するため何もしない
     }
 
-    private loadRulesFromValue(value: any) {
-        const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
+    public loadRulesFromValue(value: any) {
+        const stringValue = typeof value === 'string' ? value : (typeof value === 'object' ? JSON.stringify(value) : String(value));
         if (!stringValue || stringValue === "" || stringValue === this._lastLoadedValue) return;
         try {
-            const parsed = JSON.parse(stringValue);
+            const parsed = typeof value === 'object' && Array.isArray(value) ? value : JSON.parse(stringValue);
             if (Array.isArray(parsed)) {
                 this.rules = parsed;
                 this._lastLoadedValue = stringValue;
+                this.render();
             }
         } catch (e) {}
     }
 
+    public setRules(rules: FilterRule[]) {
+        this.rules = rules;
+        this.saveRules();
+        this.render();
+        this.notifyListeners();
+    }
+
     private loadRules() {
         let val = (this._node.properties && this._node.properties.rules);
-        this.loadRulesFromValue(val);
+        if (val) this.loadRulesFromValue(val);
     }
 
     private saveRules() {
@@ -149,11 +134,6 @@ export class FilterWidget {
         this._lastLoadedValue = newVal;
         if (!this._node.properties) this._node.properties = {};
         this._node.properties.rules = newVal;
-        const widget = this._node.widgets?.find((w: any) => w.name === "rules");
-        if (widget) {
-            widget.value = newVal;
-            if (widget.callback) widget.callback(newVal);
-        }
         this._node.setDirtyCanvas(true);
     }
 
