@@ -378,6 +378,11 @@
     flex-direction: column;
     height: 100%;
     width: 100%;
+    min-width: 100%;
+    min-height: 100px;
+    box-sizing: border-box;
+    overflow: hidden;
+    border-radius: 0 0 6px 6px;
     font-family: var(--font-family, sans-serif);
     font-size: 12px;
 }
@@ -418,6 +423,8 @@
     gap: 4px;
     padding: 4px;
     margin-bottom: 2px;
+    width: 100%;
+    box-sizing: border-box;
     background-color: #2d2d2d;
     border: 1px solid transparent;
     border-radius: 4px;
@@ -442,14 +449,15 @@
 .webui-monaco-prompt-filter-spacer {
     display: inline-block;
     width: 50px;
+    min-width: 50px;
     height: 22px;
     flex-shrink: 0;
     box-sizing: border-box;
-    /* operator select width placeholder */
 }
 
 .webui-monaco-prompt-filter-operator-select {
-    width: 50px;
+    width: 50px !important;
+    min-width: 50px !important;
     flex-shrink: 0;
     box-sizing: border-box;
 }
@@ -461,10 +469,14 @@
     border-radius: 2px;
     height: 22px;
     font-size: 11px;
+    flex-shrink: 0;
+    min-width: 55px;
+    box-sizing: border-box;
 }
 
 .webui-monaco-prompt-filter-input {
-    flex: 1;
+    flex: 1 1 0px;
+    min-width: 0px;
     background-color: #3c3c3c;
     color: #cccccc;
     border: 1px solid #444;
@@ -472,6 +484,7 @@
     height: 20px;
     padding: 0 5px;
     font-size: 11px;
+    box-sizing: border-box;
 }
 
 .webui-monaco-prompt-filter-input:focus {

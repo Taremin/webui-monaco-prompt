@@ -437,6 +437,7 @@ function hookNodeWidgets(node: any) {
 
     for (const widget of node.widgets) {
         if (node.comfyClass === "WebuiMonacoPromptMultiText" && widget.name === "text") continue
+        if (node.comfyClass === "WebuiMonacoPromptJsonFilter" || node.type === "WebuiMonacoPromptJsonFilter") continue
         
         if (!processWidget(widget)) {
             let timeoutId: any = null;
@@ -492,6 +493,9 @@ const CustomNode: {[key: string]: CustomNodeWidget} = {
                 const rulesWidget = node.widgets.find((w: any) => w.name === "rules");
                 if (rulesWidget) {
                     rulesWidget.type = "hidden";
+                    (rulesWidget as any).hidden = true;
+                    (rulesWidget as any).draw = () => {};
+                    (rulesWidget as any).computeSize = () => [0, 0];
                     rulesWidget.beforeQueued = function() {
                         this.value = node.properties.rules || [];
                     };
@@ -503,12 +507,69 @@ const CustomNode: {[key: string]: CustomNodeWidget} = {
                 const domWidget = node.addDOMWidget("webui-monaco-prompt-filter", "filter", filterWidget.container, {
                     hideOnZoom: true,
                     serialize: false,
+                    getValue() {
+                        return filterWidget.rules;
+                    },
+                    setValue(v: any) {
+                        if (v) {
+                            if (typeof v === "string") {
+                                filterWidget.loadRulesFromValue(v);
+                            } else if (Array.isArray(v)) {
+                                filterWidget.setRules(v);
+                            }
+                        }
+                    },
                 });
-                (domWidget as any)._node = node;
+
+                const updateDOMWidgetSize = (size: [number, number]) => {
+                    if (domWidget.element && size) {
+                        const startY = 40; 
+                        const availableHeight = Math.max(30, size[1] - startY - 20);
+                        const availableWidth = Math.max(100, size[0] - 30);
+                        // Apply directly to the element to bypass LiteGraph's container restrictions
+                        domWidget.element.style.setProperty("height", `${availableHeight}px`, "important");
+                        domWidget.element.style.setProperty("width", `${availableWidth}px`, "important");
+                        domWidget.element.style.position = "absolute";
+                        domWidget.element.style.left = "0px";
+                    }
+                };
+
+                const origOnResize = node.onResize;
+                node.onResize = function(this: any, size: [number, number]) {
+                    if (origOnResize) origOnResize.apply(this, arguments as any);
+                    updateDOMWidgetSize(size);
+                };
+
+                const origWidgetOnResize = (domWidget as any).onResize;
+                (domWidget as any).onResize = function(this: any, w: number, h: number) {
+                    if (origWidgetOnResize) origWidgetOnResize.apply(this, arguments as any);
+                    const realNode = this._node || node;
+                    if (realNode && realNode.size) {
+                        updateDOMWidgetSize(realNode.size);
+                    }
+                };
+
+                const originalDraw = (domWidget as any).draw;
+                (domWidget as any).draw = function(this: any, ctx: CanvasRenderingContext2D, n: any, widget_width: number, y: number, H: number, ...args: any[]) {
+                    if (originalDraw) {
+                        originalDraw.call(this, ctx, n, widget_width, y, H, ...args);
+                    }
+                    if (this.element) {
+                        const nodeHeight = n.size ? n.size[1] : 200;
+                        const nodeWidth = n.size ? n.size[0] : 350;
+                        const availableHeight = Math.max(30, nodeHeight - y - 20);
+                        const availableWidth = Math.max(100, nodeWidth - 30);
+                        this.element.style.setProperty("height", `${availableHeight}px`, "important");
+                        this.element.style.setProperty("width", `${availableWidth}px`, "important");
+                        this.element.style.position = "absolute";
+                        this.element.style.left = "0px";
+                    }
+                };
+
                 (domWidget as any).computeSize = function(this: any, width: number) {
-                    const n = this._node || node;
-                    const targetHeight = n && n.size ? Math.max(50, n.size[1] - 36 - (n.outputs ? n.outputs.length * 20 : 0)) : 200;
-                    return [width, targetHeight];
+                    // Return the minimum required size for the widget.
+                    // Returning a value based on node.size causes LiteGraph to recursively increase the node height.
+                    return [350, 170];
                 };
             }
         } as any,
