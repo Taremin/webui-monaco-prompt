@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v[0-9]+\\.[0-9]+\\.[0-9]+"
+      - "v[0-9]+\\.[0-9]+\\.[0-9]+-*"
 
 jobs:
   create_release:
@@ -11,7 +12,10 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
       - name: version
         id: version
         run: |
@@ -21,6 +25,38 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           VERSION_STRING=$(echo $VERSION | sed -e "s#\.#_#g")
           echo "version_string=$VERSION_STRING" >> "$GITHUB_OUTPUT"
+      - name: 前のリリースタグを特定
+        id: release_info
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if [[ "$VERSION" == *"-"* ]]; then
+            PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          else
+            PREVIOUS_TAG=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | grep -v '-' | grep -v "^${VERSION}$" | head -1)
+          fi
+          echo "previous_tag=$PREVIOUS_TAG" >> "$GITHUB_OUTPUT"
+          echo "前のタグ: $PREVIOUS_TAG"
+      - name: コミット履歴を生成
+        id: changelog
+        run: |
+          PREVIOUS_TAG="${{ steps.release_info.outputs.previous_tag }}"
+          VERSION="${{ steps.version.outputs.version }}"
+          
+          if [ -n "$PREVIOUS_TAG" ]; then
+            echo "## 変更内容 (${PREVIOUS_TAG}...${VERSION})" > changelog.md
+            echo "" >> changelog.md
+            git log --pretty=format:"- %s (%h)" ${PREVIOUS_TAG}..HEAD >> changelog.md
+          else
+            echo "## 変更内容" > changelog.md
+            echo "" >> changelog.md
+            git log --pretty=format:"- %s (%h)" >> changelog.md
+          fi
+          
+          DELIMITER="CHANGELOG_$(date +%s%N)"
+          echo "changelog<<${DELIMITER}" >> "$GITHUB_OUTPUT"
+          cat changelog.md >> "$GITHUB_OUTPUT"
+          echo "" >> "$GITHUB_OUTPUT"
+          echo "${DELIMITER}" >> "$GITHUB_OUTPUT"
       - name: Zip output
         id: create_zip
         run: |
@@ -34,10 +70,13 @@ jobs:
           zip -r $ARCHIVE_FILENAME $ARCHIVE_BASENAME -x ".git"
       - name: Create Release
         id: create-release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           name: Release ${{ steps.version.outputs.version }} 
           tag_name: ${{ steps.version.outputs.version }}
+          body: ${{ steps.changelog.outputs.changelog }}
           draft: true
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
           files: |
             ${{ steps.create_zip.outputs.filename}}
+
