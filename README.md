@@ -202,17 +202,12 @@ ComfyUI 環境において、プロンプトのパーツ化・テンプレート
 `examples/workflows` ディレクトリに ComfyUI 用のサンプルワークフロー JSON を同梱しています。
 ComfyUI の画面に JSON ファイルをドラッグ＆ドロップすることで、設定済みのノード群をそのまま読み込んで動作確認が可能です。
 
-- **[v0.4.0 フル機能連携デモ](./examples/workflows/v0.4.0_multitext_filter_demo.json)** (`examples/workflows/v0.4.0_multitext_filter_demo.json`)
+- **[MultiText フル機能連携デモ](./examples/workflows/multitext_filter_demo.json)** (`examples/workflows/multitext_filter_demo.json`)
   - **使用ノード**: `MultiText` → `JsonFilter` → `Template` → `PreviewAny`
   - **概要**: 
     1. **MultiText**: パーツアセット（キャラ/背景/品質タグ）と、それらを `<include:...>` で組み立てた完成形シーン定義（`scenes/`）を一括管理。
     2. **JsonFilter**: パス条件（`scenes/` かつ `fantasy`）を指定し、対象のシーンテンプレートのみを動的に選択・抽出。
     3. **Template**: 選択されたシーンテンプレートの `<include:...>` タグを再帰的に展開し、最終プロンプトを構築。
-
-
-
-
-
 
 ## 注意
 
